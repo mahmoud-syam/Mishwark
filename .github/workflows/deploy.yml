@@ -1,71 +1,71 @@
-name: Deploy Backend to VPS
+# name: Deploy Backend to VPS
 
-on:
-  push:
-    branches:
-      - master
+# on:
+#   push:
+#     branches:
+#       - master
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+#     steps:
+#       - name: Checkout Code
+#         uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '24'
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v3
+#         with:
+#           node-version: '24'
 
-      - name: Install, Migrate, and Build
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}  # Ensure this is set in your
-        run: |
-          npm ci
-          npx prisma generate  # Generates the client locally so TypeScript can compile successfully
-          npm run build
-          mkdir -p dist/templates
-          cp -R src/templates/. dist/templates/
-      # --- NEW STEP: Clean old build and schema files on the VPS ---
-      - name: Clean up old files on VPS
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          port: 22
-          script: |
-            # Removes the old directories to prevent ghost-file duplicates
-            rm -rf ~/AcsWebsite/AcsWebsite-backend/prisma
-            rm -rf ~/AcsWebsite/AcsWebsite-backend/dist
+#       - name: Install, Migrate, and Build
+#         env:
+#           DATABASE_URL: ${{ secrets.DATABASE_URL }}  # Ensure this is set in your
+#         run: |
+#           npm ci
+#           npx prisma generate  # Generates the client locally so TypeScript can compile successfully
+#           npm run build
+#           mkdir -p dist/templates
+#           cp -R src/templates/. dist/templates/
+#       # --- NEW STEP: Clean old build and schema files on the VPS ---
+#       - name: Clean up old files on VPS
+#         uses: appleboy/ssh-action@master
+#         with:
+#           host: ${{ secrets.HOST }}
+#           username: ${{ secrets.USERNAME }}
+#           key: ${{ secrets.SSH_KEY }}
+#           port: 22
+#           script: |
+#             # Removes the old directories to prevent ghost-file duplicates
+#             rm -rf ~/AcsWebsite/AcsWebsite-backend/prisma
+#             rm -rf ~/AcsWebsite/AcsWebsite-backend/dist
 
-      - name: Transfer to VPS
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          port: 22
-          # Sync a self-contained build artifact plus the deployment metadata the server still needs.
-          source: "dist/,package.json,package-lock.json,prisma/,prisma.config.ts,tsconfig.json"
-          target: "~/AcsWebsite/AcsWebsite-backend"
+#       - name: Transfer to VPS
+#         uses: appleboy/scp-action@master
+#         with:
+#           host: ${{ secrets.HOST }}
+#           username: ${{ secrets.USERNAME }}
+#           key: ${{ secrets.SSH_KEY }}
+#           port: 22
+#           # Sync a self-contained build artifact plus the deployment metadata the server still needs.
+#           source: "dist/,package.json,package-lock.json,prisma/,prisma.config.ts,tsconfig.json"
+#           target: "~/AcsWebsite/AcsWebsite-backend"
 
-      - name: Update Database & Start Application
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          port: 22
-          script: |
-            cd ~/AcsWebsite/AcsWebsite-backend
-            npm ci --omit=dev  
+#       - name: Update Database & Start Application
+#         uses: appleboy/ssh-action@master
+#         with:
+#           host: ${{ secrets.HOST }}
+#           username: ${{ secrets.USERNAME }}
+#           key: ${{ secrets.SSH_KEY }}
+#           port: 22
+#           script: |
+#             cd ~/AcsWebsite/AcsWebsite-backend
+#             npm ci --omit=dev  
             
-            # Applies any pending migrations to the local database
-            npx prisma migrate deploy  
+#             # Applies any pending migrations to the local database
+#             npx prisma migrate deploy  
 
-            # Generate the Prisma Client for the production environment
-            npx prisma generate
+#             # Generate the Prisma Client for the production environment
+#             npx prisma generate
             
-            pm2 restart backend || pm2 start npm --name "backend" -- start
+#             pm2 restart backend || pm2 start npm --name "backend" -- start
