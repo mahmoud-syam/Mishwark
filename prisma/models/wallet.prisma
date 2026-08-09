@@ -1,0 +1,10 @@
+model WalletTransactions {
+  id          String                @id @default(uuid())
+  user        Users                 @relation(fields: [userId], references: [id])
+  userId      String
+  amount      Float
+  type        WalletTransactionType
+  description String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @default(now()) @updatedAt
+}

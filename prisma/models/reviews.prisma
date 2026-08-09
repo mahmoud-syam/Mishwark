@@ -1,0 +1,17 @@
+model Reviews {
+  id                String       @id @default(uuid())
+  booking           Bookings     @relation(fields: [bookingId], references: [id])
+  bookingId         String
+  reviewer          Users        @relation("ReviewsGiven", fields: [reviewerId], references: [id])
+  reviewerId        String
+  reviewee          Users        @relation("ReviewsReceived", fields: [revieweeId], references: [id])
+  revieweeId        String
+  reviewerType      ReviewerType
+  overallRating     Int
+  vehicleRating     Int?
+  punctualityRating Int?
+  comment           String?
+  visibleAt         DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @default(now()) @updatedAt
+}

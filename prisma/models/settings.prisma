@@ -1,0 +1,7 @@
+model SystemSettings {
+  id                        String   @id @default("global")
+  performanceHistoryVisible Boolean  @default(true)
+  evaluationsVisible        Boolean  @default(true)
+  selfAppraisalsVisible     Boolean  @default(true)
+  updatedAt                 DateTime @updatedAt
+}

@@ -1,0 +1,15 @@
+model Referrals {
+  id                  String         @id @default(uuid())
+  referrer            Users          @relation("Referrer", fields: [referrerId], references: [id])
+  referrerId          String
+  referred            Users          @relation("Referred", fields: [referredId], references: [id])
+  referredId          String
+  referralCode        String
+  status              ReferralStatus @default(PENDING)
+  rewardAmount        Float          @default(0)
+  triggeringBooking   Bookings?      @relation(fields: [triggeringBookingId], references: [id])
+  triggeringBookingId String?
+  completedAt         DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @default(now()) @updatedAt
+}

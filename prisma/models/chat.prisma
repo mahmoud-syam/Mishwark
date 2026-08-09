@@ -1,0 +1,28 @@
+model Conversations {
+  id         String             @id @default(uuid())
+  booking    Bookings           @relation(fields: [bookingId], references: [id])
+  bookingId  String             @unique
+  customer   Users              @relation("CustomerConversations", fields: [customerId], references: [id])
+  customerId String
+  driver     Drivers            @relation("DriverConversations", fields: [driverId], references: [id])
+  driverId   String
+  status     ConversationStatus @default(OPEN)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @default(now()) @updatedAt
+
+  messages Messages[]
+}
+
+model Messages {
+  id             String        @id @default(uuid())
+  conversation   Conversations @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  sender         Users         @relation(fields: [senderId], references: [id])
+  senderId       String
+  senderType     SenderType
+  messageType    MessageType   @default(TEXT)
+  content        String
+  isRead         Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @default(now()) @updatedAt
+}

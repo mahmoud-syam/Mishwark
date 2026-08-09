@@ -1,0 +1,20 @@
+model Role {
+  id          String @id @default(uuid())
+  name        String @unique
+  description String @default("")
+
+  // Implicit Many-to-Many relations
+  permissions Permission[] @relation("RolePermissions")
+  users       Users[]      @relation("UserRoles")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Permission {
+  id          String @id @default(uuid())
+  name        String @unique
+  description String @default("")
+
+  roles Role[] @relation("RolePermissions")
+}

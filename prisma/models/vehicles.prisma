@@ -1,0 +1,71 @@
+model Vehicles {
+  id                    String                @id @default(uuid())
+  make                  String                @default("")
+  model                 String                @default("")
+  year                  Int                   @default(2024)
+  plateNumber           String                @unique @default("")
+  color                 String                @default("")
+  capacity              Int                   @default(0)
+  category              VehicleCategory       @default(CAR)
+  status                VehicleStatus         @default(AVAILABLE)
+  basePrice             Float                 @default(0)
+  pricePerKm            Float                 @default(0)
+  pricePerHour          Float                 @default(0)
+  images                VehicleImages[]
+  description           String                @default("")
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @default(now()) @updatedAt
+  vehicleDrivers        VehicleDrivers[]
+  vehicleAvailabilities VehicleAvailability[]
+  bookings              Bookings[]
+  waitlists             Waitlist[]
+  maintenance           VehicleMaintenance[]
+}
+
+model VehicleImages {
+  id        String   @id @default(uuid())
+  vehicle   Vehicles @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicleId String
+  imageUrl  String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model VehicleDrivers {
+  id        String   @id @default(uuid())
+  vehicle   Vehicles @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicleId String
+  driver    Drivers  @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId  String
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model VehicleAvailability {
+  id        String             @id @default(uuid())
+  vehicle   Vehicles           @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicleId String
+  date      DateTime
+  status    AvailabilityStatus @default(AVAILABLE)
+  reason    String             @default("")
+  booking   Bookings?          @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  bookingId String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @default(now()) @updatedAt
+
+  @@unique([vehicleId, date])
+}
+
+model VehicleMaintenance {
+  id              String    @id @default(uuid())
+  vehicle         Vehicles  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicleId       String
+  maintenanceType String
+  cost            Float     @default(0)
+  scheduledDate   DateTime
+  completedDate   DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+}

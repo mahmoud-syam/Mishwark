@@ -1,0 +1,16 @@
+node_modules
+# Keep environment variables out of version control
+.env
+*.xlsx
+
+/generated
+
+/uploads
+/dist
+
+/src/v1/schemas/zod
+/prisma/zod.prisma
+/src/v1/services/email.trial.ts
+
+/scripts
+data.xlsx

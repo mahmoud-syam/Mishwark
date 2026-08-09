@@ -1,0 +1,448 @@
+Table of Contents
+Mishwark — Data Model & Flow Reference
+Consolidated reference for Backend (API) and Flutter development
+1. Complete Database Schema
+1.1 users
+Customer accounts (and login identity shared with drivers/staff via role).
+Field
+Type
+Notes
+id
+UUID (PK)
+phone_number
+VARCHAR(20) UNIQUE
+primary login identifier
+full_name
+VARCHAR(100)
+email
+VARCHAR(100)
+optional
+role
+VARCHAR(20)
+customer, driver, admin, staff
+otp_verified
+BOOLEAN
+preferred_language
+VARCHAR(5)
+ar / en, default ar
+referral_code
+VARCHAR(20) UNIQUE
+auto-generated on signup
+referred_by
+UUID (FK → users.id)
+nullable
+customer_rating
+DECIMAL(2,1)
+default 5.0, updated from reviews
+created_at / updated_at
+TIMESTAMP
+1.2 drivers
+Driver profiles. Linked to a users row so the same login/OTP system routes them correctly.
+Field
+Type
+Notes
+id
+UUID (PK)
+user_id
+UUID (FK → users.id)
+links driver to login account
+full_name
+VARCHAR(100)
+phone_number
+VARCHAR(20)
+license_number
+VARCHAR(50)
+license_expiry
+DATE
+photo_url
+TEXT
+rating
+DECIMAL(2,1)
+default 5.0
+status
+VARCHAR(20)
+active, on_trip, off, on_leave
+created_at
+TIMESTAMP
+1.3 vehicles
+Field
+Type
+Notes
+id
+UUID (PK)
+make / model
+VARCHAR(50)
+year
+INT
+plate_number
+VARCHAR(20) UNIQUE
+color
+VARCHAR(30)
+capacity
+INT
+passengers
+category
+VARCHAR(30)
+classic, luxury, van
+base_price
+DECIMAL(10,2)
+shown as “starts from” on browse screen
+price_per_km
+DECIMAL(10,2)
+used for dynamic route pricing
+price_per_hour
+DECIMAL(10,2)
+optional, for hourly bookings
+status
+VARCHAR(20)
+available, booked, maintenance
+images
+JSONB
+array of image URLs
+description
+TEXT
+created_at
+TIMESTAMP
+1.4 vehicle_drivers (join table)
+Field
+Type
+vehicle_id
+UUID (FK)
+driver_id
+UUID (FK)
+is_primary
+BOOLEAN
+1.5 vehicle_availability — new, required for the availability calendar
+Explicit calendar per vehicle. Distinct from bookings — covers manual blocks (maintenance, owner holds) as well as computed booked days.
+Field
+Type
+Notes
+id
+UUID (PK)
+vehicle_id
+UUID (FK)
+date
+DATE
+status
+VARCHAR(20)
+available, booked, blocked
+booking_id
+UUID (FK, nullable)
+set when status = booked
+reason
+VARCHAR(100)
+nullable, e.g. “Maintenance”
+API implementation note: status here can be derived from bookings + a smaller vehicle_blocks table instead of stored redundantly — either approach works; store it explicitly if you want the calendar query to be a single fast read.
+1.6 bookings — the core table
+Field
+Type
+Notes
+id
+UUID (PK)
+customer_id
+UUID (FK)
+vehicle_id
+UUID (FK)
+driver_id
+UUID (FK)
+package_id
+UUID (FK, nullable)
+set if part of a multi-car package
+event_type
+VARCHAR(30)
+wedding, engagement, airport, other
+start_point / end_point
+VARCHAR(200)
+route_waypoints
+JSONB
+optional extra stops
+distance_km
+DECIMAL(6,2)
+calculated from route — drives pricing
+booking_date
+DATE
+start_time
+TIME
+estimated_end_time
+TIME
+status
+VARCHAR(20)
+pending, confirmed, completed, cancelled
+trip_status
+VARCHAR(20)
+not_started, en_route, arrived, completed
+base_price
+DECIMAL(10,2)
+snapshot from vehicle at booking time
+distance_price
+DECIMAL(10,2)
+distance_km * price_per_km
+total_price
+DECIMAL(10,2)
+base + distance (+ package discount if any)
+deposit_paid
+DECIMAL(10,2)
+payment_status
+VARCHAR(20)
+unpaid, partial, paid
+driver_notes
+TEXT
+special instructions for the driver
+notes
+TEXT
+general notes
+created_at / updated_at
+TIMESTAMP
+UNIQUE(vehicle_id, booking_date, start_time) — prevents double-booking at the DB level
+1.7 packages
+Field
+Type
+id
+UUID (PK)
+customer_id
+UUID (FK)
+package_name
+VARCHAR(100)
+package_type
+VARCHAR(30) — multi_car, multi_event
+total_price
+DECIMAL(10,2)
+discount_percentage
+DECIMAL(5,2)
+status
+VARCHAR(20)
+1.8 payments
+Field
+Type
+id
+UUID (PK)
+booking_id
+UUID (FK)
+amount
+DECIMAL(10,2)
+payment_method
+VARCHAR(30) — paymob, fawry, cash
+transaction_ref
+VARCHAR(100)
+status
+VARCHAR(20) — pending, success, failed, refunded
+paid_at
+TIMESTAMP
+1.9 reviews — two-way
+Field
+Type
+Notes
+id
+UUID (PK)
+booking_id
+UUID (FK)
+reviewer_type
+VARCHAR(20)
+customer_to_driver, driver_to_customer
+reviewee_id
+UUID
+the person being rated
+overall_rating
+INT (1–5)
+vehicle_rating
+INT (1–5)
+customer→driver only
+punctuality_rating
+INT (1–5)
+both directions
+comment
+TEXT
+visible_at
+TIMESTAMP
+blind-rating: null until both sides submit or 48h pass
+created_at
+TIMESTAMP
+1.10 waitlist
+Field
+Type
+id
+UUID (PK)
+customer_id
+UUID (FK)
+vehicle_id
+UUID (FK)
+requested_date
+DATE
+requested_time
+TIME
+position
+INT
+status
+VARCHAR(20) — waiting, notified, converted, expired
+notified_at / expires_at
+TIMESTAMP
+1.11 conversations & messages
+conversations: id, booking_id (UNIQUE), customer_id, driver_id, status (open/closed)messages: id, conversation_id, sender_type, sender_id, content,          message_type (text/quick_reply), is_read, created_at
+1.12 scheduled_notifications
+id, booking_id, recipient_type, recipient_id, notification_type  (reminder_24h / reminder_2h / reminder_30m / rate_trip),  channel (push/sms/whatsapp), scheduled_at, sent_at, status
+1.13 referrals & wallet_transactions
+referrals: id, referrer_id, referred_id, referral_code, status,           reward_amount, triggering_booking_id, completed_atwallet_transactions: id, user_id, amount, type  (referral_reward/refund/manual_adjustment), description, created_at
+1.14 trip_locations (live tracking — future phase)
+id, booking_id, latitude, longitude, speed, recorded_at
+1.15 vehicle_maintenance
+id, vehicle_id, maintenance_type, cost, scheduled_date, completed_date, notes
+2. Entity Relationship Summary
+users ──< bookings >── vehicles ──< vehicle_availability  │           │             │  │           │             └──< vehicle_drivers >── drivers ── (user_id) ── users  │           │  │           ├──< payments  │           ├──< reviews  │           ├──< conversations ──< messages  │           └──< scheduled_notifications  │  ├──< waitlist  ├──< referrals (as referrer or referred)  └──< wallet_transactionspackages ──< bookings (package_id)
+3. Screen-by-Screen Flow → API Mapping
+This is the exact sequence Flutter should follow, and the endpoints Backend needs to expose for each step.
+Auth
+Screen
+Action
+Endpoint
+Notes
+Login
+Submit phone number
+POST /auth/otp/request
+creates/finds user by phone
+OTP Verification
+Submit code
+POST /auth/otp/verify
+returns JWT + role (customer/driver/admin) — this is what routes the user to the correct home screen
+Customer — Browse & Book
+Screen
+Action
+Endpoint
+Notes
+Home / Browse
+Load vehicle list
+GET /vehicles?category=&status=available
+returns base_price, not final price
+Car Details
+Load vehicle + availability
+GET /vehicles/{id} + GET /vehicles/{id}/availability?month=2026-08
+second call powers the calendar
+Car Details
+Pick an available date
+(client-side selection, no call yet)
+date passed forward to booking screen
+Booking / Route
+Enter start/end points
+POST /bookings/estimate-price
+body: vehicle_id, start_point, end_point, date → returns distance_km, base_price, distance_price, total_price
+Booking / Route
+Confirm booking
+POST /bookings
+creates row with status=pending; DB unique constraint blocks double-booking
+Package Booking
+Add another vehicle to same event
+POST /packages then repeat POST /bookings with package_id
+discount computed server-side
+Confirmation
+Poll/display status
+GET /bookings/{id}
+My Bookings
+List all bookings
+GET /bookings?customer_id=me&filter=upcoming|completed|cancelled
+Booking Details
+Full detail + cancel/edit
+GET /bookings/{id}, PATCH /bookings/{id}, DELETE /bookings/{id}
+Waitlist
+Screen
+Action
+Endpoint
+Waitlist join
+Join waitlist for booked vehicle/date
+POST /waitlist
+Waitlist status
+Check position
+GET /waitlist/{id}
+(system)
+Vehicle freed up
+triggers notification to position=1, sets status=notified, starts expires_at timer
+Chat
+Screen
+Action
+Endpoint
+Chat
+Open conversation for a booking
+GET /bookings/{id}/conversation (auto-created on booking confirm)
+Chat
+Send message
+WebSocket emit('message:send', {conversation_id, content})
+Chat
+Receive messages
+WebSocket on('message:new')
+Ratings
+Screen
+Action
+Endpoint
+Rate (customer side)
+Submit rating
+POST /reviews with reviewer_type=customer_to_driver
+Rate (driver side)
+Submit rating
+POST /reviews with reviewer_type=driver_to_customer
+Driver App
+Screen
+Action
+Endpoint
+Driver Home
+List today’s/upcoming trips
+GET /driver/bookings?filter=today|upcoming|completed
+Trip Details
+Load full trip info
+GET /bookings/{id} (driver-scoped, filtered fields)
+Trip Details
+Start trip
+PATCH /bookings/{id}/trip-status → en_route (begins location updates if live tracking is on)
+Trip Details
+End trip
+PATCH /bookings/{id}/trip-status → completed → triggers rating prompts both sides
+Referral
+Screen
+Action
+Endpoint
+Invite Friends
+Load code + stats
+GET /referrals/me
+(system)
+Referred user’s first booking confirmed
+triggers POST /referrals/{id}/complete → credits both wallets
+Notifications
+Screen
+Action
+Endpoint
+Notifications list
+Load
+GET /notifications?user_id=me
+Settings
+Toggle preference
+PATCH /users/me/notification-settings
+Admin Dashboard
+Screen
+Action
+Endpoint
+Dashboard
+Stat cards
+GET /admin/stats/summary
+Dashboard
+Calendar month view
+GET /admin/bookings/calendar?month=2026-08 → count per day
+Day Details
+Bookings for one day
+GET /admin/bookings?date=2026-08-14
+Dashboard
+Fleet status
+GET /admin/vehicles/status
+Dashboard
+Driver breakdown
+GET /admin/drivers/{id}/stats → trips, revenue, complaints, ratings
+4. Key Business Logic Notes for Backend
+Price calculation is always server-side. POST /bookings/estimate-price must be called before showing any final number to the customer — never trust a price sent from the Flutter app.
+Double-booking protection is enforced at the database layer (UNIQUE(vehicle_id, booking_date, start_time)), not just in application code.
+Availability calendar (vehicle_availability or the derived equivalent) must be checked before allowing a date selection on the Car Details screen — this happens before route/price, so it’s a separate, earlier read.
+Role routing after login is server-determined — the JWT payload from /auth/otp/verify carries role, and Flutter uses that (not a button the user picks) to decide which home screen to show.
+Reviews are blind until both sides submit or 48 hours pass (visible_at field) — don’t expose one side’s review via the API until this condition is met.
+5. Suggested Order for Backend Development
+users + auth (OTP + role-based JWT)
+vehicles + vehicle_availability (needed before booking exists)
+bookings + price estimation endpoint
+drivers + driver-scoped booking endpoints
+payments
+reviews, waitlist, packages (secondary features)
+conversations/messages, scheduled_notifications, referrals (can be parallel workstreams)

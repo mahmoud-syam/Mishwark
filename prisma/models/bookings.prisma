@@ -1,0 +1,52 @@
+model Bookings {
+  id             String    @id @default(uuid())
+  customer       Users     @relation(fields: [customerId], references: [id])
+  customerId     String
+  vehicle        Vehicles  @relation(fields: [vehicleId], references: [id])
+  vehicleId      String
+  driver         Drivers   @relation(fields: [driverId], references: [id])
+  driverId       String
+  package        Packages? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  packageId      String?
+  eventType      String    @default("")
+  startPoint     String    @default("")
+  endPoint       String    @default("")
+  routeWaypoints Json?
+  distanceKm     Float     @default(0)
+  bookingDate    String    @default("")
+  startTime      String    @default("")
+  endTime        String    @default("")
+
+  status                 BookingStatus            @default(PENDING)
+  tripStatus             TripStatus               @default(NOTSTARTED)
+  basePrice              Float                    @default(0)
+  distancePrice          Float                    @default(0)
+  totalPrice             Float                    @default(0)
+  depositPaid            Float                    @default(0)
+  paymentStatus          PaymentStatus            @default(UNPAID)
+  driverNotes            String                   @default("")
+  notes                  String                   @default("")
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @default(now()) @updatedAt
+
+  payments               Payments[]
+  reviews                Reviews[]
+  conversation           Conversations?
+  waitlists              Waitlist[]
+  scheduledNotifications ScheduledNotifications[]
+  referrals              Referrals[]
+  vehicleAvailabilities  VehicleAvailability[]
+  tripLocations          TripLocations[]
+
+  @@unique([vehicleId, bookingDate, startTime])
+}
+
+model TripLocations {
+  id         String   @id @default(uuid())
+  booking    Bookings @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId  String
+  latitude   Float
+  longitude  Float
+  speed      Float?
+  recordedAt DateTime @default(now())
+}

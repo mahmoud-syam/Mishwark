@@ -1,0 +1,142 @@
+enum DriverStatus {
+  ACTIVE
+  OFF
+  ONTRIP
+  ONLEAVE
+}
+
+enum VehicleCategory {
+  CAR
+  VAN
+  BUS
+  TRUCK
+  CLASSIC
+  LUXURY
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  BOOKED
+  MAINTENANCE
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  BOOKED
+  BLOCKED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum TripStatus {
+  NOTSTARTED
+  INPROGRESS
+  ARRIVED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  PARTIALLY_PAID
+}
+
+enum PackageType {
+  MULTI_CAR
+  MULTI_EVENT
+}
+
+enum PackageStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentMethod {
+  PAYMOB
+  FAWRY
+  CASH
+  WALLET
+}
+
+enum PaymentRecordStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum ReviewerType {
+  CUSTOMER_TO_DRIVER
+  DRIVER_TO_CUSTOMER
+}
+
+enum WaitlistStatus {
+  WAITING
+  NOTIFIED
+  CONVERTED
+  EXPIRED
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+}
+
+enum SenderType {
+  CUSTOMER
+  DRIVER
+  SYSTEM
+}
+
+enum MessageType {
+  TEXT
+  QUICK_REPLY
+}
+
+enum NotificationRecipientType {
+  CUSTOMER
+  DRIVER
+  ADMIN
+}
+
+enum NotificationType {
+  REMINDER_24H
+  REMINDER_2H
+  REMINDER_30M
+  RATE_TRIP
+  SYSTEM
+}
+
+enum NotificationChannel {
+  PUSH
+  SMS
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  SCHEDULED
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum ReferralStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+}
+
+enum WalletTransactionType {
+  REFERRAL_REWARD
+  REFUND
+  MANUAL_ADJUSTMENT
+  PAYMENT_DEDUCTION
+  DEPOSIT
+}
