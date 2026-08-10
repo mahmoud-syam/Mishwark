@@ -1,11 +1,18 @@
-# Progress Log - explorer_m2_3
+# Progress — Explorer M2-3
 
-Last visited: 2026-08-09T08:34:30Z
+Last visited: 2026-08-10T10:54:35Z
 
-- [x] Initialized DISPATCH.md, BRIEFING.md, and progress.md
-- [x] Read mandatory context files (ORIGINAL_REQUEST.md, SCOPE.md, PROJECT.md)
-- [x] Inspect existing application structure (`src/app.ts`, `src/v1/controllers/`, `src/v1/routes/`, `src/v1/middlewares/`, `src/v1/schemas/`)
-- [x] Analyze required API endpoints for M2 and middleware/validation requirements
-- [x] Inspect testing setup (Jest/Vitest/Supertest, package.json scripts)
-- [x] Produce `analysis.md` and `handoff.md`
-- [x] Send handoff message to parent sub-orchestrator
+## Status
+Investigation of Booking Cancellation, Waitlist Promotion Engine, Controllers, and Routes complete. Reports written.
+
+## Steps
+- [x] Initialized DISPATCH.md and BRIEFING.md
+- [x] Read Scope and Spec files (ORIGINAL_REQUEST.md, PROJECT.md, SCOPE.md)
+- [x] Inspect Prisma Schema (`prisma/models/`) for Booking, Waitlist, VehicleAvailability, ScheduledNotifications models
+- [x] Inspect existing codebase structure in `src/` (services, controllers, routes, middlewares, app.ts)
+- [x] Investigate Booking Cancellation and Waitlist Promotion logic requirements
+- [x] Investigate Booking Controller endpoints and route definitions
+- [x] Investigate Middleware attachment & app.ts registration
+- [x] Document findings in `analysis.md`
+- [x] Draft structured `handoff.md`
+- [x] Notify parent orchestrator

@@ -1,81 +1,51 @@
-# Handoff Report: Explorer 1 (Milestone M2 — Bookings & Pricing Core Engine)
+# Handoff Report: Milestone M2 — Pricing Engine Exploration
 
 ## 1. Observation
-
-### Codebase and Model Inspection
-- **Prisma Schema Models** (`prisma/models/`):
-  - `bookings.prisma`: `Bookings` model with composite unique constraint `@@unique([vehicleId, bookingDate, startTime])`.
-  - `vehicles.prisma`: `Vehicles` model (with `category`, `basePrice`, `pricePerKm`, `pricePerHour`, `status`), `VehicleAvailability` model (with `@@unique([vehicleId, date])`).
-  - `waitlist.prisma`: `Waitlist` model with fields (`customerId`, `vehicleId`, `requestedDate`, `requestedTime`, `position`, `status`).
-  - `packages.prisma` & `referrals.prisma`: Models for multi-car/multi-event packages and user referral program tracking.
-- **Existing Routes & Controllers** (`src/v1/routes/index.ts`, `src/v1/controllers/vehicles.controller.ts`):
-  - Express v5 pattern with `errorHandler` async wrapper.
-  - Middlewares `authMiddleware`, `adminMiddleware`, `errorMiddleware`.
-  - Service directory currently lacks `pricing.service.ts` and `booking.service.ts`.
-- **Existing Test Infrastructure** (`tests/tier1/f4_f5_f6_f7_bookings_pricing.test.ts`, `tests/tier2/f4_f5_f6_f7_bookings_boundaries.test.ts`):
-  - Defines the exact authoritative formula for price estimates:
-    - Default rates per category: `CAR` (50, 10, 25), `VAN` (150, 15, 40), `BUS` (300, 25, 60), `TRUCK` (250, 20, 50), `CLASSIC` (200, 18, 45), `LUXURY` (350, 30, 75).
-    - Distance price: `distanceKm * pricePerKm`.
-    - Time price: `(durationMinutes / 60) * pricePerHour`.
-    - Peak surge multiplier default: `1.25` when `isPeakHour` is true.
-    - Package + Referral discount capping to prevent negative total price.
-    - 20% deposit requirement: `totalPrice * 0.20`.
-    - Slot overlap condition: `sA < eB && sB < eA`.
-    - State machine transitions for `BookingStatus` (`PENDING` -> `CONFIRMED` -> `COMPLETED`/`CANCELLED`) and `TripStatus` (`NOTSTARTED` -> `INPROGRESS` -> `ARRIVED` -> `COMPLETED`).
-
----
+- **Service implementation**: `src/v1/services/pricing.service.ts` contains `calculateEstimatedPrice` and `PricingService.calculatePrice`.
+- **Validation Schema**: `src/v1/schemas/booking.schema.ts` defines `calculatePriceSchema` (lines 4-18) supporting `vehicleCategory`, `distanceKm`, `durationMinutes`, `isPeakHour`, `surgeMultiplier`, `packageDiscount`, `referralDiscount`, `customBasePrice`, `customPricePerKm`, `customPricePerHour`, `vehicleId`, `packageId`, `referralCode`.
+- **Controller Endpoint**: `src/v1/controllers/booking.controller.ts` exports `calculatePrice` (lines 5-11), which calls `PricingService.calculatePrice(req.body)` and returns HTTP 200 with `{ success: true, data: breakdown }`.
+- **Prisma Schema Models**:
+  - `Vehicles` model in `prisma/models/vehicles.prisma` provides `category`, `basePrice`, `pricePerKm`, `pricePerHour`.
+  - `Packages` model in `prisma/models/packages.prisma` provides `discountPercentage` and `status` (`PackageStatus` enum).
+  - `Referrals` model in `prisma/models/referrals.prisma` provides `referralCode` and `rewardAmount`.
+  - `Enums` in `prisma/models/enums.prisma` define `VehicleCategory` (`CAR`, `VAN`, `BUS`, `TRUCK`, `CLASSIC`, `LUXURY`).
+- **Test Expectations**: `tests/tier1/f4_f5_f6_f7_bookings_pricing.test.ts` (lines 34-77) and `tests/tier2/f4_f5_f6_f7_bookings_boundaries.test.ts` test:
+  - Base rates: `CAR`=$50, `VAN`=$150, `BUS`=$300, `TRUCK`=$250, `CLASSIC`=$200, `LUXURY`=$350.
+  - Formula: `subtotal = basePrice + (distanceKm * pricePerKm) + ((durationMinutes / 60) * pricePerHour)`.
+  - Peak surge: `surgeMultiplier` default `1.25` for peak hour, `1.0` otherwise.
+  - Package discount & Referral discount subtraction capped at surcharged total (so total price never goes below 0).
+  - Deposit: exactly 20% of `totalPrice` (`Math.round(totalPrice * 0.20 * 100) / 100`).
 
 ## 2. Logic Chain
-
-1. **Pricing Engine Logic**:
-   - Query vehicle custom rates if `vehicleId` provided; fallback to `VehicleCategory` standard defaults table; fallback to `CAR` rates if category missing/unknown.
-   - Clamp `distanceKm` and `durationMinutes` with `Math.max(0, val)`.
-   - Calculate subtotal = `basePrice + distancePrice + timePrice`. Apply peak surge multiplier to subtotal if `isPeakHour = true`.
-   - Subtract total combined discount (`packageDiscount + referralDiscount`), capped at `surchargedTotal`.
-   - Round total price to 2 decimal places and compute 20% deposit.
-
-2. **Double-Booking & Availability Control Logic**:
-   - Execute all booking creations inside `prisma.$transaction`.
-   - Check vehicle status (must not be `MAINTENANCE`) and driver status (must be `ACTIVE`).
-   - Check existing `VehicleAvailability` records for `BOOKED` or `BLOCKED` status on `bookingDate`.
-   - Query existing active `Bookings` on the date for vehicle/driver and run slot overlap formula `sA < eB && sB < eA`.
-   - If overlap detected, throw a HTTP 409 `ConflictException`.
-   - Upon creation, insert `Bookings` record and upsert `VehicleAvailability` to status `BOOKED` linked to `bookingId`.
-
-3. **Cancellation & Waitlist Promotion Logic**:
-   - Check state transition validity: only `PENDING` or `CONFIRMED` bookings can be cancelled.
-   - Update `Booking.status` to `CANCELLED`, release `VehicleAvailability` record back to `AVAILABLE`, set assigned driver back to `ACTIVE`.
-   - Find top waiting entry in `Waitlist` table (`status = WAITING`, ordered by `position ASC`), update status to `NOTIFIED`, set 24h expiration timer, and generate a `ScheduledNotifications` record.
-
----
+1. **Inputs Verification**:
+   - `distanceKm` and `durationMinutes` are clamped to non-negative values (`Math.max(0, val || 0)`).
+   - Category defaults are resolved from `CATEGORY_DEFAULT_RATES`. If custom rates on vehicle are `> 0`, they take precedence.
+2. **Surge Scaling**:
+   - `isPeakHour` triggers `1.25` surge unless custom positive `surgeMultiplier` is supplied.
+   - Non-positive or negative `surgeMultiplier` values are ignored and fallback to defaults (`1.25` or `1.0`).
+3. **Discount Computation**:
+   - Package lookup checks package validity and applies percentage discount.
+   - Referral lookup checks code and applies fixed dollar reward discount.
+   - Combined discounts are capped at `surchargedTotal`.
+4. **Rounding & Deposit**:
+   - Final prices and component breakdown amounts are rounded to 2 decimal places.
+   - Deposit requirement is exactly 20% of the calculated total price.
 
 ## 3. Caveats
-
-- **Time Format Assumption**: Booking dates are stored as ISO dates (`YYYY-MM-DD` or `DateTime`), and time slots as `HH:mm` strings (24h format).
-- **Peak Hour Detection**: In `calculatePrice`, if `isPeakHour` boolean is explicitly passed, it overrides date/time heuristics. If omitted, time of day can be checked against standard peak windows (07:00-09:30, 16:30-19:30).
-- **Referral Code / Package Validation**: If `packageId` or `referralCode` is passed to `calculatePrice`, the service queries `Packages` and `Referrals`/`Users` tables to compute exact dollar discounts.
-
----
+- No code changes were made to source files during this exploration phase (strictly read-only).
+- Package status validation (`pkg.status === PackageStatus.ACTIVE`) should be explicitly enforced by implementers when querying the `Packages` model in `PricingService.calculatePrice`.
 
 ## 4. Conclusion
-
-The technical architecture and complete implementation blueprint for Milestone M2 (Bookings & Pricing Engine) are defined in `analysis.md`. The design fulfills all requirements of `ORIGINAL_REQUEST.md`, `SCOPE.md`, and `PROJECT.md`, while remaining 100% compliant with existing tier 1-4 tests.
-
-### Required Files to Build in Implementation Phase:
-1. `src/v1/exceptions/conflict.ts`: `ConflictException` (HTTP 409).
-2. `src/v1/schemas/booking.schema.ts`: Zod validation schemas.
-3. `src/v1/services/pricing.service.ts`: Pricing calculation engine.
-4. `src/v1/services/booking.service.ts`: Booking creation, double-booking lock, state machine, waitlist promotion.
-5. `src/v1/controllers/booking.controller.ts`: Express controllers.
-6. `src/v1/routes/booking.routes.ts`: Booking routes.
-7. `src/v1/routes/index.ts`: Mounting booking router under `/bookings`.
-
----
+The Pricing Calculation Engine specification, formulas, DTO contracts (`CalculatePriceDTO`, `PriceBreakdown`), and validation rules are fully specified and aligned across database models, controller endpoints, service methods, and test suites. Implementers can proceed with feature execution safely.
 
 ## 5. Verification Method
-
-To verify the blueprint implementation:
-1. **Compilation Check**: Run `npx tsc --noEmit` from project root (`C:/Projects/Mishwarak-backend`). Must return 0 errors.
-2. **Master Test Runner**: Run `npx ts-node tests/infra/run-all.ts`.
-   - All tests in `tests/tier1/f4_f5_f6_f7_bookings_pricing.test.ts` must pass.
-   - All tests in `tests/tier2/f4_f5_f6_f7_bookings_boundaries.test.ts` must pass.
+1. **TypeScript Type Safety**:
+   ```bash
+   npx tsc --noEmit
+   ```
+2. **Automated Test Runner**:
+   ```bash
+   npx tsx tests/infra/run-all.ts
+   ```
+3. **Targeted Test Suites**:
+   Inspect and run `tests/tier1/f4_f5_f6_f7_bookings_pricing.test.ts` and `tests/tier2/f4_f5_f6_f7_bookings_boundaries.test.ts`.

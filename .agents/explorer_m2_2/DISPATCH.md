@@ -1,18 +1,15 @@
-## 2026-08-09T11:32:09Z
-You are Explorer 2 for Milestone M2 (Bookings & Pricing Engine).
-Your working directory is C:/Projects/Mishwarak-backend/.agents/explorer_m2_2.
+## 2026-08-10T07:50:50Z
+Scope & Context Files:
+- Original Request: C:/Projects/Mishwarak-backend/ORIGINAL_REQUEST.md
+- Project Spec: C:/Projects/Mishwarak-backend/PROJECT.md
+- Milestone M2 Scope: C:/Projects/Mishwarak-backend/.agents/sub_orch_m2_gen2/SCOPE.md
 
-Mandatory Context Files to Read:
-1. C:/Projects/Mishwarak-backend/ORIGINAL_REQUEST.md
-2. C:/Projects/Mishwarak-backend/.agents/sub_orch_m2/SCOPE.md
-3. C:/Projects/Mishwarak-backend/PROJECT.md
-
-Task Objectives:
-1. Explore the codebase and Prisma models (`prisma/models/bookings.prisma`, `vehicles.prisma`, `waitlist.prisma`, etc.) for booking state machine and concurrency lock mechanisms.
-2. Investigate Booking State Machine & Double-Booking Prevention:
-   - Valid state transitions for `BookingStatus` (`PENDING` -> `CONFIRMED` -> `COMPLETED` / `CANCELLED`) and `TripStatus` (`NOTSTARTED` -> `EN_ROUTE` -> `ARRIVED` -> `COMPLETED`).
-   - How `prisma.$transaction` and overlap queries for `[startTime, endTime]` should be implemented to prevent double booking.
-   - `VehicleAvailability` locking and driver availability check.
-   - Cancellation logic & Waitlist promotion logic (query top waitlist entry, update status to `NOTIFIED`, trigger scheduled notification).
-3. Produce a detailed technical analysis in `C:/Projects/Mishwarak-backend/.agents/explorer_m2_2/analysis.md` and handoff report in `C:/Projects/Mishwarak-backend/.agents/explorer_m2_2/handoff.md`.
-4. Report back when complete using send_message to parent sub-orchestrator.
+Task Instructions:
+1. Investigate the Booking Service & State Machine + Double-Booking Protection (`src/v1/services/booking.service.ts`):
+   - State machine transitions for BookingStatus (PENDING -> CONFIRMED -> COMPLETED / CANCELLED) and TripStatus (NOTSTARTED -> EN_ROUTE -> ARRIVED -> COMPLETED). Valid vs invalid transitions (return 400 Bad Request via standard HttpException).
+   - Atomic transaction double-booking prevention in Prisma (`prisma.$transaction`): overlap detection for date YYYY-MM-DD and time window `[startTime, endTime]` (overlap formula: `newStart < existingEnd AND newEnd > existingStart`).
+   - Checking `VehicleAvailability` records (BOOKED/BLOCKED) and existing `Bookings` for vehicle and driver.
+   - Updating/creating `VehicleAvailability` records to BOOKED and returning 409 Conflict when overlapping.
+2. Inspect existing codebase, Prisma schema/models, error handling middleware, and helper utilities.
+3. Write your detailed findings and proposed implementation strategy into `C:/Projects/Mishwarak-backend/.agents/explorer_m2_2/analysis.md` and deliver a structured `handoff.md` in the same directory.
+4. Send a completion message to the parent orchestrator. Do NOT modify any source code files.

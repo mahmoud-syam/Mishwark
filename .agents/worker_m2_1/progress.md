@@ -1,16 +1,14 @@
-# Progress Log - Worker M2 1
+# Progress Log - worker_m2_1
 
-Last visited: 2026-08-09T08:45:34Z
+Last visited: 2026-08-10T07:55:00Z
 
-- [x] Initialized workspace files (DISPATCH.md, BRIEFING.md, progress.md)
-- [x] Read mandatory context files
-- [x] Inspect existing codebase & schemas
-- [x] Implement `src/v1/utils/errors.ts`
-- [x] Implement `src/v1/services/pricing.service.ts`
-- [x] Implement `src/v1/schemas/booking.schema.ts`
-- [x] Implement `src/v1/services/booking.service.ts`
-- [x] Implement `src/v1/controllers/booking.controller.ts`
-- [ ] Implement `src/v1/routes/booking.routes.ts`
-- [ ] Update `src/app.ts`
-- [ ] Run `npx tsc --noEmit` and tests
-- [ ] Write handoff report and notify parent
+- [x] Initialized DISPATCH.md and BRIEFING.md
+- [ ] Read context files, schema, and current implementation files
+- [ ] Implement Pricing Engine in `src/v1/services/pricing.service.ts`
+- [ ] Implement Booking Core Service, State Machine, Transaction & Double-Booking Protection, Waitlist Promotion in `src/v1/services/booking.service.ts`
+- [ ] Implement Controller in `src/v1/controllers/booking.controller.ts`
+- [ ] Implement Routes in `src/v1/routes/booking.routes.ts` and update `src/app.ts`
+- [ ] Verify TypeScript build (`npx tsc --noEmit`)
+- [ ] Verify test suite (`npx tsx tests/infra/run-all.ts`)
+- [ ] Write `changes.md` and `handoff.md`
+- [ ] Send completion message to parent orchestrator

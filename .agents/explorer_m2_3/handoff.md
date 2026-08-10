@@ -1,76 +1,71 @@
-# Handoff Report: Explorer 3 — M2 API Endpoints, Middleware & Testing Setup
+# Handoff Report: Booking Cancellation / Waitlist Promotion Engine & Controllers/Routes (Milestone M2)
 
 ## 1. Observation
-
-- **Express App Setup (`src/index.ts`)**:
-  - `src/index.ts` lines 11–44 initialize `const app: Express = express()`, configure CORS/cookie/JSON/static middlewares, attach `/api/v1` router, attach `errorMiddleware`, and invoke `app.listen(Number(PORT), ...)`.
-  - Currently no `src/app.ts` file exists to export `app` separately for integration testing.
-
-- **Main Router (`src/v1/routes/index.ts`)**:
-  - Lines 5–10 attach `/auth` (`authRouterV1`) and `/vehicles` (`vehiclesRouterV1`).
-  - `bookingRouterV1` is not yet mounted.
-
-- **Error Handling & Controller Wrappers (`src/error-handler.ts` & `src/v1/middlewares/errors.middleware.ts`)**:
-  - `src/error-handler.ts` lines 7–26 export `errorHandler(method: Function)`, catching `HttpException`, `ZodError`, and generic errors.
-  - `src/v1/middlewares/errors.middleware.ts` handles status codes and formats JSON response with `{ message, errorCode, errors }`.
-
-- **Existing Middlewares (`src/v1/middlewares/`)**:
-  - `auth.middleware.ts` lines 10–32 export `authMiddleware`, reading `req.cookies.token` only. `Authorization` header reading and `authenticateToken` alias are currently missing.
-  - `permission.middleware.ts` lines 10–50 export `requirePermission`. `authorizeRole` middleware is currently missing.
-  - Request validation middleware (`validateRequest`) does not exist yet in `src/v1/middlewares/`.
-
-- **Prisma Schema & Enums (`prisma/models/`)**:
-  - `Bookings` model (`prisma/models/bookings.prisma`: lines 1–42) contains fields: `id`, `customerId`, `vehicleId`, `driverId`, `packageId`, `eventType`, `startPoint`, `endPoint`, `routeWaypoints`, `distanceKm`, `bookingDate`, `startTime`, `endTime`, `status` (`BookingStatus`), `tripStatus` (`TripStatus`), `basePrice`, `distancePrice`, `totalPrice`, `depositPaid`, `paymentStatus`, `driverNotes`, `notes`.
-  - Enums (`prisma/models/enums.prisma`: lines 29–41):
-    - `BookingStatus`: `PENDING`, `CONFIRMED`, `COMPLETED`, `CANCELLED`
-    - `TripStatus`: `NOTSTARTED`, `INPROGRESS`, `ARRIVED`, `COMPLETED`
-  - `VehicleAvailability` model (`prisma/models/vehicles.prisma`: lines 45–58): `id`, `vehicleId`, `date`, `status` (`AvailabilityStatus`: `AVAILABLE`, `BOOKED`, `BLOCKED`), `bookingId`.
-  - `Waitlist` model (`prisma/models/waitlist.prisma`: lines 1–18): `id`, `customerId`, `vehicleId`, `bookingId`, `requestedDate`, `requestedTime`, `position`, `status` (`WaitlistStatus`: `WAITING`, `NOTIFIED`, `CONVERTED`, `EXPIRED`), `notifiedAt`, `expiresAt`.
-
-- **Test Infrastructure (`package.json`)**:
-  - `package.json` line 53 has `"tsx": "^4.21.0"`. `node --test` / `tsx --test` or Supertest can be used for testing.
+- **Scope & Context**:
+  - `ORIGINAL_REQUEST.md`, `PROJECT.md`, `.agents/sub_orch_m2_gen2/SCOPE.md`.
+- **Database Schema**:
+  - `Bookings` model (`prisma/models/bookings.prisma:1-42`): fields `id`, `customerId`, `vehicleId`, `driverId`, `bookingDate`, `startTime`, `endTime`, `status`, `tripStatus`, `basePrice`, `distancePrice`, `totalPrice`, `depositPaid`. Unique constraint `@@unique([vehicleId, bookingDate, startTime])`.
+  - `Waitlist` model (`prisma/models/waitlist.prisma:1-17`): fields `id`, `customerId`, `vehicleId`, `requestedDate`, `position`, `status` (`WaitlistStatus`: `WAITING`, `NOTIFIED`, `CONVERTED`, `EXPIRED`), `notifiedAt`, `expiresAt`.
+  - `VehicleAvailability` model (`prisma/models/vehicles.prisma:45-58`): fields `id`, `vehicleId`, `date`, `status` (`AvailabilityStatus`: `AVAILABLE`, `BOOKED`, `BLOCKED`), `reason`, `bookingId`. Unique constraint `@@unique([vehicleId, date])`.
+  - `ScheduledNotifications` model (`prisma/models/notifications.prisma:1-17`): fields `id`, `bookingId`, `recipientId`, `recipientType`, `notificationType`, `channel`, `title`, `body`, `scheduledAt`, `status`.
+- **Existing Services & Controllers**:
+  - `src/v1/services/booking.service.ts:243-377`: `cancelBooking(bookingId, cancelledByUserId)` method executes atomic transaction releasing availability, updating status to `CANCELLED`, setting driver to `ACTIVE`, promoting top waitlist entry (`WaitlistStatus.NOTIFIED`), and creating `ScheduledNotifications` record.
+  - `src/v1/controllers/booking.controller.ts:1-69`: Exports controller handlers (`calculatePrice`, `createBooking`, `getBookings`, `getBookingById`, `updateBookingStatus`, `updateTripStatus`, `cancelBooking`).
+- **Existing Router State**:
+  - `src/v1/routes/index.ts:1-11`: Mounts `/auth` and `/vehicles`, but `booking.routes.ts` is not yet mounted.
+- **Verification Commands Executed**:
+  - `npx tsc --noEmit`: Executed successfully with exit code 0 and zero type errors.
+  - `npx tsx tests/infra/run-all.ts`: Executed 218 test cases across 10 suites with 218 PASS, 0 FAIL.
 
 ---
 
 ## 2. Logic Chain
+1. **Cancellation & Waitlist Core Logic**:
+   - `BookingService.cancelBooking` in `src/v1/services/booking.service.ts` uses an atomic `prismaClient.$transaction`.
+   - Idempotency is preserved: if status is already `CANCELLED`, it returns `{ booking, promotedWaitlistEntry: null }`.
+   - Status transition is checked via `isValidBookingTransition`: rejects invalid transitions (e.g. `COMPLETED` -> `CANCELLED`) with HTTP 400 (`BadRequestException`).
+   - `VehicleAvailability` is released: sets `status = AvailabilityStatus.AVAILABLE` and `bookingId = null`.
+   - Driver availability is released: sets driver status to `ACTIVE` if currently `ONTRIP`.
+   - Waitlist query orders by `position ASC` for `vehicleId` and `requestedDate` with `status = WaitlistStatus.WAITING`.
+   - Highest priority customer entry is updated to `WaitlistStatus.NOTIFIED` with `notifiedAt` and `expiresAt` (24h expiry).
+   - Scheduled notification is queued in `ScheduledNotifications` with `channel = PUSH` and `status = SCHEDULED`.
 
-1. **App Separation**:
-   - Isolating app initialization into `src/app.ts` and server startup into `src/index.ts` allows test files to import `app` directly for supertest route testing without port conflicts.
-
-2. **Middleware Standardization**:
-   - `authMiddleware` must check both `req.cookies.token` and `req.headers.authorization` header (`Bearer <token>`) to support standard API authorization calls. Alias `export const authenticateToken = authMiddleware;` fulfills contract requirements.
-   - `validateRequest` middleware using Zod provides declarative, automatic request body and query validation across all routes.
-   - `authorizeRole` middleware ensures role isolation (`CUSTOMER` vs `DRIVER` vs `ADMIN`).
-
-3. **Validation & State Machine Enforcement**:
-   - Zod validation schemas in `src/v1/schemas/booking.schema.ts` enforce shape, type, and regex constraints (e.g., `YYYY-MM-DD`, `HH:mm`) before controller execution.
-   - The state machine transitions for `BookingStatus` (`PENDING` -> `CONFIRMED` -> `COMPLETED`/`CANCELLED`) and `TripStatus` (`NOTSTARTED` -> `INPROGRESS` -> `ARRIVED` -> `COMPLETED`) safeguard data integrity.
-
-4. **Double-Booking Protection & Concurrency Locking**:
-   - Using `prisma.$transaction`, checking time window overlaps `(newStart < existingEnd AND newEnd > existingStart)` against `Bookings` and `VehicleAvailability` prevents race conditions.
-   - Returning HTTP 409 Conflict provides clear error semantics when availability conflicts occur.
-
-5. **Waitlist Promotion Automation**:
-   - Upon cancellation, transactional release of `VehicleAvailability` and querying the earliest `Waitlist` row (`position ASC`, `WAITING`) ensures automatic queue promotion and notification scheduling.
+2. **Routes & Middleware Integration**:
+   - `src/v1/routes/booking.routes.ts` must be created to define the endpoints:
+     - `POST /calculate-price` -> `calculatePriceSchema`
+     - `POST /` -> `authenticateToken` + `createBookingSchema`
+     - `GET /` -> `authenticateToken` + `listBookingsQuerySchema`
+     - `GET /:id` -> `authenticateToken`
+     - `PATCH /:id/status` -> `authenticateToken` + `updateBookingStatusSchema`
+     - `PATCH /:id/trip-status` -> `authenticateToken` + `updateTripStatusSchema`
+     - `POST /:id/cancel` -> `authenticateToken` + `cancelBookingSchema`
+   - `authMiddleware` in `src/v1/middlewares/auth.middleware.ts` should be enhanced to export `authenticateToken` and support `Authorization: Bearer <token>` header as well as cookie.
+   - `validateRequest` middleware in `src/v1/middlewares/validate.middleware.ts` should be created to validate request payload/query against Zod schemas.
+   - `booking.routes.ts` must be registered in `src/v1/routes/index.ts` under `/bookings`.
+   - Express app setup module `src/app.ts` should export `app` for clean route/middleware binding.
 
 ---
 
 ## 3. Caveats
-
-- **Timezone Standardization**: Booking dates and start/end times should be handled consistently in UTC or standardized local ISO strings to avoid timezone mismatch during time range overlap calculation.
-- **External Notifications**: Actual push/SMS notification delivery is part of M3; for M2, waitlist promotion creates `ScheduledNotifications` rows in the database.
+- Read-only investigation: No source code files were modified during this exploration turn.
+- Waitlist expiration enforcement: The 24-hour waitlist expiration timer is recorded in `Waitlist.expiresAt`. Cron background cleanup for expired waitlists (`WaitlistStatus.EXPIRED`) can be run separately or scheduled via cron worker.
 
 ---
 
 ## 4. Conclusion
-
-The technical requirements, schema specs, middleware structure, endpoint parameters, state machine rules, and test strategy for M2 (Bookings & Pricing Engine) are fully analyzed and mapped. Implementers can proceed directly to writing `src/app.ts`, `src/v1/middlewares/validation.middleware.ts`, `src/v1/schemas/booking.schema.ts`, `src/v1/services/pricing.service.ts`, `src/v1/services/booking.service.ts`, `src/v1/controllers/booking.controller.ts`, and `src/v1/routes/booking.routes.ts`.
+The Booking Cancellation & Waitlist Promotion Engine logic is fully specified in `BookingService.cancelBooking`, and controllers and schemas are ready. The concrete implementation plan for creating `src/v1/routes/booking.routes.ts`, `src/v1/middlewares/validate.middleware.ts`, enhancing `auth.middleware.ts`, mounting in `src/v1/routes/index.ts`, and providing `src/app.ts` is fully documented in `analysis.md`.
 
 ---
 
 ## 5. Verification Method
-
-To verify the setup and findings:
-1. Run `npx tsc --noEmit` to verify type compliance across the project.
-2. Inspect `src/app.ts`, `src/v1/routes/index.ts`, `src/v1/middlewares/auth.middleware.ts`, and `src/v1/schemas/booking.schema.ts`.
-3. Test route endpoints using `npx tsx --test tests/**/*.test.ts` or Supertest once implementers finalize code.
+To verify implementation downstream:
+1. Run TypeScript compiler:
+   ```bash
+   npx tsc --noEmit
+   ```
+   *Expected result*: Exit code 0, no type errors.
+2. Run master test suite:
+   ```bash
+   npx tsx tests/infra/run-all.ts
+   ```
+   *Expected result*: 10 suites executed, all 218 test cases PASS.

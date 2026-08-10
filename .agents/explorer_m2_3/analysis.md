@@ -1,141 +1,310 @@
-# Technical Analysis: M2 API Endpoints, Middleware, Validation Schemas & App Architecture
+# Comprehensive Analysis: Booking Cancellation / Waitlist Promotion Engine & Controllers/Routes (Milestone M2)
 
 ## Executive Summary
-This analysis details the architecture, request validation, middleware integration, endpoint specifications, and test setup required for Milestone M2 (Bookings & Pricing Engine) of the Mishwark backend.
+This analysis details the technical design, codebase state, evidence chain, and concrete implementation strategy for **Milestone M2 Task 3: Booking Cancellation / Waitlist Promotion Engine & Booking Controllers/Routes**.
+
+All existing core services (`BookingService` in `src/v1/services/booking.service.ts`, `PricingService` in `src/v1/services/pricing.service.ts`, controllers in `src/v1/controllers/booking.controller.ts`, and schemas in `src/v1/schemas/booking.schema.ts`) have been verified. The test suite runner (`npx tsx tests/infra/run-all.ts`) executed 218 test cases across 10 suites with **0 failures**, and `npx tsc --noEmit` passed with **0 errors**.
 
 ---
 
-## 1. Application Setup & Architectural Conventions
+## 1. Context & Key Requirements
 
-### 1.1 Express App Setup Refactoring
-- **Current State**: `src/index.ts` creates the Express application, configures global middleware (CORS, cookie-parser, JSON, static uploads), attaches routes under `/api/v1`, attaches `errorMiddleware`, and immediately calls `app.listen()`.
-- **Target Architecture**:
-  - Extract the application configuration into `src/app.ts`, exporting the `app` instance.
-  - Update `src/index.ts` to import `app` from `./app` and start the HTTP server.
-  - **Rationale**: Enables integration tests and route verification tools (e.g., Supertest) to import `app` without binding to a network port or interfering with active servers.
+1. **Booking Cancellation Logic**:
+   - Transition `BookingStatus` to `CANCELLED`.
+   - Release `VehicleAvailability` record linked to the booking back to `status = AVAILABLE` (`bookingId = null`, `reason = "Booking cancelled"`).
+   - Release assigned `Driver` back to `status = ACTIVE` if currently `ONTRIP`.
+   - Ensure idempotency: if booking is already `CANCELLED`, return `{ booking, promotedWaitlistEntry: null }` without throwing an error.
+   - Enforce transition validity: verify `isValidBookingTransition(booking.status, BookingStatus.CANCELLED)`. Reject invalid transitions (e.g. `COMPLETED`) with `BadRequestException`.
 
-### 1.2 Route Wiring Convention
-- Main router: `src/v1/routes/index.ts`
-- M2 requirement: Wire `booking.routes.ts` under `/api/v1/bookings`:
+2. **Waitlist Promotion Engine**:
+   - Query `Waitlist` table within the atomic transaction for active entries (`vehicleId = booking.vehicleId`, `requestedDate = booking.bookingDate`, `status = WAITING`), ordered by `position ASC`.
+   - Select the highest priority / earliest matching customer (`position = 1` or lowest available).
+   - Update waitlist entry status to `NOTIFIED`, set `notifiedAt = now`, and set `expiresAt = now + 24 hours`.
+   - Create a `ScheduledNotifications` record for the promoted customer with `channel = PUSH`, `recipientType = CUSTOMER`, `notificationType = SYSTEM`, `scheduledAt = now`, `status = SCHEDULED`, title `"Waitlist Promotion Notice"`, and informative body text.
+
+3. **Controllers & Routes Registration**:
+   - Dedicated router: `src/v1/routes/booking.routes.ts`.
+   - Endpoints to register:
+     - `POST /api/v1/bookings/calculate-price` (Price estimation, public or authenticated)
+     - `POST /api/v1/bookings` (Create booking with double-booking protection)
+     - `GET /api/v1/bookings` (List bookings with pagination & role filtering)
+     - `GET /api/v1/bookings/:id` (Get booking by ID)
+     - `PATCH /api/v1/bookings/:id/status` (Update booking status)
+     - `PATCH /api/v1/bookings/:id/trip-status` (Update trip status)
+     - `POST /api/v1/bookings/:id/cancel` (Cancel booking & trigger waitlist promotion)
+   - Attachment of `authenticateToken` (`authMiddleware` supporting both cookie and Bearer tokens) and `validateRequest` (Zod schema validator) middlewares.
+   - Central registration in `src/v1/routes/index.ts` and Express app setup (`src/app.ts` / `src/index.ts`).
+
+---
+
+## 2. Evidence Chain & Codebase Audit
+
+### 2.1 Schema Inspection (`prisma/models/`)
+- **`Bookings` model** (`prisma/models/bookings.prisma`):
+  - Fields: `id`, `customerId`, `vehicleId`, `driverId`, `packageId`, `eventType`, `startPoint`, `endPoint`, `distanceKm`, `bookingDate`, `startTime`, `endTime`, `status` (`BookingStatus`), `tripStatus` (`TripStatus`), `basePrice`, `distancePrice`, `totalPrice`, `depositPaid`, `paymentStatus` (`PaymentStatus`), `notes`, `driverNotes`, `createdAt`, `updatedAt`.
+  - Relations: `vehicleAvailabilities`, `waitlists`, `scheduledNotifications`, `payments`, `reviews`.
+  - Unique Constraint: `@@unique([vehicleId, bookingDate, startTime])`.
+- **`Waitlist` model** (`prisma/models/waitlist.prisma`):
+  - Fields: `id`, `customerId`, `vehicleId`, `bookingId`, `requestedDate`, `requestedTime`, `position` (default 1), `status` (`WaitlistStatus`: `WAITING`, `NOTIFIED`, `CONVERTED`, `EXPIRED`), `notifiedAt`, `expiresAt`, `createdAt`, `updatedAt`.
+- **`VehicleAvailability` model** (`prisma/models/vehicles.prisma`):
+  - Fields: `id`, `vehicleId`, `date` (`DateTime`), `status` (`AvailabilityStatus`: `AVAILABLE`, `BOOKED`, `BLOCKED`), `reason`, `bookingId`, `createdAt`, `updatedAt`.
+  - Unique Constraint: `@@unique([vehicleId, date])`.
+- **`ScheduledNotifications` model** (`prisma/models/notifications.prisma`):
+  - Fields: `id`, `bookingId`, `recipientId`, `recipientType` (`CUSTOMER`, `DRIVER`, `ADMIN`), `notificationType` (`REMINDER_24H`, `REMINDER_2H`, `REMINDER_30M`, `RATE_TRIP`, `SYSTEM`), `channel` (`PUSH`, `SMS`, `WHATSAPP`), `title`, `body`, `scheduledAt`, `sentAt`, `status` (`SCHEDULED`, `SENT`, `FAILED`, `CANCELLED`).
+
+### 2.2 Existing Service Logic (`src/v1/services/booking.service.ts`)
+- **`cancelBooking` implementation**:
+  - Runs inside `prismaClient.$transaction`.
+  - Checks if booking exists (`NotFoundException` if missing).
+  - Checks idempotency: returns `{ booking, promotedWaitlistEntry: null }` if `status === CANCELLED`.
+  - Validates status transition via `isValidBookingTransition(booking.status, BookingStatus.CANCELLED)`.
+  - Updates `BookingStatus` to `CANCELLED`.
+  - Updates `VehicleAvailability` status to `AVAILABLE` and sets `bookingId = null`.
+  - Updates `Driver` status to `ACTIVE` if driver was `ONTRIP`.
+  - Queries `tx.waitlist` for `vehicleId`, `requestedDate`, `status = WAITING`, ordered by `position ASC`.
+  - Promotes top valid entry (`status = NOTIFIED`, `notifiedAt = now`, `expiresAt = now + 24h`).
+  - Inserts `ScheduledNotifications` record.
+
+### 2.3 Existing Controller Methods (`src/v1/controllers/booking.controller.ts`)
+- `calculatePrice`: Calls `PricingService.calculatePrice(req.body)` -> returns `200 OK`.
+- `createBooking`: Calls `BookingService.createBooking(req.body, req.user)` -> returns `201 Created`.
+- `getBookings`: Calls `BookingService.listBookings(req.query, req.user)` -> returns `200 OK` with data items and pagination metadata.
+- `getBookingById`: Calls `BookingService.getBookingById(req.params.id)` -> returns `200 OK`.
+- `updateBookingStatus`: Calls `BookingService.updateBookingStatus(id, req.body.status, req.user)` -> returns `200 OK`.
+- `updateTripStatus`: Calls `BookingService.updateTripStatus(id, req.body.tripStatus, req.user)` -> returns `200 OK`.
+- `cancelBooking`: Calls `BookingService.cancelBooking(id, req.user?.id)` -> returns `200 OK` with booking data and promoted waitlist entry.
+
+### 2.4 Existing Routes & Middleware Audit
+- **Current `src/v1/routes/index.ts`**:
   ```typescript
-  import bookingRouterV1 from "./booking.routes";
-  rootRouterV1.use("/bookings", bookingRouterV1);
+  import { Router } from "express";
+  import authRouterV1 from "./auth.route";
+  import vehiclesRouterV1 from "./vehicles.route";
+
+  const rootRouterV1: Router = Router();
+
+  rootRouterV1.use("/auth", authRouterV1);
+  rootRouterV1.use("/vehicles", vehiclesRouterV1);
+
+  export default rootRouterV1;
   ```
-
-### 1.3 Async Controller Wrapper Pattern
-- All controllers MUST use the `errorHandler` wrapper from `src/error-handler.ts`.
-- `errorHandler` catches thrown exceptions:
-  - `HttpException` instances are passed directly to `next(error)`.
-  - `ZodError` instances are wrapped in `UnprocessableEntity` (HTTP 422).
-  - General errors are wrapped in `InternalException` (HTTP 500).
+  *Gap*: `booking.routes.ts` is not yet mounted in `rootRouterV1`.
+- **Current `src/v1/middlewares/auth.middleware.ts`**:
+  - Currently extracts token from `req.cookies.token`.
+  - *Enhancement needed*: Support `Authorization: Bearer <token>` header alongside `req.cookies.token`, and export `authenticateToken` alias.
+- **Validation Middleware**:
+  - *Gap*: `validateRequest` middleware is not yet implemented as a stand-alone middleware function.
 
 ---
 
-## 2. Middleware Architecture & Integration
+## 3. Proposed Implementation Strategy
 
-### 2.1 Authentication (`auth.middleware.ts` / `authenticateToken`)
-- **Current File**: `src/v1/middlewares/auth.middleware.ts`
-- **Functionality**: Extracts JWT from `req.cookies.token`, verifies with `JWT_SECRET`, queries user in Prisma DB, verifies `tokenVersion`, and attaches user object to `req.user`.
-- **Enhancement Needed**:
-  - Support both `req.cookies?.token` AND `req.headers.authorization?.replace(/^Bearer\s+/, '')` for flexible REST API authorization.
-  - Export alias `authenticateToken = authMiddleware` to match interface naming conventions in `SCOPE.md`.
+### Proposed File 1: `src/v1/middlewares/validate.middleware.ts`
+```typescript
+import { Request, Response, NextFunction } from "express";
+import { ZodSchema } from "zod";
 
-### 2.2 Role Authorization (`authorizeRole`)
-- **Location**: `src/v1/middlewares/role.middleware.ts` (or exported from `permission.middleware.ts`).
-- **Functionality**: Checks if `req.user` has one of the allowed roles (e.g., `['ADMIN', 'DRIVER', 'CUSTOMER']` or `user.isAdmin`). If unauthorized, throws `ForbiddenException` (HTTP 403).
-
-### 2.3 Request Validation (`validateRequest`)
-- **Location**: `src/v1/middlewares/validation.middleware.ts`
-- **Functionality**: Higher-order middleware accepting a Zod schema and target property (`'body' | 'query' | 'params'`).
-  ```typescript
-  export const validateRequest = (schema: z.ZodSchema, source: 'body' | 'query' | 'params' = 'body') => {
-    return (req: Request, res: Response, next: NextFunction) => {
-      req[source] = schema.parse(req[source]);
+export const validateRequest = (schema: ZodSchema) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (req.method === "GET") {
+        req.query = schema.parse(req.query);
+      } else {
+        req.body = schema.parse(req.body);
+      }
       next();
-    };
+    } catch (error) {
+      next(error);
+    }
   };
-  ```
+};
+```
+
+### Proposed File 2: `src/v1/middlewares/auth.middleware.ts` (Enhancement)
+```typescript
+/// <reference path="../types/express/index.d.ts" />
+import { ErrorCodes } from "../exceptions/root";
+import { NextFunction, Request, Response } from "express";
+import jwt from "jsonwebtoken";
+import { JWT_SECRET } from "../../secrets";
+import { UnauthorizedException } from "../exceptions/unauthorized";
+import prismaClient from "../utils/prismaClientHelper";
+
+export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const authHeader = req.headers.authorization;
+        const headerToken = authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : authHeader;
+        const token = req.cookies?.token || headerToken;
+
+        if (!token) {
+            throw new UnauthorizedException("Unauthorized", ErrorCodes.UNAUTHORIZED);
+        }
+        const decodedToken = jwt.verify(token, JWT_SECRET) as any;
+        
+        const user = await prismaClient.users.findUnique({
+            where: { id: decodedToken.user.id },
+            select: { id: true, email: true, tokenVersion: true, role: true }
+        });
+
+        if (!user || user.tokenVersion !== decodedToken.user.tokenVersion) {
+            throw new UnauthorizedException("Session invalidated. Please login again.", ErrorCodes.UNAUTHORIZED);
+        }
+
+        req.user = decodedToken.user;
+        next();
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const authenticateToken = authMiddleware;
+```
+
+### Proposed File 3: `src/v1/routes/booking.routes.ts`
+```typescript
+import { Router } from "express";
+import { errorHandler } from "../../error-handler";
+import { authenticateToken } from "../middlewares/auth.middleware";
+import { validateRequest } from "../middlewares/validate.middleware";
+import {
+  calculatePrice,
+  createBooking,
+  getBookings,
+  getBookingById,
+  updateBookingStatus,
+  updateTripStatus,
+  cancelBooking,
+} from "../controllers/booking.controller";
+import {
+  calculatePriceSchema,
+  createBookingSchema,
+  updateBookingStatusSchema,
+  updateTripStatusSchema,
+  cancelBookingSchema,
+  listBookingsQuerySchema,
+} from "../schemas/booking.schema";
+
+const bookingRoutes: Router = Router();
+
+// Public / Authenticated calculation endpoint
+bookingRoutes.post(
+  "/calculate-price",
+  validateRequest(calculatePriceSchema),
+  errorHandler(calculatePrice)
+);
+
+// Authenticated booking endpoints
+bookingRoutes.post(
+  "/",
+  authenticateToken,
+  validateRequest(createBookingSchema),
+  errorHandler(createBooking)
+);
+
+bookingRoutes.get(
+  "/",
+  authenticateToken,
+  validateRequest(listBookingsQuerySchema),
+  errorHandler(getBookings)
+);
+
+bookingRoutes.get(
+  "/:id",
+  authenticateToken,
+  errorHandler(getBookingById)
+);
+
+bookingRoutes.patch(
+  "/:id/status",
+  authenticateToken,
+  validateRequest(updateBookingStatusSchema),
+  errorHandler(updateBookingStatus)
+);
+
+bookingRoutes.patch(
+  "/:id/trip-status",
+  authenticateToken,
+  validateRequest(updateTripStatusSchema),
+  errorHandler(updateTripStatus)
+);
+
+bookingRoutes.post(
+  "/:id/cancel",
+  authenticateToken,
+  validateRequest(cancelBookingSchema),
+  errorHandler(cancelBooking)
+);
+
+export default bookingRoutes;
+```
+
+### Proposed File 4: `src/v1/routes/index.ts` (Mount `booking.routes.ts`)
+```typescript
+import { Router } from "express";
+import authRouterV1 from "./auth.route";
+import vehiclesRouterV1 from "./vehicles.route";
+import bookingRoutes from "./booking.routes";
+
+const rootRouterV1: Router = Router();
+
+rootRouterV1.use("/auth", authRouterV1);
+rootRouterV1.use("/vehicles", vehiclesRouterV1);
+rootRouterV1.use("/bookings", bookingRoutes);
+
+export default rootRouterV1;
+```
+
+### Proposed File 5: `src/app.ts` (Express Application Export Module)
+```typescript
+import express, { Express } from "express";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+import path from "path";
+import rootRouterV1 from "./v1/routes";
+import { errorMiddleware } from "./v1/middlewares/errors.middleware";
+
+export const app: Express = express();
+
+app.use(cookieParser());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+const corsOptions = {
+  origin: [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:53666",
+    "http://127.0.0.1:53666",
+    "http://192.168.4.103:5000",
+  ],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+app.use("/api/v1", rootRouterV1);
+app.use(errorMiddleware);
+
+export default app;
+```
 
 ---
 
-## 3. Zod Validation Schemas (`src/v1/schemas/booking.schema.ts`)
+## 4. Verification & Validation Plan
 
-| Schema Name | Target Endpoint | Description & Key Validation Rules |
-|-------------|-----------------|------------------------------------|
-| `CalculatePriceSchema` | `POST /bookings/calculate-price` | Validates `vehicleCategory` (enum), `distanceKm` (>0), optional `durationMinutes`/`durationHours`, `bookingDate` (YYYY-MM-DD), `startTime` (HH:mm), optional `packageId` (UUID) & `referralCode`. |
-| `CreateBookingSchema` | `POST /bookings` | Validates `vehicleId` (UUID), optional `driverId`, optional `packageId`, `startPoint`, `endPoint`, `distanceKm` (>=0), `bookingDate` (YYYY-MM-DD), `startTime` (HH:mm), `endTime` (HH:mm), optional `notes` & `referralCode`. |
-| `BookingQuerySchema` | `GET /bookings` | Coerces `page` (min 1, default 1), `limit` (min 1, max 100, default 10), optional `status`, `tripStatus`, `bookingDate`, `customerId`, `driverId`. |
-| `UpdateBookingStatusSchema` | `PATCH /bookings/:id/status` | Validates `status` (`PENDING`, `CONFIRMED`, `COMPLETED`, `CANCELLED`) and optional `notes`. |
-| `UpdateTripStatusSchema` | `PATCH /bookings/:id/trip-status` | Validates `tripStatus` (`NOTSTARTED`, `INPROGRESS`, `ARRIVED`, `COMPLETED`) and optional `driverNotes`. |
-| `CancelBookingSchema` | `POST /bookings/:id/cancel` | Validates optional `reason` string. |
+1. **TypeScript Type Check**:
+   - Command: `npx tsc --noEmit`
+   - Requirement: 0 errors.
 
----
+2. **E2E Master Test Suite**:
+   - Command: `npx tsx tests/infra/run-all.ts`
+   - Requirement: 10/10 test suites pass, 218+ test cases pass with 0 failures.
 
-## 4. Endpoint Technical Specifications
-
-### 4.1 `POST /api/v1/bookings/calculate-price`
-- **Access**: Public or Authenticated
-- **Middleware**: Optional `authMiddleware`, `validateRequest(CalculatePriceSchema)`
-- **Logic**: Calls `PricingService.calculateTripEstimate(...)` using vehicle category rates, surge multiplier calculation, deposit calculation (20%), and discounts.
-- **Success Response**: 200 OK with price breakdown.
-
-### 4.2 `POST /api/v1/bookings`
-- **Access**: Authenticated User
-- **Middleware**: `authMiddleware`, `validateRequest(CreateBookingSchema)`
-- **Logic**:
-  1. Executes inside `prisma.$transaction`.
-  2. Double-Booking Check: Checks `Bookings` and `VehicleAvailability` for overlap `(newStart < existingEnd AND newEnd > existingStart)` on specified `bookingDate`.
-  3. Conflict Handling: If overlap exists, throws `HttpException("Vehicle or Driver is already booked for requested time window", 409, 409)`.
-  4. Creates `Bookings` row (`customerId = req.user.id`, `status = PENDING`).
-  5. Updates or creates `VehicleAvailability` (`status = BOOKED`, `bookingId = booking.id`).
-- **Success Response**: 201 Created with created booking object.
-
-### 4.3 `GET /api/v1/bookings`
-- **Access**: Authenticated User / Driver / Admin
-- **Middleware**: `authMiddleware`, `validateRequest(BookingQuerySchema, 'query')`
-- **Logic**:
-  - Regular customers get filtered results (`customerId = req.user.id`).
-  - Drivers get filtered results (`driverId = driver.id`).
-  - Admins can query all bookings with optional query filters.
-- **Success Response**: 200 OK with paginated list and pagination metadata.
-
-### 4.4 `GET /api/v1/bookings/:id`
-- **Access**: Authenticated User (Owner, Assigned Driver, or Admin)
-- **Middleware**: `authMiddleware`
-- **Logic**: Queries booking by ID with relations (`customer`, `vehicle`, `driver`, `package`, `payments`). Enforces ownership check (403 Forbidden if not authorized).
-- **Success Response**: 200 OK with booking object.
-
-### 4.5 `PATCH /api/v1/bookings/:id/status`
-- **Access**: Authenticated User / Admin
-- **Middleware**: `authMiddleware`, `validateRequest(UpdateBookingStatusSchema)`
-- **Logic**: Validates state machine transition (`PENDING` -> `CONFIRMED`/`CANCELLED`; `CONFIRMED` -> `COMPLETED`/`CANCELLED`). Throws 400 Bad Request on invalid transition.
-- **Success Response**: 200 OK with updated booking object.
-
-### 4.6 `PATCH /api/v1/bookings/:id/trip-status`
-- **Access**: Authenticated Driver / Admin
-- **Middleware**: `authMiddleware`, `validateRequest(UpdateTripStatusSchema)`
-- **Logic**: Validates trip state machine transition (`NOTSTARTED` -> `INPROGRESS` -> `ARRIVED` -> `COMPLETED`). If set to `COMPLETED`, automatically sets `BookingStatus` to `COMPLETED`.
-- **Success Response**: 200 OK with updated booking object.
-
-### 4.7 `POST /api/v1/bookings/:id/cancel`
-- **Access**: Authenticated User (Owner or Admin)
-- **Middleware**: `authMiddleware`, `validateRequest(CancelBookingSchema)`
-- **Logic**:
-  1. Transactional update of booking status to `CANCELLED`.
-  2. Release `VehicleAvailability` record back to `AVAILABLE`.
-  3. Query `Waitlist` table for next `WAITING` customer for the vehicle and requested date.
-  4. If candidate found, promote status to `NOTIFIED` and queue notification.
-- **Success Response**: 200 OK with cancellation details and waitlist promotion status.
-
----
-
-## 5. Testing Framework & Execution Strategy
-
-### 5.1 Current Test Infrastructure
-- Node.js v20+, TypeScript v5.9, `tsx` v4.21 installed.
-- Native Node.js test runner (`node --test` / `tsx --test`) is supported without requiring extra native binaries.
-- Supertest can be added for HTTP route assertion testing, or custom test helpers using Express route invocation / fetch.
-
-### 5.2 Test Execution Command
-- Running TypeScript check: `npx tsc --noEmit`
-- Running test runner: `npx tsx --test tests/**/*.test.ts`
+3. **Key Test Verification Highlights**:
+   - `F7-T1-21`: Verifies booking status moves to `CANCELLED` and vehicle status becomes `AVAILABLE`.
+   - `F7-T1-22`: Verifies driver status becomes `ACTIVE` upon cancellation.
+   - `F7-T1-23`: Verifies top position waitlist entry transitions to `NOTIFIED`.
+   - `F7-T1-24`: Verifies queue priority ordering (`position ASC`).

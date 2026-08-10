@@ -43,17 +43,18 @@ Orchestrate the Mishwark backend implementation project according to ORIGINAL_RE
 | Explorer 3 | teamwork_preview_explorer | Business Logic, API & Edge Case Survey | completed | 60f9fd71-c5ca-46e3-9dfc-8736c594e50d |
 | Sub-Orch M1 | self | Milestone M1: Prisma Models & DB Layer | completed | 4121624b-e1c0-4104-8658-d7cf9d157d2a |
 | E2E Testing Orch | self | E2E Testing Track & Test Suite | completed (218 tests) | 8e6a810b-ac4f-4696-ac78-e943f685b978 |
-| Sub-Orch M2 | self | Milestone M2: Bookings & Pricing Engine | in-progress | 4e0681aa-d76c-46a3-852a-04868a0e4329 |
+| Sub-Orch M2 gen1 | self | Milestone M2: Bookings & Pricing Engine | errored (quota pause) | 4e0681aa-d76c-46a3-852a-04868a0e4329 |
+| Sub-Orch M2 gen2 | self | Milestone M2: Bookings & Pricing Engine | in-progress | 3deba2e5-46e0-4b7c-980b-6751301fae45 |
 
 ## Succession Status
 - Succession required: no
-- Spawn count: 6 / 20
-- Pending subagents: 8e6a810b-ac4f-4696-ac78-e943f685b978, 4e0681aa-d76c-46a3-852a-04868a0e4329
+- Spawn count: 7 / 20
+- Pending subagents: 3deba2e5-46e0-4b7c-980b-6751301fae45
 - Predecessor: none
 - Successor: not yet spawned
 
 ## Active Timers
-- Heartbeat cron: task-113
+- Heartbeat cron: task-206
 - Safety timer: none
 
 ## Artifact Index
