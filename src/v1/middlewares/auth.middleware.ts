@@ -9,7 +9,13 @@ import prismaClient from "../utils/prismaClientHelper";
 
 export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const token = req.cookies.token;
+        const authHeader = req.headers.authorization;
+        let token = req.cookies.token;
+
+        if (!token && authHeader && authHeader.startsWith("Bearer ")) {
+            token = authHeader.slice(7);
+        }
+
         if (!token) {
             throw new UnauthorizedException("Unauthorized", ErrorCodes.UNAUTHORIZED);
         }

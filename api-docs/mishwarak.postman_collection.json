@@ -1,0 +1,3046 @@
+{
+  "info": {
+    "_postman_id": "mishwarak-backend",
+    "name": "Mishwark Backend API",
+    "description": "Mishwark car-rental & chauffeur booking backend.\n\nAUTH: POST /auth/otp/verify returns a JWT. Send it as `Authorization: Bearer <token>`.\nRole routing: Customer, Driver, Super Admin.\n\nSETUP: set baseUrl=http://localhost:5000, then run Verify OTP and copy the token into {token}.\nDev OTP bypass: code=\"0000\".\n\nRESPONSE ENVELOPE: { success, data, pagination? }. Errors: { message, errorCode, errors }.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "vehicleId",
+      "value": ""
+    },
+    {
+      "key": "bookingId",
+      "value": ""
+    },
+    {
+      "key": "driverUserId",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "paymentId",
+      "value": ""
+    },
+    {
+      "key": "waitlistId",
+      "value": ""
+    },
+    {
+      "key": "packageId",
+      "value": ""
+    },
+    {
+      "key": "conversationId",
+      "value": ""
+    },
+    {
+      "key": "roleId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /auth/signup",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "auth",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ahmed Ali\",\n  \"email\": \"ali@mishwarak.com\",\n  \"pic\": \"\",\n  \"code\": \"EMP001\",\n  \"graduationYear\": \"2020\",\n  \"graduationFaculty\": \"Engineering\",\n  \"graduationDepartment\": \"Mechanical\",\n  \"graduationUniversity\": \"Cairo University\",\n  \"location\": \"Cairo\",\n  \"salary\": \"15000\",\n  \"position\": \"Driver\",\n  \"birth_date\": \"1995-05-01\",\n  \"religion\": \"\",\n  \"marital_status\": \"single\",\n  \"military_status\": \"completed\",\n  \"personal_mail\": \"\",\n  \"joining_date\": \"2024-01-01\",\n  \"resign_date\": \"\",\n  \"medical_insurance\": true,\n  \"phoneNumbers\": [\n    {\n      \"number\": \"+201011111111\"\n    }\n  ],\n  \"isAdmin\": false,\n  \"contract\": {\n    \"type_of_contract\": \"FULLTIME\",\n    \"start_date\": \"2024-01-01\",\n    \"contract_valu\": \"15000\"\n  },\n  \"insurance\": {\n    \"insurance_status\": \"active\",\n    \"insurance_number\": \"12345\"\n  },\n  \"documents\": [\n    {\n      \"type\": \"ID\",\n      \"document\": \"\",\n      \"isReceived\": true,\n      \"fileIndex\": 0\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Create a new employee/staff account. Multipart/form-data — fields may arrive as JSON strings or files."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /auth/login",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@mishwarak.com\",\n  \"password\": \"secret123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Email/password login (admin & internal staff). Returns JWT cookie + user."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{baseUrl}}",
+                    "api",
+                    "v1",
+                    "auth",
+                    "login"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Login successful\",\n  \"user\": {\n    \"id\": \"{{userId}}\",\n    \"email\": \"admin@mishwarak.com\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/otp/request",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/otp/request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "auth",
+                "otp",
+                "request"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"+201011111111\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Public. Sends a 4-digit OTP to the phone. In dev the code is returned as dev_otp."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/otp/request",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{baseUrl}}",
+                    "api",
+                    "v1",
+                    "auth",
+                    "otp",
+                    "request"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"OTP sent successfully\",\n  \"dev_otp\": \"1234\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/otp/verify",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/otp/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "auth",
+                "otp",
+                "verify"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"+201011111111\",\n  \"code\": \"0000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Public. Verifies OTP and returns a JWT. Dev bypass code: 0000. Response drives role-based home screen."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/otp/verify",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{baseUrl}}",
+                    "api",
+                    "v1",
+                    "auth",
+                    "otp",
+                    "verify"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"token\": \"{{token}}\",\n  \"user\": {\n    \"id\": \"{{userId}}\",\n    \"name\": \"John Customer\",\n    \"phoneNumber\": \"+201011111111\",\n    \"role\": \"Customer\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/verify-2fa",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify-2fa",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "auth",
+                "verify-2fa"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"2fa-temp-token\",\n  \"otpCode\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Completes a 2FA challenge during login using a temporary token."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /auth/verify-2fa-setup",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify-2fa-setup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "auth",
+                "verify-2fa-setup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"ali@mishwarak.com\",\n  \"otpCode\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Confirms and enables 2FA for a user."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /auth/logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Clears the auth cookie / current session."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /auth/logout-all-devices",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout-all-devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "auth",
+                "logout-all-devices"
+              ]
+            },
+            "description": "Bumps tokenVersion, invalidating every session for the user."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /auth/reset-2fa/:userId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/reset-2fa/:userId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "auth",
+                "reset-2fa",
+                ":userId"
+              ]
+            },
+            "description": "Admin (user_password:manage). Resets a user's 2FA."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /auth/change-password/:userId",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/change-password/:userId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "auth",
+                "change-password",
+                ":userId"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oldPassword\": \"oldpass\",\n  \"newPassword\": \"newpass123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Admin (user_password:manage). Changes a user's password and optionally resets 2FA. Protected by requirePermission."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /auth/2fa/setup",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/2fa/setup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "auth",
+                "2fa",
+                "setup"
+              ]
+            },
+            "description": "Returns TOTP secret + QR code data URL for authenticator enrollment."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /auth/2fa/verify",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/2fa/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "auth",
+                "2fa",
+                "verify"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"2fa-temp-token\",\n  \"otpCode\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Validates an OTP to enable 2FA."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /auth/2fa/disable",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/2fa/disable",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "auth",
+                "2fa",
+                "disable"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"secret123\",\n  \"otpCode\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Disables 2FA for the authenticated user."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Vehicles",
+      "item": [
+        {
+          "name": "GET /vehicles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vehicles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "vehicles"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "VAN",
+                  "disabled": false
+                },
+                {
+                  "key": "status",
+                  "value": "AVAILABLE",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /vehicles/:id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vehicles/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "vehicles",
+                ":id"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /vehicles/:id/availability",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/vehicles/:id/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "vehicles",
+                ":id",
+                "availability"
+              ],
+              "query": [
+                {
+                  "key": "month",
+                  "value": "2026-09",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "item": [
+        {
+          "name": "POST /bookings/estimate-price",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings/estimate-price",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "bookings",
+                "estimate-price"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleCategory\": \"VAN\",\n  \"distanceKm\": 25,\n  \"durationMinutes\": 120,\n  \"isPeakHour\": false,\n  \"surgeMultiplier\": 1,\n  \"packageDiscount\": 10,\n  \"referralDiscount\": 5,\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"packageId\": \"\",\n  \"referralCode\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "PUBLIC. Server-side price estimate. Never trust a client-side price."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/bookings/estimate-price",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{baseUrl}}",
+                    "api",
+                    "v1",
+                    "bookings",
+                    "estimate-price"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"basePrice\": 100,\n    \"distancePrice\": 30,\n    \"timePrice\": 20,\n    \"surgeMultiplier\": 1,\n    \"discountAmount\": 5,\n    \"totalPrice\": 145,\n    \"depositPaid\": 30\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /bookings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"\",\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"driverId\": \"\",\n  \"bookingDate\": \"2026-09-15\",\n  \"startTime\": \"10:00\",\n  \"endTime\": \"12:00\",\n  \"distanceKm\": 30,\n  \"durationMinutes\": 120,\n  \"startPoint\": \"Cairo\",\n  \"endPoint\": \"Alexandria\",\n  \"notes\": \"Airport pickup\",\n  \"driverNotes\": \"\",\n  \"packageId\": \"\",\n  \"eventType\": \"wedding\",\n  \"isPeakHour\": false,\n  \"surgeMultiplier\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a booking with status=PENDING. DB unique constraint blocks double-booking (409)."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/bookings",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{baseUrl}}",
+                    "api",
+                    "v1",
+                    "bookings"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"{{bookingId}}\",\n    \"vehicleId\": \"{{vehicleId}}\",\n    \"status\": \"PENDING\",\n    \"tripStatus\": \"NOTSTARTED\",\n    \"totalPrice\": 145\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /bookings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "bookings"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /bookings/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "bookings",
+                ":id"
+              ]
+            },
+            "description": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1."
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /bookings/:id/status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings/:id/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "bookings",
+                ":id",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CONFIRMED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Transitions booking status. PENDING→CONFIRMED/CANCELLED, CONFIRMED→COMPLETED/CANCELLED."
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /bookings/:id/trip-status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings/:id/trip-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "bookings",
+                ":id",
+                "trip-status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tripStatus\": \"INPROGRESS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "NOTSTARTED→INPROGRESS→ARRIVED→COMPLETED. Trip COMPLETED auto-completes the booking and releases the driver."
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /bookings/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "bookings",
+                ":id"
+              ]
+            },
+            "description": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Drivers",
+      "item": [
+        {
+          "name": "GET /driver/profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/driver/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "driver",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /driver/profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/driver/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "driver",
+                "profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Ahmed Driver\",\n  \"licenseNumber\": \"DL123456\",\n  \"licenseExpiry\": \"2030-12-31\",\n  \"pic\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /driver/status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/driver/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "driver",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /driver/bookings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/driver/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "driver",
+                "bookings"
+              ],
+              "query": [
+                {
+                  "key": "filter",
+                  "value": "today",
+                  "disabled": false
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Driver's trips. filter=today|upcoming|completed."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /driver/vehicles",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/driver/vehicles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "driver",
+                "vehicles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"isPrimary\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /driver/vehicles/:vehicleId",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/driver/vehicles/:vehicleId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "driver",
+                "vehicles",
+                ":vehicleId"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /driver/stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/driver/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "driver",
+                "stats"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2026-01-01",
+                  "disabled": false
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-09-30",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /driver/:id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/driver/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "driver",
+                ":id"
+              ]
+            },
+            "description": "PUBLIC. Returns a driver's profile by id (rating included)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "POST /reviews",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "reviews"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingId\": \"{{bookingId}}\",\n  \"reviewerType\": \"CUSTOMER_TO_DRIVER\",\n  \"revieweeId\": \"{{driverUserId}}\",\n  \"overallRating\": 5,\n  \"vehicleRating\": 5,\n  \"punctualityRating\": 4,\n  \"comment\": \"Excellent trip!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Blind rating: only visible to the other party after both submit OR 48h. Driver rating recalculated."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/reviews",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{baseUrl}}",
+                    "api",
+                    "v1",
+                    "reviews"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"{{reviewId}}\",\n    \"bookingId\": \"{{bookingId}}\",\n    \"overallRating\": 5,\n    \"visible\": false\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /reviews/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "reviews",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /reviews/booking/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews/booking/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "reviews",
+                "booking",
+                ":id"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /reviews/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "reviews",
+                ":id"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "POST /payments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "payments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingId\": \"{{bookingId}}\",\n  \"amount\": 100,\n  \"paymentMethod\": \"CASH\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a PENDING payment. paymentMethod: PAYMOB|FAWRY|CASH|WALLET."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/payments",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{baseUrl}}",
+                    "api",
+                    "v1",
+                    "payments"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"{{paymentId}}\",\n    \"bookingId\": \"{{bookingId}}\",\n    \"amount\": 100,\n    \"paymentMethod\": \"CASH\",\n    \"status\": \"PENDING\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "PATCH /payments/:id/status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/:id/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "payments",
+                ":id",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"SUCCESS\",\n  \"transactionRef\": \"ref-12345\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Updates payment record and recomputes booking aggregate paymentStatus."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /payments/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "payments",
+                ":id"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /payments/:id/refund",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/:id/refund",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "payments",
+                ":id",
+                "refund"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /payments/booking/:bookingId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/booking/:bookingId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "payments",
+                "booking",
+                ":bookingId"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /payments/summary/:bookingId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/summary/:bookingId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "payments",
+                "summary",
+                ":bookingId"
+              ]
+            },
+            "description": "Returns totalPrice, totalPaid, remaining."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Waitlist",
+      "item": [
+        {
+          "name": "POST /waitlist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/waitlist",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "waitlist"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"requestedDate\": \"2026-09-15\",\n  \"requestedTime\": \"10:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Joins the waitlist at the next open position; cancellation promotes position #1."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/waitlist",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "{{baseUrl}}",
+                    "api",
+                    "v1",
+                    "waitlist"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"{{waitlistId}}\",\n    \"position\": 2,\n    \"status\": \"WAITING\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /waitlist/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/waitlist/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "waitlist",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /waitlist/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/waitlist/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "waitlist",
+                ":id"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /waitlist/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/waitlist/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "waitlist",
+                ":id"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /waitlist/:id/convert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/waitlist/:id/convert",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "waitlist",
+                ":id",
+                "convert"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Packages",
+      "item": [
+        {
+          "name": "POST /packages",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/packages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "packages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"packageName\": \"Wedding Package\",\n  \"packageType\": \"MULTI_CAR\",\n  \"discountPercentage\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a package with a server-applied discount."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /packages/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/packages/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "packages",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /packages/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/packages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "packages",
+                ":id"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /packages/:id/booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/packages/:id/booking",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "packages",
+                ":id",
+                "booking"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"packageId\": \"{{packageId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /packages/:id/booking",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/packages/:id/booking",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "packages",
+                ":id",
+                "booking"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /packages/:id/cancel",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/packages/:id/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "packages",
+                ":id",
+                "cancel"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Chat",
+      "item": [
+        {
+          "name": "GET /chat/booking/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/chat/booking/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "chat",
+                "booking",
+                ":id"
+              ]
+            },
+            "description": "Auto-creates the conversation for a booking on first call."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /chat/booking/:id",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/chat/booking/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "chat",
+                "booking",
+                ":id"
+              ]
+            },
+            "description": "Auto-creates the conversation for a booking on first call."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /chat/:conversationId/messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/chat/:conversationId/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "chat",
+                ":conversationId",
+                "messages"
+              ]
+            },
+            "description": "Sends a chat message. messageType: TEXT|QUICK_REPLY."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /chat/:conversationId/messages",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/chat/:conversationId/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "chat",
+                ":conversationId",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Hello\",\n  \"messageType\": \"TEXT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sends a chat message. messageType: TEXT|QUICK_REPLY."
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /chat/:conversationId/read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/chat/:conversationId/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "chat",
+                ":conversationId",
+                "read"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /chat/:conversationId/close",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/chat/:conversationId/close",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "chat",
+                ":conversationId",
+                "close"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Referrals",
+      "item": [
+        {
+          "name": "POST /referrals/generate-code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/referrals/generate-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "referrals",
+                "generate-code"
+              ]
+            },
+            "description": "Generates/returns the user's referral code."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /referrals/apply",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/referrals/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "referrals",
+                "apply"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referralCode\": \"MRK123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Applies a referral code to the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /referrals/:id/complete",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/referrals/:id/complete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "referrals",
+                ":id",
+                "complete"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingId\": \"{{bookingId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "PUBLIC. Credits both referrer & referee wallets when the refereed user completes their first booking."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /referrals/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/referrals/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "referrals",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /referrals/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/referrals/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "referrals",
+                ":id"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Wallet",
+      "item": [
+        {
+          "name": "GET /wallet/balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallet/balance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "wallet",
+                "balance"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /wallet/transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallet/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "wallet",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "disabled": false
+                },
+                {
+                  "key": "type",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /wallet/credit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallet/credit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "wallet",
+                "credit"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 25,\n  \"type\": \"REFERRAL_REWARD\",\n  \"description\": \"Referral reward\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Credits the wallet. type: REFERRAL_REWARD|REFUND|MANUAL_ADJUSTMENT|PAYMENT_DEDUCTION|DEPOSIT."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /wallet/debit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallet/debit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "wallet",
+                "debit"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10,\n  \"type\": \"PAYMENT_DEDUCTION\",\n  \"description\": \"Trip payment\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "GET /notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "disabled": false
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /notifications/unread-count",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "notifications",
+                "unread-count"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /notifications/:id/read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/:id/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "notifications",
+                ":id",
+                "read"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /notifications/read-all",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/read-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "notifications",
+                "read-all"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "GET /admin/stats/summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/stats/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "admin",
+                "stats",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "endDate",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /admin/bookings/calendar",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/bookings/calendar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "admin",
+                "bookings",
+                "calendar"
+              ],
+              "query": [
+                {
+                  "key": "month",
+                  "value": "2026-09",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Bookings grouped by day for a month (YYYY-MM)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /admin/bookings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "admin",
+                "bookings"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "2026-09-15",
+                  "disabled": false
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Bookings filtered by a specific date (YYYY-MM-DD)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /admin/bookings/all",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/bookings/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "admin",
+                "bookings",
+                "all"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /admin/vehicles/status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicles/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "admin",
+                "vehicles",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /admin/drivers/:id/stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/drivers/:id/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "admin",
+                "drivers",
+                ":id",
+                "stats"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /admin/drivers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/drivers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "admin",
+                "drivers"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /admin/drivers/:id/status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/drivers/:id/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "admin",
+                "drivers",
+                ":id",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"OFF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /admin/users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /admin/users/role",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "role"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"roleId\": \"{{roleId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Changes a user's role."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /admin/settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "admin",
+                "settings"
+              ]
+            },
+            "description": "System & evaluation-related settings."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /admin/settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{baseUrl}}",
+                "api",
+                "v1",
+                "admin",
+                "settings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"performanceHistoryVisible\": true,\n  \"evaluationsVisible\": true,\n  \"selfAppraisalsVisible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "System & evaluation-related settings."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
