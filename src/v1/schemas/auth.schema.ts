@@ -39,19 +39,65 @@ const coerceToString = (value: unknown) => {
     return String(value);
 };
 
+/**
+ * Roles a client may self-assign during signup.
+ * Admin roles are intentionally absent - they can only be granted by an existing
+ * admin through PATCH /admin/users/role.
+ */
+export const SELF_SIGNUP_ROLES = ["customer", "driver"] as const;
+
+const parseMultipartEnum = (allowed: readonly string[]) => (value: unknown) => {
+    const normalized =
+        typeof value === "string" ? value.trim().toLowerCase() : value;
+
+    if (typeof normalized === "string" && allowed.includes(normalized)) {
+        return normalized;
+    }
+
+    return value;
+};
+
 export const SignupSchema = z.object({
     name: z.string().min(1, "Name is required"),
     email: z.string().email("Invalid email address"),
     pic: z.string().optional(),
-    password: z.string().optional(),
-    code: z.preprocess(coerceToString, z.string().min(1, "Code is required")),
-    graduationYear: z.preprocess(coerceToString, z.string().min(4, "Graduation year is required")),
-    graduationFaculty: z.string().min(2, "Graduation faculty is required"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    phoneNumbers: z.preprocess(parseMultipartJson, z.array(z.object({
+        number: z.string().min(1)
+    }))),
+    /**
+     * The account type flag. Defaults to "customer" when omitted. Multipart
+     * bodies send it as a string, hence the preprocessor.
+     */
+    role: z.preprocess(
+        parseMultipartEnum(SELF_SIGNUP_ROLES),
+        z.enum(SELF_SIGNUP_ROLES).default("customer")
+    ),
+    /** Optional referral code captured at signup time. */
+    referralCode: z.string().trim().min(1).optional(),
+
+    // Driver-only fields. Rejected when role is not "driver".
+    licenseNumber: z.string().trim().min(1, "License number is required for drivers").optional(),
+    licenseExpiry: z.preprocess(
+        coerceToString,
+        z
+            .string()
+            .refine((value) => !Number.isNaN(new Date(value).getTime()), {
+                message: "licenseExpiry must be a valid date",
+            })
+            .optional()
+    ),
+
+    // Legacy HR/employee fields retained for backwards compatibility with the
+    // original ACS fork payload. They are validated but no longer stored.
+    code: z.preprocess(coerceToString, z.string().optional()),
+    graduationYear: z.preprocess(coerceToString, z.string().optional()),
+    graduationFaculty: z.string().optional(),
     graduationDepartment: z.string().optional(),
     graduationUniversity: z.string().optional(),
-    location: z.string().min(2, "Location is required"),
+    location: z.string().optional(),
     salary: z.preprocess(coerceToString, z.string()).optional(),
-    position: z.string().min(2, "Position is required"),
+    position: z.string().optional(),
     birth_date: z.string().optional(),
     religion: z.string().optional(),
     marital_status: z.string().optional(),
@@ -60,15 +106,12 @@ export const SignupSchema = z.object({
     joining_date: z.string().optional(),
     resign_date: z.string().optional(),
     work_certificate_sub_date: z.string().optional(),
-    medical_insurance:z.preprocess(parseMultipartBoolean, z.boolean().optional()).optional(),
+    medical_insurance: z.preprocess(parseMultipartBoolean, z.boolean().optional()).optional(),
     teamLeaderOfId: z.string().optional(),
     headOfDepartmentId: z.string().optional(),
     employeeOfId: z.string().optional(),
     reportingToId: z.string().optional(),
-    phoneNumbers: z.preprocess(parseMultipartJson, z.array(z.object({
-        number: z.string().min(1)
-    }))),
-    isAdmin: z.preprocess(parseMultipartBoolean, z.boolean().optional()).optional(),
+
     contract: z.preprocess(parseMultipartJson,z.object({
         type_of_contract: z.enum(['FULLTIME','PARTTIME','CONTRACT','INTERN']),
         start_date: z.string().optional(),
@@ -89,6 +132,14 @@ export const SignupSchema = z.object({
     }))).optional(),
 
 
+}).superRefine((data, ctx) => {
+    if (data.role === "driver" && !data.licenseNumber) {
+        ctx.addIssue({
+            code: "custom",
+            path: ["licenseNumber"],
+            message: "licenseNumber is required when registering as a driver",
+        });
+    }
 });
 
 export type SignupSchema = z.infer<typeof SignupSchema>;
@@ -140,10 +191,21 @@ export const InsuranceSchema = z.object({
 export type Insurance = z.infer<typeof InsuranceSchema>
 
 export const OtpRequestSchema = z.object({
-    phoneNumber: z.string().min(8, "Phone number is too short")
+    phoneNumber: z.string().min(8, "Phone number is too short"),
+    /** Account type requested when the phone number is not yet registered. */
+    role: z.preprocess(
+        parseMultipartEnum(SELF_SIGNUP_ROLES),
+        z.enum(SELF_SIGNUP_ROLES).default("customer")
+    ),
+    name: z.string().trim().min(1).optional(),
+    licenseNumber: z.string().trim().min(1).optional(),
 });
+
+export type OtpRequestSchema = z.infer<typeof OtpRequestSchema>;
 
 export const OtpVerifySchema = z.object({
     phoneNumber: z.string().min(8, "Phone number is too short"),
     code: z.string().length(4, "OTP must be 4 digits")
 });
+
+export type OtpVerifySchema = z.infer<typeof OtpVerifySchema>;

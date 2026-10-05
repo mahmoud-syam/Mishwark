@@ -3,58 +3,126 @@ import { LoginSchema, SignupSchema, OtpRequestSchema, OtpVerifySchema } from "..
 import prismaClient from "../utils/prismaClientHelper";
 import { compareSync, hashSync } from "bcrypt";
 import { BadRequestsException } from "../exceptions/bad-requests";
+import { ConflictException } from "../utils/errors";
 import { ErrorCodes } from "../exceptions/root";
 import jwt from "jsonwebtoken";
 import { generate2FASecret, verify2FAToken } from "../services/two-factor.service";
+import { buildTokenUser, findOrCreateRole } from "../services/role.service";
+import { normalizeRoleName, USER_ROLES } from "../constants/roles";
 
 export const signup = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const safePayload = SignupSchema.safeParse(req.body);
 
         if (!safePayload.success) {
-            console.error("Validation errors during signup:", JSON.stringify(safePayload.error.format(), null, 2));
             throw new BadRequestsException("Invalid signup data", ErrorCodes.INVALID_CREDENTIALS, safePayload.error.issues);
         }
-        const { name, email, pic, code, password, phoneNumbers } = safePayload.data as any;
+        const {
+            name,
+            email,
+            pic,
+            code,
+            password,
+            phoneNumbers,
+            role,
+            referralCode,
+            licenseNumber,
+            licenseExpiry,
+        } = safePayload.data;
 
         const files = req.files as Express.Multer.File[] | undefined;
         const pictureFile = files?.find(f => f.fieldname === "pic");
         const uploadedPicPath = pictureFile ? `/uploads/employees/${pictureFile.filename}` : pic;
 
+        const normalizedEmail = email.toLowerCase().trim();
+        const normalizedCode = code?.trim() || null;
+
+        // The unique scalar column that OTP login looks users up by. Previously
+        // only the PhoneNumbers relation was written, so signup users could never
+        // log in again via OTP and got a duplicate user row instead.
+        const phoneNumbersList = (phoneNumbers ?? []).map(p => p.number.trim());
+        const primaryPhoneNumber = phoneNumbersList[0] ?? null;
+
+        const orFilters: Record<string, string>[] = [{ email: normalizedEmail }];
+        if (primaryPhoneNumber) orFilters.push({ phoneNumber: primaryPhoneNumber });
+        if (normalizedCode) orFilters.push({ code: normalizedCode });
+
         const existingUser = await prismaClient.users.findFirst({
-            where: {
-                OR: [
-                    { email: email ? email.toLowerCase().trim() : undefined },
-                    { code: code ? code.toLowerCase().trim() : undefined }
-                ]
-            }
+            where: { OR: orFilters },
+            select: { id: true },
         });
 
         if (existingUser) {
-            throw new Error("User with this email or code already exists");
-        } else {
-            await prismaClient.$transaction(async (prisma) => {
-                await prisma.users.create({
-                    data: {
-                        name,
-                        email: email ? email.toLowerCase().trim() : null,
-                        password: hashSync(password || "test1234", 10),
-                        pic: uploadedPicPath ? uploadedPicPath : undefined,
-                        code: code || "",
-                        phoneNumbers: phoneNumbers ? {
-                            create: phoneNumbers.map((phone: any) => ({
-                                number: phone.number
-                            }))
-                        } : undefined
-                    },
-                });
-            }).catch((error) => {                
-                console.error("Error during user creation transaction:", error);
-                throw new Error("Failed to create user");
+            throw new ConflictException("User with this email, phone number or code already exists", ErrorCodes.USER_ALREADY_EXISTS);
+        }
+
+        // Users.referralCode is the code this account shares and is @unique, so
+        // the incoming code must resolve to the referrer's id rather than being
+        // copied onto the new row - that would collide with the referrer.
+        let referredById: string | null = null;
+        if (referralCode) {
+            const referrer = await prismaClient.users.findUnique({
+                where: { referralCode },
+                select: { id: true },
+            });
+            if (!referrer) {
+                throw new BadRequestsException("Invalid referral code", ErrorCodes.INVALID_CREDENTIALS);
+            }
+            referredById = referrer.id;
+        }
+
+        // The role flag. Self-signup is limited to CUSTOMER and DRIVER by the
+        // schema; admin roles can only be granted through PATCH /admin/users/role.
+        const requestedRole = normalizeRoleName(role) ?? USER_ROLES.CUSTOMER;
+        const roleRecord = await findOrCreateRole(requestedRole);
+
+        const user = await prismaClient.$transaction(async (prisma) => {
+            const createdUser = await prisma.users.create({
+                data: {
+                    name,
+                    email: normalizedEmail,
+                    password: hashSync(password, 10),
+                    pic: uploadedPicPath ? uploadedPicPath : undefined,
+                    code: normalizedCode ?? "",
+                    roleId: roleRecord.id,
+                    phoneNumber: primaryPhoneNumber,
+                    referredById,
+                    phoneNumbers: phoneNumbersList.length
+                        ? {
+                            create: phoneNumbersList.map((number) => ({ number })),
+                        }
+                        : undefined,
+                },
+                select: { id: true, name: true, email: true },
             });
 
-            res.status(201).json({ message: "User created successfully" });
-        }
+            // A driver needs a Drivers row: Bookings.driverId and
+            // Conversations.driverId both reference Drivers.id, so a user with
+            // the Driver role but no profile 404s on every /driver/* endpoint.
+            if (requestedRole === USER_ROLES.DRIVER) {
+                await prisma.drivers.create({
+                    data: {
+                        userId: createdUser.id,
+                        fullName: name,
+                        licenseNumber: licenseNumber ?? "",
+                        licenseExpiry: licenseExpiry ? new Date(licenseExpiry) : null,
+                        pic: uploadedPicPath ? uploadedPicPath : "",
+                        phoneNumbers: phoneNumbersList.length
+                            ? {
+                                create: phoneNumbersList.map((number) => ({ number })),
+                            }
+                            : undefined,
+                    },
+                });
+            }
+
+            return createdUser;
+        });
+
+        res.status(201).json({
+            message: "User created successfully",
+            user: { ...user, role: requestedRole },
+        });
 
     } catch (error) {
         next(error);
@@ -154,15 +222,7 @@ export const verifyAndEnable2FALogin = async (req: Request, res: Response, next:
         delete (updatedUser as any).password;
         delete (updatedUser as any).twoFactorSecret;
 
-        const userRole = (updatedUser as any).role;
-        const optimizedUser = {
-            ...updatedUser,
-            tokenVersion: updatedUser.tokenVersion,
-            role: userRole ? {
-                ...userRole,
-                permissions: userRole.permissions ? userRole.permissions.map((p: any) => p.name) : []
-            } : null
-        };
+        const optimizedUser = buildTokenUser(updatedUser);
 
         const token = jwt.sign({ user: optimizedUser }, process.env.JWT_SECRET as string, { expiresIn: "24h" });
 
@@ -174,7 +234,7 @@ export const verifyAndEnable2FALogin = async (req: Request, res: Response, next:
             maxAge: 1000 * 60 * 60 * 24 * 7
         });
 
-        res.status(200).json({ message: "Login successful", user: updatedUser });
+        res.status(200).json({ message: "Login successful", user: optimizedUser });
     } catch (error) {
         next(error);
     }
@@ -183,6 +243,31 @@ export const verifyAndEnable2FALogin = async (req: Request, res: Response, next:
 export const verify2FALogin = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { userId, token: totpToken } = req.body;
+
+        // Look the user up before updating. Updating first meant a bad
+        // userId surfaced a raw Prisma error (500) and a wrong TOTP code
+        // still bumped tokenVersion, killing the user's live sessions.
+        const existingUser = await prismaClient.users.findUnique({
+            where: { id: userId },
+            include: {
+                role: {
+                    include: {
+                        permissions: true
+                    }
+                },
+                phoneNumbers: true
+            }
+        });
+
+        if (!existingUser || !existingUser.twoFactorSecret) {
+            throw new BadRequestsException("User not found or 2FA not enabled", ErrorCodes.USER_NOT_FOUND);
+        }
+
+        const isValid = await verify2FAToken(totpToken, existingUser.twoFactorSecret);
+
+        if (!isValid) {
+            throw new BadRequestsException("Invalid 2FA token", ErrorCodes.INVALID_CREDENTIALS);
+        }
 
         const updatedUser = await prismaClient.users.update({
             where: { id: userId },
@@ -199,28 +284,10 @@ export const verify2FALogin = async (req: Request, res: Response, next: NextFunc
             }
         });
 
-        if (!updatedUser || !updatedUser.twoFactorSecret) {
-            throw new BadRequestsException("User not found or 2FA not enabled", ErrorCodes.USER_NOT_FOUND);
-        }
-
-        const isValid = await verify2FAToken(totpToken, updatedUser.twoFactorSecret);
-
-        if (!isValid) {
-            throw new BadRequestsException("Invalid 2FA token", ErrorCodes.INVALID_CREDENTIALS);
-        }
-
         delete (updatedUser as any).password;
         delete (updatedUser as any).twoFactorSecret;
 
-        const userRole = (updatedUser as any).role;
-        const optimizedUser = {
-            ...updatedUser,
-            tokenVersion: (updatedUser as any).tokenVersion,
-            role: userRole ? {
-                ...userRole,
-                permissions: userRole.permissions ? userRole.permissions.map((p: any) => p.name) : []
-            } : null
-        };
+        const optimizedUser = buildTokenUser(updatedUser);
 
         const token = jwt.sign({ user: optimizedUser }, process.env.JWT_SECRET as string, { expiresIn: "24h" });
 
@@ -268,6 +335,17 @@ export const logoutAllDevices = async (req: Request, res: Response, next: NextFu
 export const reset2FAOnly = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { userId } = req.params as { userId: string };
+
+        // Check first: updating a missing id raised a raw Prisma error (500).
+        const user = await prismaClient.users.findUnique({
+            where: { id: userId },
+            select: { id: true }
+        });
+
+        if (!user) {
+            throw new BadRequestsException("User not found", ErrorCodes.USER_NOT_FOUND);
+        }
+
         await prismaClient.users.update({
             where: { id: userId },
             data: {
@@ -322,39 +400,65 @@ export const changePassword = async (req: Request, res: Response, next: NextFunc
 
 export const otpRequest = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { phoneNumber } = OtpRequestSchema.parse(req.body);
+        const { phoneNumber, role, name, licenseNumber } = OtpRequestSchema.parse(req.body);
 
-        let user = await prismaClient.users.findUnique({
-            where: { phoneNumber }
+        const existingUser = await prismaClient.users.findUnique({
+            where: { phoneNumber },
+            select: { id: true },
         });
 
         const otpCode = Math.floor(1000 + Math.random() * 9000).toString(); // 4 digit code
 
-        if (!user) {
-            // Find or create customer role
-            let role = await prismaClient.role.findUnique({ where: { name: "Customer" } });
-            if (!role) {
-                role = await prismaClient.role.create({ data: { name: "Customer", description: "Default customer role" } });
+        let userId: string;
+
+        if (!existingUser) {
+            const requestedRole = normalizeRoleName(role) ?? USER_ROLES.CUSTOMER;
+            const roleRecord = await findOrCreateRole(requestedRole);
+
+            if (requestedRole === USER_ROLES.DRIVER && !licenseNumber) {
+                throw new BadRequestsException("licenseNumber is required when registering as a driver", ErrorCodes.INVALID_CREDENTIALS);
             }
 
-            user = await prismaClient.users.create({
-                data: {
-                    phoneNumber,
-                    name: "Customer", // default
-                    email: null,
-                    otpCode,
-                    roleId: role.id
+            const created = await prismaClient.$transaction(async (prisma) => {
+                const createdUser = await prisma.users.create({
+                    data: {
+                        phoneNumber,
+                        name: name ?? phoneNumber,
+                        email: null,
+                        otpCode,
+                        roleId: roleRecord.id,
+                        phoneNumbers: { create: [{ number: phoneNumber }] },
+                    },
+                    select: { id: true, name: true, phoneNumber: true },
+                });
+
+                if (requestedRole === USER_ROLES.DRIVER) {
+                    await prisma.drivers.create({
+                        data: {
+                            userId: createdUser.id,
+                            fullName: createdUser.name,
+                            licenseNumber: licenseNumber ?? "",
+                            pic: "",
+                            phoneNumbers: { create: [{ number: phoneNumber }] },
+                        },
+                    });
                 }
+
+                return createdUser;
             });
+
+            userId = created.id;
         } else {
-            user = await prismaClient.users.update({
-                where: { id: user.id },
+            await prismaClient.users.update({
+                where: { id: existingUser.id },
                 data: { otpCode }
             });
+
+            userId = existingUser.id;
         }
 
         // In a real app, send SMS here. For now, we return it in dev.
-        res.status(200).json({ message: "OTP sent successfully", dev_otp: otpCode });
+        res.status(200).json({ message: "OTP sent successfully", userId, dev_otp: otpCode });
     } catch (error) {
         next(error);
     }
@@ -387,7 +491,10 @@ export const otpVerify = async (req: Request, res: Response, next: NextFunction)
             include: { role: { include: { permissions: true } } }
         });
 
-        const token = jwt.sign({ user: updatedUser }, process.env.JWT_SECRET || "default_secret", { expiresIn: "24h" });
+        // Flatten permissions to names so requirePermission does not receive
+        // raw Prisma Permission objects.
+        const tokenUser = buildTokenUser(updatedUser);
+        const token = jwt.sign({ user: tokenUser }, process.env.JWT_SECRET as string, { expiresIn: "24h" });
 
         res.cookie("token", token, {
             httpOnly: false,
@@ -400,8 +507,8 @@ export const otpVerify = async (req: Request, res: Response, next: NextFunction)
         res.status(200).json({
             message: "OTP verified successfully",
             token,
-            role: updatedUser.role?.name || "customer",
-            user: updatedUser
+            role: tokenUser.role?.name ?? null,
+            user: tokenUser
         });
     } catch (error) {
         next(error);

@@ -99,39 +99,42 @@ const BODY_EXAMPLES = {
     name: "Ahmed Ali",
     email: "ali@mishwarak.com",
     pic: "",
+    password: "secret123",
+    phoneNumbers: [{ number: "+201011111111" }],
+    // Account type flag. "customer" (default) or "driver".
+    // Admin roles can never be self-assigned at signup.
+    role: "driver",
+    // Required only when role is "driver".
+    licenseNumber: "LIC-998877",
+    licenseExpiry: "2030-12-31",
+    // Optional referral code captured during signup.
+    referralCode: "",
+    // Legacy employee fields, still accepted for backwards compatibility.
     code: "EMP001",
-    graduationYear: "2020",
-    graduationFaculty: "Engineering",
-    graduationDepartment: "Mechanical",
-    graduationUniversity: "Cairo University",
-    location: "Cairo",
-    salary: "15000",
     position: "Driver",
     birth_date: "1995-05-01",
-    religion: "",
-    marital_status: "single",
-    military_status: "completed",
-    personal_mail: "",
     joining_date: "2024-01-01",
-    resign_date: "",
     medical_insurance: true,
-    phoneNumbers: [{ number: "+201011111111" }],
-    isAdmin: false,
-    contract: { type_of_contract: "FULLTIME", start_date: "2024-01-01", contract_valu: "15000" },
-    insurance: { insurance_status: "active", insurance_number: "12345" },
-    documents: [{ type: "ID", document: "", isReceived: true, fileIndex: 0 }],
   },
   "/auth/login": { email: "admin@mishwarak.com", password: "secret123" },
-  "/auth/otp/request": { phoneNumber: "+201011111111" },
+  "/auth/otp/request": { phoneNumber: "+201011111111", role: "customer", name: "Ahmed Ali" },
   "/auth/otp/verify": { phoneNumber: "+201011111111", code: "0000" },
-  "/auth/verify-2fa": { token: "2fa-temp-token", otpCode: "123456" },
-  "/auth/verify-2fa-setup": { username: "ali@mishwarak.com", otpCode: "123456" },
-  "/auth/2fa/verify": { token: "2fa-temp-token", otpCode: "123456" },
-  "/auth/2fa/disable": { password: "secret123", otpCode: "123456" },
+  "/auth/verify-2fa": { userId: "USER_ID", token: "123456" },
+  "/auth/verify-2fa-setup": { userId: "USER_ID", token: "123456", secret: "TOTP_SECRET" },
+  // The controller reads `secret` from the body, not `otpCode`.
+  "/auth/2fa/verify": { token: "123456", secret: "JBSWY3DPEHPK3PXP" },
+  // Disable takes no body: it acts on the authenticated user.
+  "/auth/2fa/disable": {},
 
   // bookings
+  "/bookings/estimate-distance": {
+    startPoint: { latitude: 30.0444, longitude: 31.2357 },
+    endPoint: { latitude: 31.2001, longitude: 29.9187 },
+  },
   "/bookings/estimate-price": {
     vehicleCategory: "VAN",
+    startPoint: { latitude: 30.0444, longitude: 31.2357 },
+    endPoint: { latitude: 31.2001, longitude: 29.9187 },
     distanceKm: 25,
     durationMinutes: 120,
     isPeakHour: false,
@@ -149,10 +152,10 @@ const BODY_EXAMPLES = {
     bookingDate: "2026-09-15",
     startTime: "10:00",
     endTime: "12:00",
+    startPoint: { latitude: 30.0444, longitude: 31.2357 },
+    endPoint: { latitude: 31.2001, longitude: 29.9187 },
     distanceKm: 30,
     durationMinutes: 120,
-    startPoint: "Cairo",
-    endPoint: "Alexandria",
     notes: "Airport pickup",
     driverNotes: "",
     packageId: "",
@@ -207,8 +210,8 @@ const BODY_EXAMPLES = {
   "/admin/users/role": { userId: "{{userId}}", roleId: "{{roleId}}" },
   "/admin/settings": { performanceHistoryVisible: true, evaluationsVisible: true, selfAppraisalsVisible: true },
 
-  // change password
-  "/auth/change-password/{userId}": { oldPassword: "oldpass", newPassword: "newpass123" },
+  // change password: admin-permissioned, no oldPassword, optionally resets 2FA
+  "/auth/change-password/{userId}": { newPassword: "newpass123", reset2FA: false },
   "/auth/reset-2fa/{userId}": {},
 };
 
@@ -233,12 +236,25 @@ const BODY_ENDPOINTS = new Set(
   Object.keys(BODY_EXAMPLES).filter((p) => BODY_EXAMPLES[p] && Object.keys(BODY_EXAMPLES[p]).length)
 );
 
+// Endpoints that return a usable identifier. Running them fills the matching
+// environment variable, so the follow-up requests (which reference
+// {{bookingId}} and friends) work without hand-copying ids.
+const ID_CAPTURE = {
+  "GET /vehicles": { var: "vehicleId", expr: "const list = (json.data && json.data.items) || json.data || []; return Array.isArray(list) ? (list[0] && (list[0].vehicleId || list[0].id)) : null;" },
+  "POST /bookings": { var: "bookingId", expr: "return json.data && json.data.id;" },
+  "POST /payments": { var: "paymentId", expr: "return json.data && json.data.id;" },
+  "POST /reviews": { var: "reviewId", expr: "return json.data && json.data.id;" },
+  "POST /waitlist": { var: "waitlistId", expr: "return json.data && json.data.id;" },
+  "POST /packages": { var: "packageId", expr: "return json.data && (json.data.id || json.data.packageId);" },
+  "POST /referrals/generate-code": { var: "referralCode", expr: "return (json.data && json.data.code) || json.referralCode;" },
+};
+
 // ---------------------------------------------------------------
 // 4. Descriptions + success responses per endpoint
 // ---------------------------------------------------------------
 const DESCRIPTIONS = {
   "/auth/login": "Email/password login (admin & internal staff). Returns JWT cookie + user.",
-  "/auth/signup": "Create a new employee/staff account. Multipart/form-data — fields may arrive as JSON strings or files.",
+  "/auth/signup": "Create a customer or driver account. Multipart/form-data — fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
   "/auth/otp/request": "Public. Sends a 4-digit OTP to the phone. In dev the code is returned as dev_otp.",
   "/auth/otp/verify": "Public. Verifies OTP and returns a JWT. Dev bypass code: 0000. Response drives role-based home screen.",
   "/auth/logout": "Clears the auth cookie / current session.",
@@ -250,7 +266,8 @@ const DESCRIPTIONS = {
   "/auth/2fa/disable": "Disables 2FA for the authenticated user.",
   "/auth/change-password/{userId}": "Admin (user_password:manage). Changes a user's password and optionally resets 2FA. Protected by requirePermission.",
   "/auth/reset-2fa/{userId}": "Admin (user_password:manage). Resets a user's 2FA.",
-  "/bookings/estimate-price": "PUBLIC. Server-side price estimate. Never trust a client-side price.",
+  "/bookings/estimate-price": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected.",
+  "/bookings/estimate-distance": "PUBLIC. Resolves startPoint/endPoint (coordinates or a place name) into distanceKm and durationMinutes. Coordinates are passed through; free text is geocoded via OpenRouteService. Without ORS_API_KEY the server falls back to a straight-line estimate and says so in `source` and `warning`.",
   "POST /bookings": "Creates a booking with status=PENDING. DB unique constraint blocks double-booking (409).",
   "/bookings/{id}/status": "Transitions booking status. PENDING→CONFIRMED/CANCELLED, CONFIRMED→COMPLETED/CANCELLED.",
   "/bookings/{id}/trip-status": "NOTSTARTED→INPROGRESS→ARRIVED→COMPLETED. Trip COMPLETED auto-completes the booking and releases the driver.",
@@ -276,7 +293,8 @@ const DESCRIPTIONS = {
 };
 
 const SUCCESS_RESPONSES = {
-  "/bookings/estimate-price": { success: true, data: { basePrice: 100, distancePrice: 30, timePrice: 20, surgeMultiplier: 1, discountAmount: 5, totalPrice: 145, depositPaid: 30 } },
+  "/bookings/estimate-price": { success: true, data: { basePrice: 100, distancePrice: 30, timePrice: 20, surgeMultiplier: 1, discountAmount: 5, totalPrice: 145, depositPaid: 30 }, route: { distanceKm: 230, durationMinutes: 165, source: "openrouteservice", start: { latitude: 30.0444, longitude: 31.2357 }, end: { latitude: 31.2001, longitude: 29.9187 } }, comparison: { serverDistanceKm: 230, serverDurationMinutes: 165, claimedDistanceKm: null, claimedDurationMinutes: null, distanceDifferenceKm: null, withinTolerance: true } },
+  "/bookings/estimate-distance": { success: true, data: { distanceKm: 230.4, durationMinutes: 168, source: "openrouteservice", start: { latitude: 30.0444, longitude: 31.2357 }, end: { latitude: 31.2001, longitude: 29.9187 } } },
   "POST /bookings": { success: true, data: { id: "{{bookingId}}", vehicleId: "{{vehicleId}}", status: "PENDING", tripStatus: "NOTSTARTED", totalPrice: 145 } },
   "/payments": { success: true, data: { id: "{{paymentId}}", bookingId: "{{bookingId}}", amount: 100, paymentMethod: "CASH", status: "PENDING" } },
   "/reviews": { success: true, data: { id: "{{reviewId}}", bookingId: "{{bookingId}}", overallRating: 5, visible: false } },
@@ -295,6 +313,10 @@ const REQUEST_SCHEMAS = {
   "/auth/otp/request": "OtpRequest",
   "/auth/otp/verify": "OtpVerify",
   "/auth/verify-2fa": "Verify2faBody",
+  "/auth/verify-2fa-setup": "Verify2faSetupBody",
+  "/auth/2fa/verify": "Verify2faEnableBody",
+  "/auth/change-password/{userId}": "ChangePasswordBody",
+  "/bookings/estimate-distance": "EstimateDistanceBody",
   "/bookings/estimate-price": "PriceEstimateBody",
   "POST /bookings": "CreateBookingBody",
   "/bookings/{id}/status": "UpdateBookingStatusBody",
@@ -320,13 +342,75 @@ const REQUEST_SCHEMAS = {
 };
 
 const openapiSchemas = {
-  SignupBody: { type: "object", properties: { name: { type: "string" }, email: { type: "string", format: "email" }, pic: { type: "string" }, code: { type: "string" }, graduationYear: { type: "string" }, graduationFaculty: { type: "string" }, graduationDepartment: { type: "string" }, graduationUniversity: { type: "string" }, location: { type: "string" }, salary: { type: "string" }, position: { type: "string" }, phoneNumbers: { type: "array", items: { type: "object", properties: { number: { type: "string" } } } } }, required: ["name", "email", "code", "graduationYear", "graduationFaculty", "location", "position", "phoneNumbers"] },
+  SignupBody: { type: "object", properties: { name: { type: "string" }, email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 }, pic: { type: "string" }, role: { type: "string", enum: ["customer", "driver"], default: "customer", description: "Account type. Admin roles cannot be self-assigned." }, licenseNumber: { type: "string", description: "Required when role is 'driver'." }, licenseExpiry: { type: "string", description: "Required when role is 'driver'." }, referralCode: { type: "string" }, phoneNumbers: { type: "array", items: { type: "object", properties: { number: { type: "string" } } } } }, required: ["name", "email", "password", "phoneNumbers"] },
   LoginBody: { type: "object", properties: { email: { type: "string", format: "email" }, password: { type: "string", minLength: 6 } }, required: ["email", "password"] },
   OtpRequest: { type: "object", properties: { phoneNumber: { type: "string", minLength: 8 } }, required: ["phoneNumber"] },
   OtpVerify: { type: "object", properties: { phoneNumber: { type: "string" }, code: { type: "string", minLength: 4, maxLength: 4 } }, required: ["phoneNumber", "code"] },
-  Verify2faBody: { type: "object", properties: { token: { type: "string" }, otpCode: { type: "string" } }, required: ["token", "otpCode"] },
-  PriceEstimateBody: { type: "object", properties: { vehicleCategory: { type: "string", enum: ["CAR", "VAN", "BUS", "TRUCK", "CLASSIC", "LUXURY"] }, distanceKm: { type: "number" }, durationMinutes: { type: "number" }, isPeakHour: { type: "boolean" }, surgeMultiplier: { type: "number" }, packageDiscount: { type: "number" }, referralDiscount: { type: "number" }, vehicleId: { type: "string" }, packageId: { type: "string" }, referralCode: { type: "string" } } },
-  CreateBookingBody: { type: "object", properties: { customerId: { type: "string" }, vehicleId: { type: "string" }, driverId: { type: "string" }, bookingDate: { type: "string", example: "2026-09-15" }, startTime: { type: "string", example: "10:00" }, endTime: { type: "string", example: "12:00" }, distanceKm: { type: "number" }, durationMinutes: { type: "number" }, startPoint: { type: "string" }, endPoint: { type: "string" }, notes: { type: "string" }, driverNotes: { type: "string" }, packageId: { type: "string" }, eventType: { type: "string" }, isPeakHour: { type: "boolean" }, surgeMultiplier: { type: "number" } }, required: ["vehicleId", "bookingDate", "startTime", "endTime"] },
+  // The controller reads `userId`, `token` (the 6-digit TOTP) and `secret`.
+  // POST /auth/verify-2fa: the challenge is answered with the TOTP code only.
+  // The secret was already stored server-side when 2FA was enabled, so this
+  // controller reads just `userId` and `token`.
+  Verify2faBody: {
+    type: "object",
+    properties: { userId: { type: "string", format: "uuid" }, token: { type: "string" } },
+    required: ["userId", "token"],
+  },
+  // POST /auth/verify-2fa-setup: first-time enrolment. `secret` is the value
+  // POST /auth/login returned as `secret` (also shown in the QR code), and the
+  // controller verifies the code against it before persisting it.
+  Verify2faSetupBody: {
+    type: "object",
+    properties: { userId: { type: "string", format: "uuid" }, token: { type: "string" }, secret: { type: "string" } },
+    required: ["userId", "token", "secret"],
+  },
+  // Authenticated 2FA enrolment: `secret` comes from GET /auth/2fa/setup.
+  Verify2faEnableBody: {
+    type: "object",
+    properties: { token: { type: "string" }, secret: { type: "string" } },
+    required: ["token", "secret"],
+  },
+  // Admin-driven reset. There is no oldPassword: the caller holds
+  // user_password:manage. Every call bumps tokenVersion, so the target user's
+  // other sessions are signed out.
+  ChangePasswordBody: {
+    type: "object",
+    properties: { newPassword: { type: "string", minLength: 6 }, reset2FA: { type: "boolean" } },
+    required: ["newPassword"],
+  },
+  LocationInput: {
+    description: "Either resolved coordinates, or free text the server geocodes.",
+    oneOf: [
+      { type: "object", properties: { latitude: { type: "number", minimum: -90, maximum: 90 }, longitude: { type: "number", minimum: -180, maximum: 180 } }, required: ["latitude", "longitude"] },
+      { type: "object", properties: { lat: { type: "number", minimum: -90, maximum: 90 }, lng: { type: "number", minimum: -180, maximum: 180 } }, required: ["lat", "lng"] },
+      { type: "string", example: "Maadi, Cairo" },
+    ],
+  },
+  DistanceComparison: {
+    type: "object",
+    description: "What the client claimed next to what the server computed. Used for auditing only - the client's figures never affect the price.",
+    properties: {
+      serverDistanceKm: { type: "number" },
+      serverDurationMinutes: { type: "number" },
+      claimedDistanceKm: { type: "number", nullable: true },
+      claimedDurationMinutes: { type: "number", nullable: true },
+      distanceDifferenceKm: { type: "number", nullable: true },
+      withinTolerance: { type: "boolean", description: "True when the claim is within 10% of the server figure." },
+    },
+  },
+  RouteInfo: {
+    type: "object",
+    properties: {
+      distanceKm: { type: "number" },
+      durationMinutes: { type: "number" },
+      source: { type: "string", enum: ["openrouteservice", "haversine"], description: "haversine means no ORS_API_KEY or the provider was unreachable - the figure is a straight-line estimate." },
+      start: { type: "object", properties: { latitude: { type: "number" }, longitude: { type: "number" } } },
+      end: { type: "object", properties: { latitude: { type: "number" }, longitude: { type: "number" } } },
+      warning: { type: "string" },
+    },
+  },
+  EstimateDistanceBody: { type: "object", properties: { startPoint: { $ref: "#/components/schemas/LocationInput" }, endPoint: { $ref: "#/components/schemas/LocationInput" } }, required: ["startPoint", "endPoint"] },
+  PriceEstimateBody: { type: "object", properties: { vehicleCategory: { type: "string", enum: ["CAR", "VAN", "BUS", "TRUCK", "CLASSIC", "LUXURY"] }, startPoint: { $ref: "#/components/schemas/LocationInput" }, endPoint: { $ref: "#/components/schemas/LocationInput" }, distanceKm: { type: "number", description: "Optional hint. Recomputed server-side and never priced." }, durationMinutes: { type: "number", description: "Optional hint. Recomputed server-side and never priced." }, isPeakHour: { type: "boolean" }, surgeMultiplier: { type: "number", minimum: 0, maximum: 10 }, packageDiscount: { type: "number" }, referralDiscount: { type: "number" }, vehicleId: { type: "string" }, packageId: { type: "string" }, referralCode: { type: "string" } } },
+  CreateBookingBody: { type: "object", properties: { customerId: { type: "string" }, vehicleId: { type: "string" }, driverId: { type: "string" }, bookingDate: { type: "string", example: "2026-09-15" }, startTime: { type: "string", example: "10:00" }, endTime: { type: "string", example: "12:00" }, startPoint: { $ref: "#/components/schemas/LocationInput" }, endPoint: { $ref: "#/components/schemas/LocationInput" }, distanceKm: { type: "number", description: "Optional hint. Recomputed server-side and never priced." }, durationMinutes: { type: "number", description: "Optional hint. Recomputed server-side and never priced." }, notes: { type: "string" }, driverNotes: { type: "string" }, packageId: { type: "string" }, eventType: { type: "string" }, isPeakHour: { type: "boolean" }, surgeMultiplier: { type: "number", minimum: 0, maximum: 10 } }, required: ["vehicleId", "bookingDate", "startTime", "endTime", "startPoint", "endPoint"] },
   UpdateBookingStatusBody: { type: "object", properties: { status: { type: "string", enum: ["PENDING", "CONFIRMED", "COMPLETED", "CANCELLED"] } }, required: ["status"] },
   UpdateTripStatusBody: { type: "object", properties: { tripStatus: { type: "string", enum: ["NOTSTARTED", "INPROGRESS", "ARRIVED", "COMPLETED"] } }, required: ["tripStatus"] },
   CancelBookingBody: { type: "object", properties: { reason: { type: "string" } } },
@@ -346,8 +430,9 @@ const openapiSchemas = {
   UpdateUserRoleBody: { type: "object", properties: { userId: { type: "string" }, roleId: { type: "string" } }, required: ["userId", "roleId"] },
   SystemSettingsBody: { type: "object", properties: { performanceHistoryVisible: { type: "boolean" }, evaluationsVisible: { type: "boolean" }, selfAppraisalsVisible: { type: "boolean" } } },
   // ---------- response schemas ----------
-  PriceEstimate: { type: "object", properties: { success: { type: "boolean" }, data: { type: "object", properties: { basePrice: { type: "number" }, distancePrice: { type: "number" }, timePrice: { type: "number" }, surgeMultiplier: { type: "number" }, discountAmount: { type: "number" }, totalPrice: { type: "number" }, depositPaid: { type: "number" } } } } },
-  Booking: { type: "object", properties: { success: { type: "boolean" }, data: { type: "object", properties: { id: { type: "string" }, vehicleId: { type: "string" }, customerId: { type: "string" }, driverId: { type: "string" }, bookingDate: { type: "string" }, startTime: { type: "string" }, endTime: { type: "string" }, distanceKm: { type: "number" }, totalPrice: { type: "number" }, status: { type: "string", enum: ["PENDING", "CONFIRMED", "COMPLETED", "CANCELLED"] }, tripStatus: { type: "string", enum: ["NOTSTARTED", "INPROGRESS", "ARRIVED", "COMPLETED"] } } } } },
+  PriceEstimate: { type: "object", properties: { success: { type: "boolean" }, data: { type: "object", properties: { basePrice: { type: "number" }, distancePrice: { type: "number" }, timePrice: { type: "number" }, surgeMultiplier: { type: "number" }, discountAmount: { type: "number" }, totalPrice: { type: "number" }, depositPaid: { type: "number" } } }, route: { $ref: "#/components/schemas/RouteInfo" }, comparison: { $ref: "#/components/schemas/DistanceComparison" } } },
+  EstimateDistanceResponse: { type: "object", properties: { success: { type: "boolean" }, data: { $ref: "#/components/schemas/RouteInfo" } } },
+  Booking: { type: "object", properties: { success: { type: "boolean" }, data: { type: "object", properties: { id: { type: "string" }, vehicleId: { type: "string" }, customerId: { type: "string" }, driverId: { type: "string" }, bookingDate: { type: "string" }, startTime: { type: "string" }, endTime: { type: "string" }, distanceKm: { type: "number", description: "Server-computed road distance." }, durationMinutes: { type: "number", description: "Server-computed travel time." }, distanceSource: { type: "string", enum: ["openrouteservice", "haversine"], description: "haversine means a straight-line estimate, because ORS_API_KEY was missing or the provider was unreachable." }, startLat: { type: "number", nullable: true }, startLng: { type: "number", nullable: true }, endLat: { type: "number", nullable: true }, endLng: { type: "number", nullable: true }, claimedDistanceKm: { type: "number", nullable: true, description: "What the client declared, kept for auditing only." }, claimedDurationMinutes: { type: "number", nullable: true, description: "What the client declared, kept for auditing only." }, totalPrice: { type: "number" }, status: { type: "string", enum: ["PENDING", "CONFIRMED", "COMPLETED", "CANCELLED"] }, tripStatus: { type: "string", enum: ["NOTSTARTED", "INPROGRESS", "ARRIVED", "COMPLETED"] } } } } },
   PagedBooking: { type: "object", properties: { success: { type: "boolean" }, data: { type: "array", items: { $ref: "#/components/schemas/Booking" } }, pagination: { type: "object", properties: { page: { type: "integer" }, limit: { type: "integer" }, total: { type: "integer" }, totalPages: { type: "integer" } } } } },
   Vehicle: { type: "object", properties: { message: { type: "string" }, data: { type: "array", items: { type: "object", properties: { id: { type: "string" }, make: { type: "string" }, model: { type: "string" }, category: { type: "string", enum: ["CAR", "VAN", "BUS", "TRUCK", "CLASSIC", "LUXURY"] }, status: { type: "string", enum: ["AVAILABLE", "BOOKED", "MAINTENANCE"] }, basePrice: { type: "number" }, pricePerKm: { type: "number" }, pricePerHour: { type: "number" } } } } } },
   Payment: { type: "object", properties: { success: { type: "boolean" }, data: { type: "object", properties: { id: { type: "string" }, bookingId: { type: "string" }, amount: { type: "number" }, paymentMethod: { type: "string", enum: ["PAYMOB", "FAWRY", "CASH", "WALLET"] }, status: { type: "string", enum: ["PENDING", "SUCCESS", "FAILED", "REFUNDED"] } } } } },
@@ -361,6 +446,7 @@ const openapiSchemas = {
 
 // map request path format -> response schema ref
 const RESPONSE_SCHEMA_BY_PATH = {
+  "/bookings/estimate-distance": "EstimateDistanceResponse",
   "/bookings/estimate-price": "PriceEstimate",
   "/bookings": "Booking",
   "/bookings/{id}": "Booking",
@@ -449,20 +535,128 @@ function buildPostman(groups) {
 
       const p = braceToColon(fullPath);
       const raw = "{{baseUrl}}/api/v1" + p;
-      const url = { raw, host: ["{{baseUrl}}"], path: raw.split("/").filter(Boolean).map(() => "") };
-      url.path = raw.split("/").filter(Boolean);
+      // Postman concatenates host + path, so {{baseUrl}} must appear only in
+      // host - leaving it in the path segment list doubles it in the URL.
+      const url = {
+        raw,
+        host: ["{{baseUrl}}"],
+        path: ["api", "v1", ...p.split("/").filter(Boolean)],
+      };
       if (query.length) url.query = query.map((q) => ({ key: q.key, value: q.value || "", disabled: !q.value }));
 
       const request = { method: ep.method, header, url };
       if (hasBody) {
-        request.body = { mode: "raw", raw: JSON.stringify(body, null, 2), options: { raw: { language: "json" } } };
+        // Multipart routes are mounted behind multer server-side, so a raw JSON
+        // body would be rejected with 400. Mirror the real wire format.
+        if (MULTIPART_ROUTES.has(fullCurly)) {
+          const fileFields = MULTIPART_FILE_FIELDS[fullCurly] || new Set();
+          request.body = {
+            mode: "formdata",
+            formdata: Object.entries(body).map(([key, value]) => {
+              if (fileFields.has(key)) return { key, type: "file", src: [] };
+              if (value === null || value === undefined || value === "") return { key, value: "", type: "text" };
+              if (typeof value === "object" && !Array.isArray(value)) return { key, value: JSON.stringify(value), type: "text" };
+              if (Array.isArray(value)) return { key, value: JSON.stringify(value), type: "text" };
+              return { key, value: String(value), type: "text" };
+            }),
+          };
+        } else {
+          request.body = { mode: "raw", raw: JSON.stringify(body, null, 2), options: { raw: { language: "json" } } };
+        }
       }
       const desc = lookup(DESCRIPTIONS, ep.method, fullCurly);
       if (desc) request.description = desc;
 
+      const events = [];
+      if (protectedRoute) {
+        events.push({
+          listen: "prerequest",
+          script: {
+            type: "text/javascript",
+            exec: [
+              "if (!pm.environment.get('token')) {",
+              "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+              "}",
+            ],
+          },
+        });
+      }
+      const tokenSource = TOKEN_CAPTURE_ROUTES[fullCurly];
+      if (tokenSource) {
+        events.push({
+          listen: "test",
+          script: {
+            type: "text/javascript",
+            exec: [
+              "let json = {};",
+              "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+              tokenSource === "body"
+                ? "const token = json.token;"
+                : [
+                      "// this endpoint returns the JWT only as a `token` cookie,",
+                      "// so read it back out of the cookie jar.",
+                      "const token = pm.cookies.get('token');",
+                    ],
+              "if (token) {",
+              "  pm.environment.set('token', token);",
+              "  console.log('token captured:', String(token).slice(0, 24) + '...');",
+              "} else {",
+              "  console.warn('No token returned. Check the response body/cookies.');",
+              "}",
+              "const role = json.role || (json.user && json.user.role && json.user.role.name);",
+              "if (role) pm.environment.set('role', role);",
+              "const uid = json.userId || (json.user && json.user.id);",
+              "if (uid) pm.environment.set('userId', uid);",
+            ],
+          },
+        });
+      }
+      if (LOGIN_STEP_ROUTES.has(fullCurly)) {
+        events.push({
+          listen: "test",
+          script: {
+            type: "text/javascript",
+            exec: [
+              "let json = {};",
+              "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+              "// /auth/login is 2FA-gated and returns no token. It hands back the",
+              "// userId needed by POST /auth/verify-2fa (or /verify-2fa-setup).",
+              "if (json.userId) {",
+              "  pm.environment.set('userId', json.userId);",
+              "  console.log('2FA required for userId:', json.userId);",
+              "}",
+              "if (json.twoFactorSetupRequired) console.log('Enable 2FA first: POST /auth/verify-2fa-setup');",
+            ],
+          },
+        });
+      }
+      const idCapture = ID_CAPTURE[`${ep.method} ${fullCurly}`];
+      if (idCapture) {
+        events.push({
+          listen: "test",
+          script: {
+            type: "text/javascript",
+            exec: [
+              "let json = {};",
+              "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+              "if (pm.response.code >= 200 && pm.response.code < 300) {",
+              `  const pick = (json) => { ${idCapture.expr} };`,
+              "  const value = pick(json);",
+              "  if (value) {",
+              `    pm.environment.set('${idCapture.var}', String(value));`,
+              `    console.log('${idCapture.var} =', value);`,
+              "  }",
+              "}",
+            ],
+          },
+        });
+      }
       const displayPath = braceToColon(fullPath);
       const name = `${ep.method} ${displayPath}`;
       const response = { name, request, response: [] };
+      // Postman/Apidog read scripts from the item, as a sibling of `request` -
+      // nesting them under `request` silently drops them on import.
+      if (events.length) response.event = events;
       const successResp = lookup(SUCCESS_RESPONSES, ep.method, fullCurly);
       if (successResp) {
         response.response.push({
@@ -581,16 +775,155 @@ function buildOpenapi(groups) {
 }
 
 // ---------------------------------------------------------------
+// 8b. Apidog-ready refinements
+// ---------------------------------------------------------------
+
+// How each endpoint hands back a JWT. Apidog honours Postman-style "test"
+// scripts on import, so the token chains automatically.
+//   /auth/otp/verify        -> `token` in the JSON body
+//   /auth/verify-2fa       -> `token` COOKIE ONLY (login is 2FA-gated)
+//   /auth/verify-2fa-setup -> `token` COOKIE ONLY
+// POST /auth/login returns no token at all - only a 2FA-required payload.
+const TOKEN_CAPTURE_ROUTES = {
+  "/auth/otp/verify": "body",
+  "/auth/verify-2fa": "cookie",
+  "/auth/verify-2fa-setup": "cookie",
+};
+
+// /auth/login is a two-step, 2FA-gated flow and never returns a token itself.
+// Remembering the userId it hands back is what makes step 2 followable.
+const LOGIN_STEP_ROUTES = new Set(["/auth/login"]);
+
+// /auth/signup is the only route mounted behind multer, so it is the only one
+// that must be described as multipart/form-data. Declaring it as JSON makes
+// multer skip req.body entirely, so every field arrives undefined.
+const MULTIPART_ROUTES = new Set(["/auth/signup"]);
+
+// File fields must be sent as multipart `file` parts, not text.
+const MULTIPART_FILE_FIELDS = { "/auth/signup": new Set(["pic"]) };
+
+// Shown in the Apidog sidebar next to each folder.
+const TAG_DESCRIPTIONS = {
+  Auth: "Registration, login, 2FA and OTP. Signup accepts a `role` flag of 'customer' (default) or 'driver'.",
+  Vehicles: "Fleet catalogue. Public - no token required.",
+  Booking: "Trip booking lifecycle: create, cancel, trip status, pricing.",
+  Driver: "Driver profile, availability, earnings and assigned bookings.",
+  Review: "Two-way reviews between customers and drivers.",
+  Payment: "Payment records, refunds and receipts.",
+  Waitlist: "Waitlist queue for fully booked vehicles.",
+  Package: "Multi-day and multi-event packages.",
+  Chat: "Customer/driver conversations and messages.",
+  Referral: "Referral codes and rewards.",
+  Wallet: "Balance and transactions. Credit/debit require the wallet:manage permission.",
+  Notification: "Scheduled and sent notifications.",
+  Admin: "Admin-only. Requires the ADMIN or SUPER_ADMIN role.",
+};
+
+const asAscii = (value) =>
+  typeof value === "string"
+    ? value.replace(/[\u2010-\u2015\u2018\u2019\u201c\u201d\u2013\u2014\u2212]/g, (c) => {
+        const map = { "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-", "\u2014": "-", "\u2212": "-" };
+        return map[c] ?? "-";
+      })
+    : value;
+
+function applyApidogFixups(spec, groups) {
+  spec.servers = [
+    { url: "http://localhost:5000/api/v1", description: "Local dev server" },
+  ];
+
+  spec.info.description = asAscii(spec.info.description);
+
+  spec.tags = spec.tags.map((t) => ({
+    ...t,
+    description: asAscii(TAG_DESCRIPTIONS[t.name] || t.name),
+  }));
+
+  for (const [key, methods] of Object.entries(spec.paths)) {
+    for (const [method, op] of Object.entries(methods)) {
+      op.summary = asAscii(op.summary);
+      op.description = op.description || op.summary;
+      op.operationId = `${method}_${key.replace(/[{}]/g, "").replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
+
+      // Public endpoints should declare an empty security array rather than
+      // inheriting nothing, so Apidog does not prompt for a token on signup.
+      if (op.security && op.security.length === 0) delete op.security;
+
+      const isMultipart = MULTIPART_ROUTES.has(key);
+      if (op.requestBody) {
+        const jsonContent = op.requestBody.content["application/json"];
+        const schemaRef = jsonContent?.schema?.$ref;
+        const schemaName = schemaRef ? schemaRef.split("/").pop() : null;
+        const props = (schemaName && spec.components.schemas[schemaName]?.properties) || {};
+        // Lookup honours both "POST /bookings" and "/bookings" style keys; a
+        // bare index would silently yield {} for method-scoped entries.
+        const example = lookup(BODY_EXAMPLES, method.toUpperCase(), key) || {};
+
+        if (isMultipart) {
+          // A multipart body must declare each field individually; Apidog will
+          // otherwise render a single opaque blob.
+          const properties = {};
+          for (const [prop, def] of Object.entries(props)) {
+            properties[prop] = { ...def, ...(example[prop] !== undefined ? { example: example[prop] } : {}) };
+          }
+          op.requestBody = {
+            required: true,
+            content: {
+              "multipart/form-data": {
+                schema: { type: "object", properties },
+                encoding: { pic: { contentType: "image/*" } },
+              },
+            },
+          };
+        } else {
+          op.requestBody.content["application/json"].example = example;
+        }
+      }
+    }
+  }
+  return spec;
+}
+
+// ---------------------------------------------------------------
 // 9. Run
 // ---------------------------------------------------------------
 fs.mkdirSync(OUT_DIR, { recursive: true });
 const groups = readRouteFiles();
 
 const postman = buildPostman(groups);
-const openapi = buildOpenapi(groups);
+const openapi = applyApidogFixups(buildOpenapi(groups), groups);
+
+// Apidog imports Postman environments natively. `token` is populated by the
+// capture script on POST /auth/otp/verify; the id variables are filled in by
+// running the matching create/list request. `roleId` and `driverUserId` have no
+// endpoint that returns them directly, so set them by hand when needed.
+const environment = {
+  id: "mishwarak-local-env",
+  name: "Mishwark Local",
+  values: [
+    { key: "baseUrl", value: "http://localhost:5000", type: "default", enabled: true },
+    { key: "token", value: "", type: "secret", enabled: true },
+    { key: "role", value: "", type: "default", enabled: true },
+    { key: "userId", value: "", type: "default", enabled: true },
+    { key: "vehicleId", value: "", type: "default", enabled: true },
+    { key: "bookingId", value: "", type: "default", enabled: true },
+    { key: "paymentId", value: "", type: "default", enabled: true },
+    { key: "reviewId", value: "", type: "default", enabled: true },
+    { key: "waitlistId", value: "", type: "default", enabled: true },
+    { key: "packageId", value: "", type: "default", enabled: true },
+    { key: "referralCode", value: "", type: "default", enabled: true },
+    { key: "driverUserId", value: "", type: "default", enabled: true },
+    { key: "roleId", value: "", type: "default", enabled: true },
+  ],
+  _postman_variable_scope: "environment",
+  _postman_exported_using: "build-api-docs.js",
+};
+
+fs.writeFileSync(path.join(OUT_DIR, "mishwarak.postman_environment.json"), JSON.stringify(environment, null, 2));
 
 const postmanPath = path.join(OUT_DIR, "mishwarak.postman_collection.json");
 const openapiPath = path.join(OUT_DIR, "mishwarak.openapi.json");
+const envPath = path.join(OUT_DIR, "mishwarak.postman_environment.json");
 fs.writeFileSync(postmanPath, JSON.stringify(postman, null, 2));
 fs.writeFileSync(openapiPath, JSON.stringify(openapi, null, 2));
 
@@ -598,5 +931,10 @@ const total = groups.reduce((n, g) => n + g.endpoints.length, 0);
 console.log("Groups parsed from routes/:");
 for (const g of groups) console.log(`  - ${g.file}: ${g.endpoints.length} endpoints`);
 console.log(`\nTotal endpoints: ${total}`);
-console.log("Postman collection:", postmanPath);
+console.log("\nApidog import order:");
+console.log("  1.", openapiPath, "(or the Postman collection)");
+console.log("  2.", envPath, "(select it as the active environment)");
+console.log("  3. run POST /auth/otp/verify to capture a token");
+console.log("\nPostman collection:", postmanPath);
 console.log("OpenAPI spec:     ", openapiPath);
+console.log("Environment:      ", envPath);

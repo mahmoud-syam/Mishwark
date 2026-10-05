@@ -3,9 +3,16 @@ import { PrismaClient, DriverStatus, VehicleCategory, VehicleStatus } from "@pri
 import { seedRolesAndPermissions } from "./api_seed_roles";
 import "dotenv/config";
 
+import { hashSync } from "bcrypt";
+
 const connectionString = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/mishwarak";
 const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
+
+// Seeded accounts sign in with this password via POST /auth/login. It has to be
+// a real bcrypt hash: the previous placeholder made every seeded login fail.
+export const SEED_PASSWORD = "secret123";
+const SEED_PASSWORD_HASH = hashSync(SEED_PASSWORD, 10);
 
 async function main() {
   console.log("Starting database seeding...");
@@ -32,9 +39,15 @@ async function main() {
     });
 
     // Fetch Roles
-    const superAdminRole = await prisma.role.findUnique({ where: { name: "Super Admin" } });
-    const customerRole = await prisma.role.findUnique({ where: { name: "Customer" } });
-    const driverRole = await prisma.role.findUnique({ where: { name: "Driver" } });
+    const superAdminRole = await prisma.role.findUnique({ where: { name: "SUPER_ADMIN" } });
+    const customerRole = await prisma.role.findUnique({ where: { name: "CUSTOMER" } });
+    const driverRole = await prisma.role.findUnique({ where: { name: "DRIVER" } });
+
+    if (!superAdminRole || !customerRole || !driverRole) {
+      throw new Error(
+        "Missing base roles. Run `npm run seed:api` before seeding users."
+      );
+    }
 
     // 3. Seed Super Admin User
     console.log("Seeding Super Admin user...");
@@ -42,14 +55,15 @@ async function main() {
       where: { email: "admin@mishwarak.com" },
       update: {
         name: "System Admin",
-        roleId: superAdminRole?.id,
+        roleId: superAdminRole.id,
+        password: SEED_PASSWORD_HASH,
       },
       create: {
         email: "admin@mishwarak.com",
         name: "System Admin",
         phoneNumber: "+201000000000",
-        password: "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vj.W.", // dummy hash
-        roleId: superAdminRole?.id,
+        password: SEED_PASSWORD_HASH,
+        roleId: superAdminRole.id,
         preferredLanguage: "ar",
       },
     });
@@ -60,14 +74,15 @@ async function main() {
       where: { email: "customer@mishwarak.com" },
       update: {
         name: "John Customer",
-        roleId: customerRole?.id,
+        roleId: customerRole.id,
+        password: SEED_PASSWORD_HASH,
       },
       create: {
         email: "customer@mishwarak.com",
         name: "John Customer",
         phoneNumber: "+201011111111",
-        password: "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vj.W.",
-        roleId: customerRole?.id,
+        password: SEED_PASSWORD_HASH,
+        roleId: customerRole.id,
         customerRating: 5.0,
         preferredLanguage: "ar",
       },
@@ -77,13 +92,13 @@ async function main() {
     console.log("Seeding Test Drivers...");
     const driver1User = await prisma.users.upsert({
       where: { email: "driver1@mishwarak.com" },
-      update: { name: "Ahmed Driver", roleId: driverRole?.id },
+      update: { name: "Ahmed Driver", roleId: driverRole.id, password: SEED_PASSWORD_HASH },
       create: {
         email: "driver1@mishwarak.com",
         name: "Ahmed Driver",
         phoneNumber: "+201022222222",
-        password: "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vj.W.",
-        roleId: driverRole?.id,
+        password: SEED_PASSWORD_HASH,
+        roleId: driverRole.id,
         preferredLanguage: "ar",
       },
     });
@@ -109,13 +124,13 @@ async function main() {
 
     const driver2User = await prisma.users.upsert({
       where: { email: "driver2@mishwarak.com" },
-      update: { name: "Mohamed Driver", roleId: driverRole?.id },
+      update: { name: "Mohamed Driver", roleId: driverRole.id, password: SEED_PASSWORD_HASH },
       create: {
         email: "driver2@mishwarak.com",
         name: "Mohamed Driver",
         phoneNumber: "+201033333333",
-        password: "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vj.W.",
-        roleId: driverRole?.id,
+        password: SEED_PASSWORD_HASH,
+        roleId: driverRole.id,
         preferredLanguage: "ar",
       },
     });

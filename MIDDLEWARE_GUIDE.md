@@ -79,10 +79,10 @@ AdminRouter.post("/roles", createRole);
 
 ## Key Logic Features
 
-1.  **Super Admin Bypass:** 
-    Users with the `isAdmin: true` flag or a role named `Super Admin` automatically pass all `requirePermission` checks, regardless of the permission requested.
-    
-2.  **Type Safety:** 
+1.  **Super Admin Bypass:**
+    Users whose role is `SUPER_ADMIN` automatically pass all `requirePermission` checks, regardless of the permission requested. There is no `isAdmin` flag on the user model; authorization derives solely from the role.
+
+2.  **Type Safety:**
     The `req.user` object is typed to include the user's role and permissions. You can access them in your controllers like this:
     ```typescript
     const permissions = req.user?.role?.permissions; // string[]
@@ -92,11 +92,21 @@ AdminRouter.post("/roles", createRole);
     *   **401 Unauthorized:** Thrown if the token is missing, invalid, or expired.
     *   **403 Forbidden:** Thrown if the user is logged in but doesn't have the required permission name.
 
+4.  **Role freshness:**
+    `authMiddleware` re-reads the role from the database on every request, so a change made through `PATCH /admin/users/role` applies immediately. The JWT is only trusted for identity and `tokenVersion`.
+
 ## Common Permission Names
-Refer to `prisma/seed/roles.ts` or your database for the current list of permissions. Common ones include:
+Refer to `src/v1/constants/roles.ts` (`PERMISSIONS`) or `prisma/seed/api_seed_roles.ts` for the canonical list. Current names:
 *   `dashboard:view`
 *   `user:manage`
 *   `role:manage`
-*   `department:manage`
-*   `applicant:manage`
-*   `kpi_config:manage`
+*   `booking:manage`
+*   `vehicle:manage`
+*   `driver:manage`
+*   `payment:manage`
+*   `settings:manage`
+*   `review:manage`
+*   `wallet:manage`
+*   `user_password:manage`
+
+`SUPER_ADMIN` holds all of them. `ADMIN` holds all except `role:manage` and `settings:manage`. `CUSTOMER` and `DRIVER` hold none — they are authorized by role rather than by permission.

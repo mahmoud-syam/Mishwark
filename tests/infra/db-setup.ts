@@ -36,14 +36,28 @@ export async function resetDatabase(): Promise<void> {
   }
 
   try {
-    // Delete in order to satisfy foreign key constraints
+    // Children before parents. Every model that references another has to be
+    // listed, otherwise a leftover row (a conversation pointing at a booking,
+    // say) aborts the whole reset with a foreign key violation and the suite
+    // then runs against a half-wiped database.
+    await prismaClient.messages.deleteMany();
+    await prismaClient.conversations.deleteMany();
+    await prismaClient.scheduledNotifications.deleteMany();
+    await prismaClient.walletTransactions.deleteMany();
+    await prismaClient.referrals.deleteMany();
+    await prismaClient.reviews.deleteMany();
+    await prismaClient.payments.deleteMany();
+    await prismaClient.waitlist.deleteMany();
+    await prismaClient.tripLocations.deleteMany();
     await prismaClient.bookings.deleteMany();
+    await prismaClient.packages.deleteMany();
     await prismaClient.vehicleAvailability.deleteMany();
+    await prismaClient.vehicleMaintenance.deleteMany();
     await prismaClient.vehicleDrivers.deleteMany();
     await prismaClient.vehicleImages.deleteMany();
     await prismaClient.vehicles.deleteMany();
-    await prismaClient.phoneNumbers.deleteMany();
     await prismaClient.drivers.deleteMany();
+    await prismaClient.phoneNumbers.deleteMany();
     await prismaClient.users.deleteMany();
     await prismaClient.permission.deleteMany();
     await prismaClient.role.deleteMany();
@@ -61,24 +75,25 @@ export async function seedDatabase(): Promise<TestSeedData> {
     return getMockSeedData();
   }
 
-  // Create Roles
+  // Create Roles. Names must match the UserRole enum - lowercase values used to
+  // create a parallel role set that adminMiddleware then rejected.
   const adminRole = await prismaClient.role.create({
     data: {
-      name: 'admin',
+      name: 'ADMIN',
       description: 'System Administrator with full permissions',
     },
   });
 
   const driverRole = await prismaClient.role.create({
     data: {
-      name: 'driver',
+      name: 'DRIVER',
       description: 'Vehicle Driver user role',
     },
   });
 
   const customerRole = await prismaClient.role.create({
     data: {
-      name: 'customer',
+      name: 'CUSTOMER',
       description: 'Rider / Customer user role',
     },
   });
@@ -121,9 +136,9 @@ export async function seedDatabase(): Promise<TestSeedData> {
         create: {
           fullName: 'Test Driver Profile',
           licenseNumber: 'LIC-998877',
-          licenseExpiry: '2030-12-31',
+          licenseExpiry: new Date('2030-12-31T00:00:00.000Z'),
           status: DriverStatus.ACTIVE,
-          rating_avg: 4.9,
+          rating: 4.9,
         },
       },
     },
@@ -150,7 +165,7 @@ export async function seedDatabase(): Promise<TestSeedData> {
     data: {
       make: 'Toyota',
       model: 'Camry',
-      year: '2024',
+      year: 2024,
       plateNumber: 'ABC-1234',
       color: 'Black',
       capacity: 4,
@@ -179,17 +194,17 @@ export function getMockSeedData(): TestSeedData {
   return {
     adminRole: {
       id: 'mock-admin-role-id',
-      name: 'admin',
+      name: 'ADMIN',
       description: 'System Administrator',
     },
     driverRole: {
       id: 'mock-driver-role-id',
-      name: 'driver',
+      name: 'DRIVER',
       description: 'Vehicle Driver user role',
     },
     customerRole: {
       id: 'mock-customer-role-id',
-      name: 'customer',
+      name: 'CUSTOMER',
       description: 'Rider / Customer user role',
     },
     systemSettings: {
@@ -217,7 +232,7 @@ export function getMockSeedData(): TestSeedData {
       userId: 'mock-driver-user-id',
       fullName: 'Test Driver Profile',
       status: DriverStatus.ACTIVE,
-      rating_avg: 4.9,
+      rating: 4.9,
     },
     riderUser: {
       id: 'mock-rider-user-id',

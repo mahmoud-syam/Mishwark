@@ -19,6 +19,9 @@ import {
   NotFoundException,
 } from "../utils/errors";
 import { PricingService, calculateEstimatedPrice } from "./pricing.service";
+import MapsService, { LocationInput, RouteResult, toCoordinates } from "./maps.service";
+import { getDriverIdForUser } from "./role.service";
+import { isAdminRole, normalizeRoleName, USER_ROLES } from "../constants/roles";
 
 export function checkSlotOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
   const toMins = (t: string) => {
@@ -62,10 +65,12 @@ export interface CreateBookingDTO {
   bookingDate: string; // YYYY-MM-DD
   startTime: string;   // HH:mm
   endTime: string;     // HH:mm
+  startPoint?: LocationInput;
+  endPoint?: LocationInput;
+  // Accepted and recorded, but never used for pricing - the server recomputes
+  // both. Kept so a mismatch can be audited instead of silently discarded.
   distanceKm?: number;
   durationMinutes?: number;
-  startPoint?: string;
-  endPoint?: string;
   notes?: string;
   driverNotes?: string;
   packageId?: string;
@@ -74,8 +79,55 @@ export interface CreateBookingDTO {
   surgeMultiplier?: number;
 }
 
-export interface ListBookingsParams {
-  page?: number;
+/**
+ * Renders a location input as the human-readable label stored on the booking.
+ * Free text passes through; coordinates become a "lat, lng" string.
+ */
+export const describePoint = (point: LocationInput | undefined | null): string => {
+  if (point == null) return "";
+  if (typeof point === "string") return point.trim();
+  const coords = toCoordinates(point);
+  if (!coords) return "";
+  return `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
+};
+
+/** Anything beyond this ratio is treated as a client/server disagreement. */
+const DISTANCE_TOLERANCE_RATIO = 0.1;
+
+export interface DistanceComparison {
+  serverDistanceKm: number;
+  serverDurationMinutes: number;
+  claimedDistanceKm: number | null;
+  claimedDurationMinutes: number | null;
+  distanceDifferenceKm: number | null;
+  withinTolerance: boolean;
+}
+
+export const compareDistance = (
+  route: Pick<RouteResult, "distanceKm" | "durationMinutes">,
+  claimedDistanceKm?: number,
+  claimedDurationMinutes?: number
+): DistanceComparison => {
+  const claimed = typeof claimedDistanceKm === "number" ? claimedDistanceKm : null;
+  const claimedDuration = typeof claimedDurationMinutes === "number" ? claimedDurationMinutes : null;
+  const difference = claimed === null ? null : Math.round((claimed - route.distanceKm) * 100) / 100;
+
+  return {
+    serverDistanceKm: route.distanceKm,
+    serverDurationMinutes: route.durationMinutes,
+    claimedDistanceKm: claimed,
+    claimedDurationMinutes: claimedDuration,
+    distanceDifferenceKm: difference,
+    // A zero-distance route has no meaningful relative tolerance, so any
+    // positive claim is a mismatch and no claim at all is trivially fine.
+    withinTolerance:
+      claimed === null ||
+      route.distanceKm < 0.05 ||
+      Math.abs(difference as number) <= route.distanceKm * DISTANCE_TOLERANCE_RATIO,
+  };
+};
+
+export interface ListBookingsParams {  page?: number;
   limit?: number;
   status?: BookingStatus;
   tripStatus?: TripStatus;
@@ -123,21 +175,18 @@ export class BookingService {
           throw new BadRequestException("Assigned driver is currently OFF or ON LEAVE");
         }
       } else {
-        // Try auto-assign an active driver if available
+        // Only genuinely available drivers may be auto-assigned. The previous
+        // "fall back to any driver record" branch happily assigned an OFF,
+        // ONLEAVE or ONTRIP driver - the exact drivers the explicit-assignment
+        // branch above rejects.
         const activeDriver = await tx.drivers.findFirst({
           where: { status: DriverStatus.ACTIVE },
+          orderBy: { createdAt: "asc" },
         });
-        if (activeDriver) {
-          driverId = activeDriver.id;
-        } else {
-          // If no active driver found, attempt finding any driver record
-          const anyDriver = await tx.drivers.findFirst();
-          if (anyDriver) {
-            driverId = anyDriver.id;
-          } else {
-            throw new BadRequestException("No active driver available for assignment");
-          }
+        if (!activeDriver) {
+          throw new BadRequestException("No active driver available for assignment");
         }
+        driverId = activeDriver.id;
       }
 
       const normalizedDate = new Date(`${data.bookingDate}T00:00:00.000Z`);
@@ -176,19 +225,27 @@ export class BookingService {
         }
       }
 
-      // 5. Calculate price estimate
+      // 5. Resolve the route server-side.
+      //
+      // distanceKm used to be taken straight from the request and fed into the
+      // price, so a client could book a 400 km trip for the base fee. It is now
+      // always recomputed from the endpoints; the client's figure is only kept
+      // alongside it for auditing.
+      const route = await MapsService.route(data.startPoint, data.endPoint);
+
+      // 6. Calculate price estimate from the server-computed distance
       const priceEstimate = calculateEstimatedPrice({
         vehicleCategory: vehicle.category,
-        distanceKm: data.distanceKm || 0,
-        durationMinutes: data.durationMinutes || 0,
+        distanceKm: route.distanceKm,
+        durationMinutes: route.durationMinutes,
         isPeakHour: data.isPeakHour,
         surgeMultiplier: data.surgeMultiplier,
-        customBasePrice: vehicle.basePrice > 0 ? vehicle.basePrice : undefined,
-        customPricePerKm: vehicle.pricePerKm > 0 ? vehicle.pricePerKm : undefined,
-        customPricePerHour: vehicle.pricePerHour > 0 ? vehicle.pricePerHour : undefined,
+        basePrice: vehicle.basePrice > 0 ? vehicle.basePrice : undefined,
+        pricePerKm: vehicle.pricePerKm > 0 ? vehicle.pricePerKm : undefined,
+        pricePerHour: vehicle.pricePerHour > 0 ? vehicle.pricePerHour : undefined,
       });
 
-      // 6. Create Booking Record
+      // 7. Create Booking Record
       const newBooking = await tx.bookings.create({
         data: {
           customerId: customerId,
@@ -196,9 +253,17 @@ export class BookingService {
           driverId: driverId,
           packageId: data.packageId || null,
           eventType: data.eventType || "",
-          startPoint: data.startPoint || "",
-          endPoint: data.endPoint || "",
-          distanceKm: data.distanceKm || 0,
+          startPoint: describePoint(data.startPoint),
+          endPoint: describePoint(data.endPoint),
+          distanceKm: route.distanceKm,
+          durationMinutes: route.durationMinutes,
+          startLat: route.start.latitude,
+          startLng: route.start.longitude,
+          endLat: route.end.latitude,
+          endLng: route.end.longitude,
+          distanceSource: route.source,
+          claimedDistanceKm: typeof data.distanceKm === "number" ? data.distanceKm : null,
+          claimedDurationMinutes: typeof data.durationMinutes === "number" ? data.durationMinutes : null,
           bookingDate: data.bookingDate,
           startTime: data.startTime,
           endTime: data.endTime,
@@ -426,12 +491,22 @@ export class BookingService {
       );
     }
 
-    // Role boundary check: Rider/customer role cannot update trip status
-    if (user && user.role) {
-      const roleName = (typeof user.role === "string" ? user.role : user.role.name || "").toLowerCase();
-      if (roleName === "customer" || roleName === "rider") {
-        throw new ForbiddenException("Customers/Riders are not authorized to update trip status");
-      }
+    // Role boundary check: only admins and the assigned driver may advance a trip.
+    // A missing role fails closed - previously `if (user && user.role)` let a
+    // role-less user through entirely.
+    if (user) {
+        const roleName = normalizeRoleName(
+            typeof user.role === "string" ? user.role : user.role?.name
+        );
+
+        if (roleName === null || !isAdminRole(roleName)) {
+            const driverId = await getDriverIdForUser(user.id);
+            const isAssignedDriver = driverId !== null && driverId === booking.driverId;
+
+            if (!isAssignedDriver) {
+                throw new ForbiddenException("Only the assigned driver or an admin can update trip status");
+            }
+        }
     }
 
     const updateData: any = { tripStatus: newTripStatus };
@@ -481,13 +556,20 @@ export class BookingService {
     if (params.driverId) where.driverId = params.driverId;
     if (params.vehicleId) where.vehicleId = params.vehicleId;
 
-    // Filter by role scope if applicable
-    if (user && user.role) {
-      const roleName = (typeof user.role === "string" ? user.role : user.role.name || "").toLowerCase();
-      if (roleName === "customer" || roleName === "rider") {
+    // Scope the result set to what the caller is entitled to see. Admins see
+    // everything; everyone else is pinned to their own rows. Previously an
+    // absent role skipped this block entirely and returned every booking.
+    if (user && !isAdminRole(typeof user.role === "string" ? user.role : user.role?.name)) {
+      const roleName = normalizeRoleName(
+        typeof user.role === "string" ? user.role : user.role?.name
+      );
+
+      if (roleName === USER_ROLES.DRIVER) {
+        // Bookings.driverId references Drivers.id, not Users.id.
+        const driverId = await getDriverIdForUser(user.id);
+        where.driverId = driverId ?? "__no_driver_profile__";
+      } else {
         where.customerId = user.id;
-      } else if (roleName === "driver") {
-        where.driverId = user.id;
       }
     }
 

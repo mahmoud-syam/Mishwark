@@ -8,7 +8,6 @@ import {
   BadRequestException,
   NotFoundException,
 } from "../utils/errors";
-import { calculateEstimatedPrice } from "./pricing.service";
 
 export class PackageService {
   public static async createPackage(data: {

@@ -7,48 +7,62 @@
   },
   "servers": [
     {
-      "url": "http://localhost:5000/api/v1"
+      "url": "http://localhost:5000/api/v1",
+      "description": "Local dev server"
     }
   ],
   "tags": [
     {
-      "name": "Auth"
+      "name": "Auth",
+      "description": "Registration, login, 2FA and OTP. Signup accepts a `role` flag of 'customer' (default) or 'driver'."
     },
     {
-      "name": "Vehicles"
+      "name": "Vehicles",
+      "description": "Fleet catalogue. Public - no token required."
     },
     {
-      "name": "Bookings"
+      "name": "Bookings",
+      "description": "Bookings"
     },
     {
-      "name": "Drivers"
+      "name": "Drivers",
+      "description": "Drivers"
     },
     {
-      "name": "Reviews"
+      "name": "Reviews",
+      "description": "Reviews"
     },
     {
-      "name": "Payments"
+      "name": "Payments",
+      "description": "Payments"
     },
     {
-      "name": "Waitlist"
+      "name": "Waitlist",
+      "description": "Waitlist queue for fully booked vehicles."
     },
     {
-      "name": "Packages"
+      "name": "Packages",
+      "description": "Packages"
     },
     {
-      "name": "Chat"
+      "name": "Chat",
+      "description": "Customer/driver conversations and messages."
     },
     {
-      "name": "Referrals"
+      "name": "Referrals",
+      "description": "Referrals"
     },
     {
-      "name": "Wallet"
+      "name": "Wallet",
+      "description": "Balance and transactions. Credit/debit require the wallet:manage permission."
     },
     {
-      "name": "Notifications"
+      "name": "Notifications",
+      "description": "Notifications"
     },
     {
-      "name": "Admin"
+      "name": "Admin",
+      "description": "Admin-only. Requires the ADMIN or SUPER_ADMIN role."
     }
   ],
   "paths": {
@@ -57,8 +71,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Create a new employee/staff account. Multipart/form-data — fields may arrive as JSON strings or files.",
-        "security": [],
+        "summary": "Create a customer or driver account. Multipart/form-data - fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
         "responses": {
           "200": {
             "description": "Success",
@@ -95,13 +108,80 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/SignupBody"
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Ahmed Ali"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "ali@mishwarak.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "example": "secret123"
+                  },
+                  "pic": {
+                    "type": "string",
+                    "example": ""
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "customer",
+                      "driver"
+                    ],
+                    "default": "customer",
+                    "description": "Account type. Admin roles cannot be self-assigned.",
+                    "example": "driver"
+                  },
+                  "licenseNumber": {
+                    "type": "string",
+                    "description": "Required when role is 'driver'.",
+                    "example": "LIC-998877"
+                  },
+                  "licenseExpiry": {
+                    "type": "string",
+                    "description": "Required when role is 'driver'.",
+                    "example": "2030-12-31"
+                  },
+                  "referralCode": {
+                    "type": "string",
+                    "example": ""
+                  },
+                  "phoneNumbers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "number": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "example": [
+                      {
+                        "number": "+201011111111"
+                      }
+                    ]
+                  }
+                }
+              },
+              "encoding": {
+                "pic": {
+                  "contentType": "image/*"
+                }
               }
             }
           }
-        }
+        },
+        "description": "Create a customer or driver account. Multipart/form-data - fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
+        "operationId": "post_auth_signup"
       }
     },
     "/auth/login": {
@@ -110,7 +190,6 @@
           "Auth"
         ],
         "summary": "Email/password login (admin & internal staff). Returns JWT cookie + user.",
-        "security": [],
         "responses": {
           "200": {
             "description": "Success",
@@ -150,10 +229,16 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/LoginBody"
+              },
+              "example": {
+                "email": "admin@mishwarak.com",
+                "password": "secret123"
               }
             }
           }
-        }
+        },
+        "description": "Email/password login (admin & internal staff). Returns JWT cookie + user.",
+        "operationId": "post_auth_login"
       }
     },
     "/auth/otp/request": {
@@ -162,7 +247,6 @@
           "Auth"
         ],
         "summary": "Public. Sends a 4-digit OTP to the phone. In dev the code is returned as dev_otp.",
-        "security": [],
         "responses": {
           "200": {
             "description": "Success",
@@ -202,10 +286,17 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/OtpRequest"
+              },
+              "example": {
+                "phoneNumber": "+201011111111",
+                "role": "customer",
+                "name": "Ahmed Ali"
               }
             }
           }
-        }
+        },
+        "description": "Public. Sends a 4-digit OTP to the phone. In dev the code is returned as dev_otp.",
+        "operationId": "post_auth_otp_request"
       }
     },
     "/auth/otp/verify": {
@@ -214,7 +305,6 @@
           "Auth"
         ],
         "summary": "Public. Verifies OTP and returns a JWT. Dev bypass code: 0000. Response drives role-based home screen.",
-        "security": [],
         "responses": {
           "200": {
             "description": "Success",
@@ -254,10 +344,16 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/OtpVerify"
+              },
+              "example": {
+                "phoneNumber": "+201011111111",
+                "code": "0000"
               }
             }
           }
-        }
+        },
+        "description": "Public. Verifies OTP and returns a JWT. Dev bypass code: 0000. Response drives role-based home screen.",
+        "operationId": "post_auth_otp_verify"
       }
     },
     "/auth/verify-2fa": {
@@ -266,7 +362,6 @@
           "Auth"
         ],
         "summary": "Completes a 2FA challenge during login using a temporary token.",
-        "security": [],
         "responses": {
           "200": {
             "description": "Success",
@@ -306,10 +401,16 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Verify2faBody"
+              },
+              "example": {
+                "userId": "USER_ID",
+                "token": "123456"
               }
             }
           }
-        }
+        },
+        "description": "Completes a 2FA challenge during login using a temporary token.",
+        "operationId": "post_auth_verify_2fa"
       }
     },
     "/auth/verify-2fa-setup": {
@@ -318,7 +419,6 @@
           "Auth"
         ],
         "summary": "Confirms and enables 2FA for a user.",
-        "security": [],
         "responses": {
           "200": {
             "description": "Success",
@@ -351,7 +451,24 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Verify2faSetupBody"
+              },
+              "example": {
+                "userId": "USER_ID",
+                "token": "123456",
+                "secret": "TOTP_SECRET"
+              }
+            }
+          }
+        },
+        "description": "Confirms and enables 2FA for a user.",
+        "operationId": "post_auth_verify_2fa_setup"
       }
     },
     "/auth/logout": {
@@ -360,7 +477,6 @@
           "Auth"
         ],
         "summary": "Clears the auth cookie / current session.",
-        "security": [],
         "responses": {
           "200": {
             "description": "Success",
@@ -393,7 +509,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Clears the auth cookie / current session.",
+        "operationId": "post_auth_logout"
       }
     },
     "/auth/logout-all-devices": {
@@ -439,7 +557,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Bumps tokenVersion, invalidating every session for the user.",
+        "operationId": "post_auth_logout_all_devices"
       }
     },
     "/auth/reset-2fa/{userId}": {
@@ -495,7 +615,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Admin (user_password:manage). Resets a user's 2FA.",
+        "operationId": "post_auth_reset_2fa_userId"
       }
     },
     "/auth/change-password/{userId}": {
@@ -551,7 +673,23 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordBody"
+              },
+              "example": {
+                "newPassword": "newpass123",
+                "reset2FA": false
+              }
+            }
+          }
+        },
+        "description": "Admin (user_password:manage). Changes a user's password and optionally resets 2FA. Protected by requirePermission.",
+        "operationId": "put_auth_change_password_userId"
       }
     },
     "/auth/2fa/setup": {
@@ -597,7 +735,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Returns TOTP secret + QR code data URL for authenticator enrollment.",
+        "operationId": "get_auth_2fa_setup"
       }
     },
     "/auth/2fa/verify": {
@@ -643,7 +783,23 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Verify2faEnableBody"
+              },
+              "example": {
+                "token": "123456",
+                "secret": "JBSWY3DPEHPK3PXP"
+              }
+            }
+          }
+        },
+        "description": "Validates an OTP to enable 2FA.",
+        "operationId": "post_auth_2fa_verify"
       }
     },
     "/auth/2fa/disable": {
@@ -689,7 +845,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Disables 2FA for the authenticated user.",
+        "operationId": "post_auth_2fa_disable"
       }
     },
     "/vehicles": {
@@ -698,7 +856,6 @@
           "Vehicles"
         ],
         "summary": "GET /vehicles",
-        "security": [],
         "parameters": [
           {
             "name": "category",
@@ -749,7 +906,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /vehicles",
+        "operationId": "get_vehicles"
       }
     },
     "/vehicles/{id}": {
@@ -758,7 +917,6 @@
           "Vehicles"
         ],
         "summary": "GET /vehicles/{id}",
-        "security": [],
         "parameters": [
           {
             "name": "id",
@@ -801,7 +959,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /vehicles/{id}",
+        "operationId": "get_vehicles_id"
       }
     },
     "/vehicles/{id}/availability": {
@@ -810,7 +970,6 @@
           "Vehicles"
         ],
         "summary": "GET /vehicles/{id}/availability",
-        "security": [],
         "parameters": [
           {
             "name": "id",
@@ -861,7 +1020,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /vehicles/{id}/availability",
+        "operationId": "get_vehicles_id_availability"
       }
     },
     "/bookings/estimate-price": {
@@ -869,8 +1030,7 @@
         "tags": [
           "Bookings"
         ],
-        "summary": "PUBLIC. Server-side price estimate. Never trust a client-side price.",
-        "security": [],
+        "summary": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected.",
         "responses": {
           "200": {
             "description": "Success",
@@ -910,10 +1070,95 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PriceEstimateBody"
+              },
+              "example": {
+                "vehicleCategory": "VAN",
+                "startPoint": {
+                  "latitude": 30.0444,
+                  "longitude": 31.2357
+                },
+                "endPoint": {
+                  "latitude": 31.2001,
+                  "longitude": 29.9187
+                },
+                "distanceKm": 25,
+                "durationMinutes": 120,
+                "isPeakHour": false,
+                "surgeMultiplier": 1,
+                "packageDiscount": 10,
+                "referralDiscount": 5,
+                "vehicleId": "{{vehicleId}}",
+                "packageId": "",
+                "referralCode": ""
               }
             }
           }
-        }
+        },
+        "description": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected.",
+        "operationId": "post_bookings_estimate_price"
+      }
+    },
+    "/bookings/estimate-distance": {
+      "post": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "PUBLIC. Resolves startPoint/endPoint (coordinates or a place name) into distanceKm and durationMinutes. Coordinates are passed through; free text is geocoded via OpenRouteService. Without ORS_API_KEY the server falls back to a straight-line estimate and says so in `source` and `warning`.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateDistanceResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EstimateDistanceBody"
+              },
+              "example": {
+                "startPoint": {
+                  "latitude": 30.0444,
+                  "longitude": 31.2357
+                },
+                "endPoint": {
+                  "latitude": 31.2001,
+                  "longitude": 29.9187
+                }
+              }
+            }
+          }
+        },
+        "description": "PUBLIC. Resolves startPoint/endPoint (coordinates or a place name) into distanceKm and durationMinutes. Coordinates are passed through; free text is geocoded via OpenRouteService. Without ORS_API_KEY the server falls back to a straight-line estimate and says so in `source` and `warning`.",
+        "operationId": "post_bookings_estimate_distance"
       }
     },
     "/bookings": {
@@ -966,10 +1211,36 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateBookingBody"
+              },
+              "example": {
+                "customerId": "",
+                "vehicleId": "{{vehicleId}}",
+                "driverId": "",
+                "bookingDate": "2026-09-15",
+                "startTime": "10:00",
+                "endTime": "12:00",
+                "startPoint": {
+                  "latitude": 30.0444,
+                  "longitude": 31.2357
+                },
+                "endPoint": {
+                  "latitude": 31.2001,
+                  "longitude": 29.9187
+                },
+                "distanceKm": 30,
+                "durationMinutes": 120,
+                "notes": "Airport pickup",
+                "driverNotes": "",
+                "packageId": "",
+                "eventType": "wedding",
+                "isPeakHour": false,
+                "surgeMultiplier": 1
               }
             }
           }
-        }
+        },
+        "description": "Creates a booking with status=PENDING. DB unique constraint blocks double-booking (409).",
+        "operationId": "post_bookings"
       },
       "get": {
         "tags": [
@@ -1039,7 +1310,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /bookings",
+        "operationId": "get_bookings"
       }
     },
     "/bookings/{id}": {
@@ -1095,7 +1368,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1.",
+        "operationId": "get_bookings_id"
       },
       "delete": {
         "tags": [
@@ -1149,7 +1424,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1.",
+        "operationId": "delete_bookings_id"
       }
     },
     "/bookings/{id}/status": {
@@ -1212,10 +1489,15 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateBookingStatusBody"
+              },
+              "example": {
+                "status": "CONFIRMED"
               }
             }
           }
-        }
+        },
+        "description": "Transitions booking status. PENDING→CONFIRMED/CANCELLED, CONFIRMED→COMPLETED/CANCELLED.",
+        "operationId": "patch_bookings_id_status"
       }
     },
     "/bookings/{id}/trip-status": {
@@ -1278,10 +1560,15 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateTripStatusBody"
+              },
+              "example": {
+                "tripStatus": "INPROGRESS"
               }
             }
           }
-        }
+        },
+        "description": "NOTSTARTED→INPROGRESS→ARRIVED→COMPLETED. Trip COMPLETED auto-completes the booking and releases the driver.",
+        "operationId": "patch_bookings_id_trip_status"
       }
     },
     "/driver/profile": {
@@ -1327,7 +1614,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /driver/profile",
+        "operationId": "get_driver_profile"
       },
       "put": {
         "tags": [
@@ -1378,10 +1667,18 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateDriverProfileBody"
+              },
+              "example": {
+                "fullName": "Ahmed Driver",
+                "licenseNumber": "DL123456",
+                "licenseExpiry": "2030-12-31",
+                "pic": ""
               }
             }
           }
-        }
+        },
+        "description": "PUT /driver/profile",
+        "operationId": "put_driver_profile"
       }
     },
     "/driver/status": {
@@ -1434,10 +1731,15 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/DriverStatusBody"
+              },
+              "example": {
+                "status": "ACTIVE"
               }
             }
           }
-        }
+        },
+        "description": "PATCH /driver/status",
+        "operationId": "patch_driver_status"
       }
     },
     "/driver/bookings": {
@@ -1509,7 +1811,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Driver's trips. filter=today|upcoming|completed.",
+        "operationId": "get_driver_bookings"
       }
     },
     "/driver/vehicles": {
@@ -1562,10 +1866,16 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AssignVehicleBody"
+              },
+              "example": {
+                "vehicleId": "{{vehicleId}}",
+                "isPrimary": true
               }
             }
           }
-        }
+        },
+        "description": "POST /driver/vehicles",
+        "operationId": "post_driver_vehicles"
       }
     },
     "/driver/vehicles/{vehicleId}": {
@@ -1621,7 +1931,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "DELETE /driver/vehicles/{vehicleId}",
+        "operationId": "delete_driver_vehicles_vehicleId"
       }
     },
     "/driver/stats": {
@@ -1685,7 +1997,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /driver/stats",
+        "operationId": "get_driver_stats"
       }
     },
     "/driver/{id}": {
@@ -1694,7 +2008,6 @@
           "Drivers"
         ],
         "summary": "PUBLIC. Returns a driver's profile by id (rating included).",
-        "security": [],
         "parameters": [
           {
             "name": "id",
@@ -1737,7 +2050,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "PUBLIC. Returns a driver's profile by id (rating included).",
+        "operationId": "get_driver_id"
       }
     },
     "/reviews": {
@@ -1790,10 +2105,21 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateReviewBody"
+              },
+              "example": {
+                "bookingId": "{{bookingId}}",
+                "reviewerType": "CUSTOMER_TO_DRIVER",
+                "revieweeId": "{{driverUserId}}",
+                "overallRating": 5,
+                "vehicleRating": 5,
+                "punctualityRating": 4,
+                "comment": "Excellent trip!"
               }
             }
           }
-        }
+        },
+        "description": "Blind rating: only visible to the other party after both submit OR 48h. Driver rating recalculated.",
+        "operationId": "post_reviews"
       }
     },
     "/reviews/me": {
@@ -1857,7 +2183,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /reviews/me",
+        "operationId": "get_reviews_me"
       }
     },
     "/reviews/booking/{id}": {
@@ -1913,7 +2241,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /reviews/booking/{id}",
+        "operationId": "get_reviews_booking_id"
       }
     },
     "/reviews/{id}": {
@@ -1969,7 +2299,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /reviews/{id}",
+        "operationId": "get_reviews_id"
       }
     },
     "/payments": {
@@ -2022,10 +2354,17 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/InitiatePaymentBody"
+              },
+              "example": {
+                "bookingId": "{{bookingId}}",
+                "amount": 100,
+                "paymentMethod": "CASH"
               }
             }
           }
-        }
+        },
+        "description": "Creates a PENDING payment. paymentMethod: PAYMOB|FAWRY|CASH|WALLET.",
+        "operationId": "post_payments"
       }
     },
     "/payments/{id}/status": {
@@ -2088,10 +2427,16 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdatePaymentStatusBody"
+              },
+              "example": {
+                "status": "SUCCESS",
+                "transactionRef": "ref-12345"
               }
             }
           }
-        }
+        },
+        "description": "Updates payment record and recomputes booking aggregate paymentStatus.",
+        "operationId": "patch_payments_id_status"
       }
     },
     "/payments/{id}": {
@@ -2147,7 +2492,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /payments/{id}",
+        "operationId": "get_payments_id"
       }
     },
     "/payments/{id}/refund": {
@@ -2203,7 +2550,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "POST /payments/{id}/refund",
+        "operationId": "post_payments_id_refund"
       }
     },
     "/payments/booking/{bookingId}": {
@@ -2259,7 +2608,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /payments/booking/{bookingId}",
+        "operationId": "get_payments_booking_bookingId"
       }
     },
     "/payments/summary/{bookingId}": {
@@ -2315,7 +2666,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Returns totalPrice, totalPaid, remaining.",
+        "operationId": "get_payments_summary_bookingId"
       }
     },
     "/waitlist": {
@@ -2368,10 +2721,17 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/JoinWaitlistBody"
+              },
+              "example": {
+                "vehicleId": "{{vehicleId}}",
+                "requestedDate": "2026-09-15",
+                "requestedTime": "10:00"
               }
             }
           }
-        }
+        },
+        "description": "Joins the waitlist at the next open position; cancellation promotes position #1.",
+        "operationId": "post_waitlist"
       }
     },
     "/waitlist/me": {
@@ -2417,7 +2777,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /waitlist/me",
+        "operationId": "get_waitlist_me"
       }
     },
     "/waitlist/{id}": {
@@ -2473,7 +2835,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /waitlist/{id}",
+        "operationId": "get_waitlist_id"
       },
       "delete": {
         "tags": [
@@ -2527,7 +2891,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "DELETE /waitlist/{id}",
+        "operationId": "delete_waitlist_id"
       }
     },
     "/waitlist/{id}/convert": {
@@ -2583,7 +2949,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "POST /waitlist/{id}/convert",
+        "operationId": "post_waitlist_id_convert"
       }
     },
     "/packages": {
@@ -2636,10 +3004,17 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreatePackageBody"
+              },
+              "example": {
+                "packageName": "Wedding Package",
+                "packageType": "MULTI_CAR",
+                "discountPercentage": 10
               }
             }
           }
-        }
+        },
+        "description": "Creates a package with a server-applied discount.",
+        "operationId": "post_packages"
       }
     },
     "/packages/me": {
@@ -2685,7 +3060,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /packages/me",
+        "operationId": "get_packages_me"
       }
     },
     "/packages/{id}": {
@@ -2741,7 +3118,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /packages/{id}",
+        "operationId": "get_packages_id"
       }
     },
     "/packages/{id}/booking": {
@@ -2804,10 +3183,15 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AddPackageBookingBody"
+              },
+              "example": {
+                "packageId": "{{packageId}}"
               }
             }
           }
-        }
+        },
+        "description": "POST /packages/{id}/booking",
+        "operationId": "post_packages_id_booking"
       },
       "delete": {
         "tags": [
@@ -2861,7 +3245,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "DELETE /packages/{id}/booking",
+        "operationId": "delete_packages_id_booking"
       }
     },
     "/packages/{id}/cancel": {
@@ -2917,7 +3303,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "PATCH /packages/{id}/cancel",
+        "operationId": "patch_packages_id_cancel"
       }
     },
     "/chat/booking/{id}": {
@@ -2973,7 +3361,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Auto-creates the conversation for a booking on first call.",
+        "operationId": "get_chat_booking_id"
       },
       "post": {
         "tags": [
@@ -3027,7 +3417,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Auto-creates the conversation for a booking on first call.",
+        "operationId": "post_chat_booking_id"
       }
     },
     "/chat/{conversationId}/messages": {
@@ -3083,7 +3475,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Sends a chat message. messageType: TEXT|QUICK_REPLY.",
+        "operationId": "get_chat_conversationId_messages"
       },
       "post": {
         "tags": [
@@ -3144,10 +3538,16 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SendMessageBody"
+              },
+              "example": {
+                "content": "Hello",
+                "messageType": "TEXT"
               }
             }
           }
-        }
+        },
+        "description": "Sends a chat message. messageType: TEXT|QUICK_REPLY.",
+        "operationId": "post_chat_conversationId_messages"
       }
     },
     "/chat/{conversationId}/read": {
@@ -3203,7 +3603,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "PATCH /chat/{conversationId}/read",
+        "operationId": "patch_chat_conversationId_read"
       }
     },
     "/chat/{conversationId}/close": {
@@ -3259,7 +3661,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "PATCH /chat/{conversationId}/close",
+        "operationId": "patch_chat_conversationId_close"
       }
     },
     "/referrals/generate-code": {
@@ -3305,7 +3709,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Generates/returns the user's referral code.",
+        "operationId": "post_referrals_generate_code"
       }
     },
     "/referrals/apply": {
@@ -3358,10 +3764,15 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ApplyReferralBody"
+              },
+              "example": {
+                "referralCode": "MRK123"
               }
             }
           }
-        }
+        },
+        "description": "Applies a referral code to the authenticated user.",
+        "operationId": "post_referrals_apply"
       }
     },
     "/referrals/{id}/complete": {
@@ -3370,7 +3781,6 @@
           "Referrals"
         ],
         "summary": "PUBLIC. Credits both referrer & referee wallets when the refereed user completes their first booking.",
-        "security": [],
         "parameters": [
           {
             "name": "id",
@@ -3420,10 +3830,15 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CompleteReferralBody"
+              },
+              "example": {
+                "bookingId": "{{bookingId}}"
               }
             }
           }
-        }
+        },
+        "description": "PUBLIC. Credits both referrer & referee wallets when the refereed user completes their first booking.",
+        "operationId": "post_referrals_id_complete"
       }
     },
     "/referrals/me": {
@@ -3469,7 +3884,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /referrals/me",
+        "operationId": "get_referrals_me"
       }
     },
     "/referrals/{id}": {
@@ -3525,7 +3942,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /referrals/{id}",
+        "operationId": "get_referrals_id"
       }
     },
     "/wallet/balance": {
@@ -3571,7 +3990,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /wallet/balance",
+        "operationId": "get_wallet_balance"
       }
     },
     "/wallet/transactions": {
@@ -3643,7 +4064,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /wallet/transactions",
+        "operationId": "get_wallet_transactions"
       }
     },
     "/wallet/credit": {
@@ -3696,10 +4119,17 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/WalletOperationBody"
+              },
+              "example": {
+                "amount": 25,
+                "type": "REFERRAL_REWARD",
+                "description": "Referral reward"
               }
             }
           }
-        }
+        },
+        "description": "Credits the wallet. type: REFERRAL_REWARD|REFUND|MANUAL_ADJUSTMENT|PAYMENT_DEDUCTION|DEPOSIT.",
+        "operationId": "post_wallet_credit"
       }
     },
     "/wallet/debit": {
@@ -3752,10 +4182,17 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/WalletOperationBody"
+              },
+              "example": {
+                "amount": 10,
+                "type": "PAYMENT_DEDUCTION",
+                "description": "Trip payment"
               }
             }
           }
-        }
+        },
+        "description": "POST /wallet/debit",
+        "operationId": "post_wallet_debit"
       }
     },
     "/notifications": {
@@ -3827,7 +4264,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /notifications",
+        "operationId": "get_notifications"
       }
     },
     "/notifications/unread-count": {
@@ -3873,7 +4312,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /notifications/unread-count",
+        "operationId": "get_notifications_unread_count"
       }
     },
     "/notifications/{id}/read": {
@@ -3929,7 +4370,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "PATCH /notifications/{id}/read",
+        "operationId": "patch_notifications_id_read"
       }
     },
     "/notifications/read-all": {
@@ -3975,7 +4418,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "PATCH /notifications/read-all",
+        "operationId": "patch_notifications_read_all"
       }
     },
     "/admin/stats/summary": {
@@ -4039,7 +4484,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /admin/stats/summary",
+        "operationId": "get_admin_stats_summary"
       }
     },
     "/admin/bookings/calendar": {
@@ -4095,7 +4542,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Bookings grouped by day for a month (YYYY-MM).",
+        "operationId": "get_admin_bookings_calendar"
       }
     },
     "/admin/bookings": {
@@ -4167,7 +4616,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "Bookings filtered by a specific date (YYYY-MM-DD).",
+        "operationId": "get_admin_bookings"
       }
     },
     "/admin/bookings/all": {
@@ -4213,7 +4664,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /admin/bookings/all",
+        "operationId": "get_admin_bookings_all"
       }
     },
     "/admin/vehicles/status": {
@@ -4259,7 +4712,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /admin/vehicles/status",
+        "operationId": "get_admin_vehicles_status"
       }
     },
     "/admin/drivers/{id}/stats": {
@@ -4315,7 +4770,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /admin/drivers/{id}/stats",
+        "operationId": "get_admin_drivers_id_stats"
       }
     },
     "/admin/drivers": {
@@ -4371,7 +4828,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /admin/drivers",
+        "operationId": "get_admin_drivers"
       }
     },
     "/admin/drivers/{id}/status": {
@@ -4434,10 +4893,15 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/DriverStatusBody"
+              },
+              "example": {
+                "status": "OFF"
               }
             }
           }
-        }
+        },
+        "description": "PATCH /admin/drivers/{id}/status",
+        "operationId": "patch_admin_drivers_id_status"
       }
     },
     "/admin/users": {
@@ -4493,7 +4957,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "GET /admin/users",
+        "operationId": "get_admin_users"
       }
     },
     "/admin/users/role": {
@@ -4546,10 +5012,16 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateUserRoleBody"
+              },
+              "example": {
+                "userId": "{{userId}}",
+                "roleId": "{{roleId}}"
               }
             }
           }
-        }
+        },
+        "description": "Changes a user's role.",
+        "operationId": "patch_admin_users_role"
       }
     },
     "/admin/settings": {
@@ -4595,7 +5067,9 @@
           "500": {
             "description": "Internal Server Error"
           }
-        }
+        },
+        "description": "System & evaluation-related settings.",
+        "operationId": "get_admin_settings"
       },
       "put": {
         "tags": [
@@ -4646,10 +5120,17 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SystemSettingsBody"
+              },
+              "example": {
+                "performanceHistoryVisible": true,
+                "evaluationsVisible": true,
+                "selfAppraisalsVisible": true
               }
             }
           }
-        }
+        },
+        "description": "System & evaluation-related settings.",
+        "operationId": "put_admin_settings"
       }
     }
   },
@@ -4672,31 +5153,31 @@
             "type": "string",
             "format": "email"
           },
+          "password": {
+            "type": "string",
+            "minLength": 8
+          },
           "pic": {
             "type": "string"
           },
-          "code": {
-            "type": "string"
+          "role": {
+            "type": "string",
+            "enum": [
+              "customer",
+              "driver"
+            ],
+            "default": "customer",
+            "description": "Account type. Admin roles cannot be self-assigned."
           },
-          "graduationYear": {
-            "type": "string"
+          "licenseNumber": {
+            "type": "string",
+            "description": "Required when role is 'driver'."
           },
-          "graduationFaculty": {
-            "type": "string"
+          "licenseExpiry": {
+            "type": "string",
+            "description": "Required when role is 'driver'."
           },
-          "graduationDepartment": {
-            "type": "string"
-          },
-          "graduationUniversity": {
-            "type": "string"
-          },
-          "location": {
-            "type": "string"
-          },
-          "salary": {
-            "type": "string"
-          },
-          "position": {
+          "referralCode": {
             "type": "string"
           },
           "phoneNumbers": {
@@ -4714,11 +5195,7 @@
         "required": [
           "name",
           "email",
-          "code",
-          "graduationYear",
-          "graduationFaculty",
-          "location",
-          "position",
+          "password",
           "phoneNumbers"
         ]
       },
@@ -4771,16 +5248,201 @@
       "Verify2faBody": {
         "type": "object",
         "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "token"
+        ]
+      },
+      "Verify2faSetupBody": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
           "token": {
             "type": "string"
           },
-          "otpCode": {
+          "secret": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "token",
+          "secret"
+        ]
+      },
+      "Verify2faEnableBody": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "secret": {
             "type": "string"
           }
         },
         "required": [
           "token",
-          "otpCode"
+          "secret"
+        ]
+      },
+      "ChangePasswordBody": {
+        "type": "object",
+        "properties": {
+          "newPassword": {
+            "type": "string",
+            "minLength": 6
+          },
+          "reset2FA": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "newPassword"
+        ]
+      },
+      "LocationInput": {
+        "description": "Either resolved coordinates, or free text the server geocodes.",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              }
+            },
+            "required": [
+              "latitude",
+              "longitude"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "lng": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              }
+            },
+            "required": [
+              "lat",
+              "lng"
+            ]
+          },
+          {
+            "type": "string",
+            "example": "Maadi, Cairo"
+          }
+        ]
+      },
+      "DistanceComparison": {
+        "type": "object",
+        "description": "What the client claimed next to what the server computed. Used for auditing only - the client's figures never affect the price.",
+        "properties": {
+          "serverDistanceKm": {
+            "type": "number"
+          },
+          "serverDurationMinutes": {
+            "type": "number"
+          },
+          "claimedDistanceKm": {
+            "type": "number",
+            "nullable": true
+          },
+          "claimedDurationMinutes": {
+            "type": "number",
+            "nullable": true
+          },
+          "distanceDifferenceKm": {
+            "type": "number",
+            "nullable": true
+          },
+          "withinTolerance": {
+            "type": "boolean",
+            "description": "True when the claim is within 10% of the server figure."
+          }
+        }
+      },
+      "RouteInfo": {
+        "type": "object",
+        "properties": {
+          "distanceKm": {
+            "type": "number"
+          },
+          "durationMinutes": {
+            "type": "number"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "openrouteservice",
+              "haversine"
+            ],
+            "description": "haversine means no ORS_API_KEY or the provider was unreachable - the figure is a straight-line estimate."
+          },
+          "start": {
+            "type": "object",
+            "properties": {
+              "latitude": {
+                "type": "number"
+              },
+              "longitude": {
+                "type": "number"
+              }
+            }
+          },
+          "end": {
+            "type": "object",
+            "properties": {
+              "latitude": {
+                "type": "number"
+              },
+              "longitude": {
+                "type": "number"
+              }
+            }
+          },
+          "warning": {
+            "type": "string"
+          }
+        }
+      },
+      "EstimateDistanceBody": {
+        "type": "object",
+        "properties": {
+          "startPoint": {
+            "$ref": "#/components/schemas/LocationInput"
+          },
+          "endPoint": {
+            "$ref": "#/components/schemas/LocationInput"
+          }
+        },
+        "required": [
+          "startPoint",
+          "endPoint"
         ]
       },
       "PriceEstimateBody": {
@@ -4797,17 +5459,27 @@
               "LUXURY"
             ]
           },
+          "startPoint": {
+            "$ref": "#/components/schemas/LocationInput"
+          },
+          "endPoint": {
+            "$ref": "#/components/schemas/LocationInput"
+          },
           "distanceKm": {
-            "type": "number"
+            "type": "number",
+            "description": "Optional hint. Recomputed server-side and never priced."
           },
           "durationMinutes": {
-            "type": "number"
+            "type": "number",
+            "description": "Optional hint. Recomputed server-side and never priced."
           },
           "isPeakHour": {
             "type": "boolean"
           },
           "surgeMultiplier": {
-            "type": "number"
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
           },
           "packageDiscount": {
             "type": "number"
@@ -4850,17 +5522,19 @@
             "type": "string",
             "example": "12:00"
           },
-          "distanceKm": {
-            "type": "number"
-          },
-          "durationMinutes": {
-            "type": "number"
-          },
           "startPoint": {
-            "type": "string"
+            "$ref": "#/components/schemas/LocationInput"
           },
           "endPoint": {
-            "type": "string"
+            "$ref": "#/components/schemas/LocationInput"
+          },
+          "distanceKm": {
+            "type": "number",
+            "description": "Optional hint. Recomputed server-side and never priced."
+          },
+          "durationMinutes": {
+            "type": "number",
+            "description": "Optional hint. Recomputed server-side and never priced."
           },
           "notes": {
             "type": "string"
@@ -4878,14 +5552,18 @@
             "type": "boolean"
           },
           "surgeMultiplier": {
-            "type": "number"
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
           }
         },
         "required": [
           "vehicleId",
           "bookingDate",
           "startTime",
-          "endTime"
+          "endTime",
+          "startPoint",
+          "endPoint"
         ]
       },
       "UpdateBookingStatusBody": {
@@ -5246,6 +5924,23 @@
                 "type": "number"
               }
             }
+          },
+          "route": {
+            "$ref": "#/components/schemas/RouteInfo"
+          },
+          "comparison": {
+            "$ref": "#/components/schemas/DistanceComparison"
+          }
+        }
+      },
+      "EstimateDistanceResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/RouteInfo"
           }
         }
       },
@@ -5280,7 +5975,46 @@
                 "type": "string"
               },
               "distanceKm": {
-                "type": "number"
+                "type": "number",
+                "description": "Server-computed road distance."
+              },
+              "durationMinutes": {
+                "type": "number",
+                "description": "Server-computed travel time."
+              },
+              "distanceSource": {
+                "type": "string",
+                "enum": [
+                  "openrouteservice",
+                  "haversine"
+                ],
+                "description": "haversine means a straight-line estimate, because ORS_API_KEY was missing or the provider was unreachable."
+              },
+              "startLat": {
+                "type": "number",
+                "nullable": true
+              },
+              "startLng": {
+                "type": "number",
+                "nullable": true
+              },
+              "endLat": {
+                "type": "number",
+                "nullable": true
+              },
+              "endLng": {
+                "type": "number",
+                "nullable": true
+              },
+              "claimedDistanceKm": {
+                "type": "number",
+                "nullable": true,
+                "description": "What the client declared, kept for auditing only."
+              },
+              "claimedDurationMinutes": {
+                "type": "number",
+                "nullable": true,
+                "description": "What the client declared, kept for auditing only."
               },
               "totalPrice": {
                 "type": "number"

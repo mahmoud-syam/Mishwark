@@ -8,6 +8,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from "../utils/errors";
+import { normalizeRoleName, USER_ROLES } from "../constants/roles";
 
 export class AdminService {
   public static async getDashboardStats() {
@@ -211,7 +212,14 @@ export class AdminService {
 
     const where: any = { isDeleted: false };
     if (params.role) {
-      where.role = { name: params.role };
+      // Role.name is now a UserRole enum, so an unrecognised value would make
+      // Prisma throw instead of returning an empty page.
+      const roleName = normalizeRoleName(params.role);
+      if (roleName) {
+        where.role = { name: roleName };
+      } else {
+        throw new BadRequestException(`Unknown role: ${params.role}`);
+      }
     }
 
     const [items, total] = await Promise.all([
@@ -264,11 +272,44 @@ export class AdminService {
   }
 
   public static async updateUserRole(userId: string, roleId: string) {
-    const user = await prismaClient.users.findUnique({ where: { id: userId } });
+    const user = await prismaClient.users.findUnique({
+      where: { id: userId },
+      include: { role: { select: { id: true, name: true } } },
+    });
     if (!user) throw new NotFoundException(`User with ID ${userId} not found`);
 
     const role = await prismaClient.role.findUnique({ where: { id: roleId } });
     if (!role) throw new NotFoundException(`Role with ID ${roleId} not found`);
+
+    // Guard against locking everyone out of the admin panel.
+    if (user.role?.name === USER_ROLES.SUPER_ADMIN && role.name !== USER_ROLES.SUPER_ADMIN) {
+      const remaining = await prismaClient.users.count({
+        where: { role: { name: USER_ROLES.SUPER_ADMIN }, isDeleted: false },
+      });
+      if (remaining <= 1) {
+        throw new BadRequestException(
+          "Cannot demote the last remaining Super Admin"
+        );
+      }
+    }
+
+    // A user carrying the Driver role but no Drivers row 404s on every
+    // /driver/* endpoint and cannot appear on a booking, so the profile is
+    // created on promotion rather than left to a separate manual step.
+    if (role.name === USER_ROLES.DRIVER) {
+      await prismaClient.drivers.upsert({
+        where: { userId },
+        update: {},
+        create: {
+          userId,
+          fullName: user.name,
+          pic: user.pic ?? "",
+          phoneNumbers: user.phoneNumber
+            ? { create: [{ number: user.phoneNumber }] }
+            : undefined,
+        },
+      });
+    }
 
     return await prismaClient.users.update({
       where: { id: userId },

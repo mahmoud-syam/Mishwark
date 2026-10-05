@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import ChatService from "../services/chat.service";
 import { SenderType } from "../../../generated/prisma";
 import { paramStr } from "../utils/routeParams";
+import { isDriverRole } from "../constants/roles";
 
 export const getOrCreateConversation = async (req: Request, res: Response) => {
   const userId = req.user?.id;
@@ -11,11 +12,13 @@ export const getOrCreateConversation = async (req: Request, res: Response) => {
 };
 
 export const sendMessage = async (req: Request, res: Response) => {
-  const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ message: "Unauthorized" });
+  const user = req.user;
+  if (!user) return res.status(401).json({ message: "Unauthorized" });
+  const userId = user.id;
 
-  const user = req.user as any;
-  const senderType = (user.role?.name || "").toLowerCase() === "driver"
+  // A null role previously fell through to CUSTOMER, which made every driver
+  // fail the conversation.customerId check in ChatService.sendMessage.
+  const senderType = isDriverRole(user.role?.name)
     ? SenderType.DRIVER
     : SenderType.CUSTOMER;
 

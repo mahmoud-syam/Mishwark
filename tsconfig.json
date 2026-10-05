@@ -15,5 +15,6 @@
     "resolveJsonModule": true
   },
   "lib": ["es2015"],
-  "include": ["src/**/*", "prisma/seed/**/*", "src/v1/types/**/*.d.ts"]
+  "include": ["src/**/*", "prisma/seed/**/*", "src/v1/types/**/*.d.ts"],
+  "exclude": ["node_modules", "src/v1/schemas/zod"]
 }

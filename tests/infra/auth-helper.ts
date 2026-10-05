@@ -3,7 +3,7 @@ import { JWT_SECRET } from '../../src/secrets';
 
 export interface TestUserRolePayload {
   id?: string;
-  name: 'admin' | 'driver' | 'customer' | 'rider';
+  name: 'ADMIN' | 'DRIVER' | 'CUSTOMER' | 'SUPER_ADMIN';
   description?: string;
   permissions?: string[];
 }
@@ -54,7 +54,7 @@ export function generateAdminToken(overrides: Partial<TestUserPayload> = {}): st
     roleId: overrides.roleId || 'role-admin-001',
     role: {
       id: overrides.role?.id || 'role-admin-001',
-      name: 'admin',
+      name: 'ADMIN',
       permissions: overrides.role?.permissions || ['*'],
     },
   };
@@ -71,7 +71,7 @@ export function generateDriverToken(overrides: Partial<TestUserPayload> = {}): s
     roleId: overrides.roleId || 'role-driver-001',
     role: {
       id: overrides.role?.id || 'role-driver-001',
-      name: 'driver',
+      name: 'DRIVER',
       permissions: overrides.role?.permissions || ['driver:read', 'driver:write'],
     },
   };
@@ -88,7 +88,7 @@ export function generateRiderToken(overrides: Partial<TestUserPayload> = {}): st
     roleId: overrides.roleId || 'role-customer-001',
     role: {
       id: overrides.role?.id || 'role-customer-001',
-      name: 'customer',
+      name: 'CUSTOMER',
       permissions: overrides.role?.permissions || ['customer:read', 'customer:write'],
     },
   };
@@ -110,7 +110,7 @@ export function generateExpiredToken(userPayload?: Partial<TestUserPayload>): st
     email: userPayload?.email || 'expired@mishwark.test',
     tokenVersion: userPayload?.tokenVersion ?? 0,
     role: {
-      name: 'customer',
+      name: 'CUSTOMER',
     },
   };
 

@@ -13,6 +13,24 @@ model Bookings {
   endPoint       String    @default("")
   routeWaypoints Json?
   distanceKm     Float     @default(0)
+
+  // Server-computed routing result. distanceKm above is kept as the canonical
+  // figure used for pricing; durationMinutes has no column of its own
+  // historically, so it was accepted, priced with, and then discarded.
+  durationMinutes Float    @default(0)
+  // Resolved coordinates for the two endpoints. Populated when the client sends
+  // lat/lng, or when the server geocodes the free-text startPoint/endPoint.
+  startLat        Float?
+  startLng        Float?
+  endLat          Float?
+  endLng          Float?
+  // "openrouteservice" | "haversine" | "client" - how distanceKm was obtained.
+  distanceSource   String    @default("")
+  // What the client claimed, kept purely for auditing mismatches against the
+  // server-computed value. Never used for pricing.
+  claimedDistanceKm Float?
+  claimedDurationMinutes Float?
+
   bookingDate    String    @default("")
   startTime      String    @default("")
   endTime        String    @default("")

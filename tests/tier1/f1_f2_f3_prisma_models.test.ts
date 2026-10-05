@@ -236,13 +236,14 @@ describe('Tier 1: Features F1, F2, F3 - Prisma Models, Client & Seeds Coverage',
 
     expect(seeds).toBeDefined();
     expect(seeds.adminRole).toBeDefined();
-    expect(seeds.adminRole.name).toBe('admin');
+    // Names follow the UserRole enum; middleware normalizes case when comparing.
+    expect(seeds.adminRole.name).toBe('ADMIN');
 
     expect(seeds.driverRole).toBeDefined();
-    expect(seeds.driverRole.name).toBe('driver');
+    expect(seeds.driverRole.name).toBe('DRIVER');
 
     expect(seeds.customerRole).toBeDefined();
-    expect(seeds.customerRole.name).toBe('customer');
+    expect(seeds.customerRole.name).toBe('CUSTOMER');
 
     expect(seeds.systemSettings).toBeDefined();
     expect(seeds.systemSettings.id).toBe('global');
@@ -287,19 +288,21 @@ describe('Tier 1: Features F1, F2, F3 - Prisma Models, Client & Seeds Coverage',
       adminToken,
       JWT_SECRET || '58232f52e620c21a7820d06348f0829591b2a6ffad3bfc4431248177fc897569'
     );
-    expect(decodedAdmin.user.role.name).toBe('admin');
+    // Role names must match the UserRole enum values; middleware normalizes
+    // case, but the token payload carries the canonical uppercase form.
+    expect(decodedAdmin.user.role.name).toBe('ADMIN');
 
     const decodedDriver: any = jwt.verify(
       driverToken,
       JWT_SECRET || '58232f52e620c21a7820d06348f0829591b2a6ffad3bfc4431248177fc897569'
     );
-    expect(decodedDriver.user.role.name).toBe('driver');
+    expect(decodedDriver.user.role.name).toBe('DRIVER');
 
     const decodedRider: any = jwt.verify(
       riderToken,
       JWT_SECRET || '58232f52e620c21a7820d06348f0829591b2a6ffad3bfc4431248177fc897569'
     );
-    expect(decodedRider.user.role.name).toBe('customer');
+    expect(decodedRider.user.role.name).toBe('CUSTOMER');
 
     expect(invalidToken).toBe('invalid.jwt.token.string.for.testing');
   });

@@ -8,6 +8,14 @@
     "start": "node dist/src/index.js",
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
     "prisma:generate": "npx prisma generate",
+    "api-docs:build": "node build-api-docs.js",
+    "api-docs:check": "node check-api-docs.js",
+    "api-docs": "npm run api-docs:build && npm run api-docs:check",
+    "smoke": "npx tsx scripts/smoke-test.ts",
+    "smoke:coverage": "npx tsx scripts/check-smoke-coverage.ts",
+    "test": "npx tsx tests/infra/run-all.ts",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm run api-docs:check && npm test && npm run smoke",
     "seed": "npx tsx prisma/seed/seed.ts",
     "seed:api": "npx tsx prisma/seed/api_seed_roles.ts"
   },
@@ -37,6 +45,7 @@
     "postmanify-express": "^2.2.1",
     "prisma": "^7.8.0",
     "qrcode": "^1.5.4",
+    "swagger-ui-express": "^5.0.1",
     "uuidv4": "^6.2.13",
     "xlsx": "^0.18.5",
     "zod": "^4.4.3"

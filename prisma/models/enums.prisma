@@ -5,6 +5,15 @@ enum DriverStatus {
   ONLEAVE
 }
 
+/// Canonical role identifiers. Mirrored in src/v1/constants/roles.ts
+/// (USER_ROLES) - keep both in sync.
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  CUSTOMER
+  DRIVER
+}
+
 enum VehicleCategory {
   CAR
   VAN

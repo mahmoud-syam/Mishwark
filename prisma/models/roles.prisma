@@ -1,7 +1,7 @@
 model Role {
-  id          String @id @default(uuid())
-  name        String @unique
-  description String @default("")
+  id          String   @id @default(uuid())
+  name        UserRole @unique
+  description String   @default("")
 
   // Implicit Many-to-Many relations
   permissions Permission[] @relation("RolePermissions")

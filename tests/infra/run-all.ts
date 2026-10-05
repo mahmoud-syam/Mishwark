@@ -145,14 +145,21 @@ export async function runAllTests(): Promise<number> {
 if (require.main === module) {
   runAllTests()
     .then(async (exitCode) => {
+      // Disconnecting Prisma is not enough on its own: api-client and the
+      // scheduler leave timers/sockets behind, so the event loop never drains
+      // and the runner appears to hang after printing the summary.
       try {
         const prisma = (await import('../../src/v1/utils/prismaClientHelper')).default;
         await prisma.$disconnect();
       } catch (e) {}
-      process.exitCode = exitCode;
+      process.exit(exitCode);
     })
-    .catch((err) => {
+    .catch(async (err) => {
       console.error('Fatal error during test runner execution:', err);
-      process.exitCode = 1;
+      try {
+        const prisma = (await import('../../src/v1/utils/prismaClientHelper')).default;
+        await prisma.$disconnect();
+      } catch (e) {}
+      process.exit(1);
     });
 }

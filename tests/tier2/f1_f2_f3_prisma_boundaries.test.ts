@@ -7,6 +7,7 @@ import {
   BookingStatus,
   TripStatus,
   PaymentStatus,
+  UserRole,
 } from '../../generated/prisma';
 import { UsersSchema, VehiclesSchema, BookingsSchema } from '../../src/v1/schemas/zod';
 import { isDatabaseConnected, resetDatabase, seedDatabase } from '../infra/db-setup';
@@ -18,12 +19,16 @@ describe('Tier 2: Features F1, F2, F3 - Database Constraints, Invalid Relations 
     if (connected) {
       await resetDatabase();
       const duplicateEmail = `dup_user_${Date.now()}@test.com`;
+      const role = await prismaClient.role.create({
+        data: { name: UserRole.CUSTOMER, description: 'Role for duplicate-email test' },
+      });
 
       await prismaClient.users.create({
         data: {
           name: 'First User',
           email: duplicateEmail,
           code: `CODE1_${Date.now()}`,
+          roleId: role.id,
         },
       });
 
@@ -34,6 +39,7 @@ describe('Tier 2: Features F1, F2, F3 - Database Constraints, Invalid Relations 
             name: 'Second User',
             email: duplicateEmail,
             code: `CODE2_${Date.now()}`,
+            roleId: role.id,
           },
         });
       } catch (err: any) {
@@ -52,12 +58,16 @@ describe('Tier 2: Features F1, F2, F3 - Database Constraints, Invalid Relations 
     if (connected) {
       await resetDatabase();
       const duplicatePhone = `+20111${Math.floor(100000 + Math.random() * 900000)}`;
+      const role = await prismaClient.role.create({
+        data: { name: UserRole.CUSTOMER, description: 'Role for duplicate-phone test' },
+      });
 
       await prismaClient.users.create({
         data: {
           name: 'Phone User 1',
           email: `phone1_${Date.now()}@test.com`,
           phoneNumber: duplicatePhone,
+          roleId: role.id,
         },
       });
 
@@ -68,6 +78,7 @@ describe('Tier 2: Features F1, F2, F3 - Database Constraints, Invalid Relations 
             name: 'Phone User 2',
             email: `phone2_${Date.now()}@test.com`,
             phoneNumber: duplicatePhone,
+            roleId: role.id,
           },
         });
       } catch (err: any) {
@@ -84,12 +95,16 @@ describe('Tier 2: Features F1, F2, F3 - Database Constraints, Invalid Relations 
     if (connected) {
       await resetDatabase();
       const dupReferral = `REF_${Date.now()}`;
+      const role = await prismaClient.role.create({
+        data: { name: UserRole.CUSTOMER, description: 'Role for referral uniqueness test' },
+      });
 
       await prismaClient.users.create({
         data: {
           name: 'Referral User 1',
           email: `ref1_${Date.now()}@test.com`,
           referralCode: dupReferral,
+          roleId: role.id,
         },
       });
 
@@ -100,6 +115,7 @@ describe('Tier 2: Features F1, F2, F3 - Database Constraints, Invalid Relations 
             name: 'Referral User 2',
             email: `ref2_${Date.now()}@test.com`,
             referralCode: dupReferral,
+            roleId: role.id,
           },
         });
       } catch (err: any) {
@@ -149,7 +165,9 @@ describe('Tier 2: Features F1, F2, F3 - Database Constraints, Invalid Relations 
     const connected = await isDatabaseConnected();
     if (connected) {
       await resetDatabase();
-      const dupRoleName = `custom_role_${Date.now()}`;
+      // Role.name is a UserRole enum column, so the duplicate has to reuse a valid
+      // enum value rather than an arbitrary string.
+      const dupRoleName = UserRole.CUSTOMER;
 
       await prismaClient.role.create({
         data: {
@@ -341,8 +359,10 @@ describe('Tier 2: Features F1, F2, F3 - Database Constraints, Invalid Relations 
     const connected = await isDatabaseConnected();
     if (connected) {
       await resetDatabase();
+      // SUPER_ADMIN is a valid UserRole value but is not part of seedDatabase,
+      // so the lookup must come back null rather than throw.
       const nonExistentRole = await prismaClient.role.findUnique({
-        where: { name: 'non_existent_role_name_999' },
+        where: { name: UserRole.SUPER_ADMIN },
       });
       expect(nonExistentRole).toBeNull();
     } else {
@@ -377,6 +397,9 @@ describe('Tier 2: Features F1, F2, F3 - Database Constraints, Invalid Relations 
     if (connected) {
       await resetDatabase();
       const invalidParentId = '00000000-0000-0000-0000-000000000000';
+      const role = await prismaClient.role.create({
+        data: { name: UserRole.CUSTOMER, description: 'Role for referral boundary test' },
+      });
 
       let threwError = false;
       try {
@@ -385,6 +408,7 @@ describe('Tier 2: Features F1, F2, F3 - Database Constraints, Invalid Relations 
             name: 'Referred User',
             email: `referred_${Date.now()}@test.com`,
             referredById: invalidParentId,
+            roleId: role.id,
           },
         });
       } catch (err: any) {

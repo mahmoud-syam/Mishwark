@@ -66,7 +66,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "auth",
@@ -74,15 +73,81 @@
               ]
             },
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Ahmed Ali\",\n  \"email\": \"ali@mishwarak.com\",\n  \"pic\": \"\",\n  \"code\": \"EMP001\",\n  \"graduationYear\": \"2020\",\n  \"graduationFaculty\": \"Engineering\",\n  \"graduationDepartment\": \"Mechanical\",\n  \"graduationUniversity\": \"Cairo University\",\n  \"location\": \"Cairo\",\n  \"salary\": \"15000\",\n  \"position\": \"Driver\",\n  \"birth_date\": \"1995-05-01\",\n  \"religion\": \"\",\n  \"marital_status\": \"single\",\n  \"military_status\": \"completed\",\n  \"personal_mail\": \"\",\n  \"joining_date\": \"2024-01-01\",\n  \"resign_date\": \"\",\n  \"medical_insurance\": true,\n  \"phoneNumbers\": [\n    {\n      \"number\": \"+201011111111\"\n    }\n  ],\n  \"isAdmin\": false,\n  \"contract\": {\n    \"type_of_contract\": \"FULLTIME\",\n    \"start_date\": \"2024-01-01\",\n    \"contract_valu\": \"15000\"\n  },\n  \"insurance\": {\n    \"insurance_status\": \"active\",\n    \"insurance_number\": \"12345\"\n  },\n  \"documents\": [\n    {\n      \"type\": \"ID\",\n      \"document\": \"\",\n      \"isReceived\": true,\n      \"fileIndex\": 0\n    }\n  ]\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Ahmed Ali",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "ali@mishwarak.com",
+                  "type": "text"
+                },
+                {
+                  "key": "pic",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "password",
+                  "value": "secret123",
+                  "type": "text"
+                },
+                {
+                  "key": "phoneNumbers",
+                  "value": "[{\"number\":\"+201011111111\"}]",
+                  "type": "text"
+                },
+                {
+                  "key": "role",
+                  "value": "driver",
+                  "type": "text"
+                },
+                {
+                  "key": "licenseNumber",
+                  "value": "LIC-998877",
+                  "type": "text"
+                },
+                {
+                  "key": "licenseExpiry",
+                  "value": "2030-12-31",
+                  "type": "text"
+                },
+                {
+                  "key": "referralCode",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "code",
+                  "value": "EMP001",
+                  "type": "text"
+                },
+                {
+                  "key": "position",
+                  "value": "Driver",
+                  "type": "text"
+                },
+                {
+                  "key": "birth_date",
+                  "value": "1995-05-01",
+                  "type": "text"
+                },
+                {
+                  "key": "joining_date",
+                  "value": "2024-01-01",
+                  "type": "text"
+                },
+                {
+                  "key": "medical_insurance",
+                  "value": "true",
+                  "type": "text"
                 }
-              }
+              ]
             },
-            "description": "Create a new employee/staff account. Multipart/form-data — fields may arrive as JSON strings or files."
+            "description": "Create a customer or driver account. Multipart/form-data — fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned."
           },
           "response": []
         },
@@ -97,7 +162,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "auth",
@@ -127,7 +191,6 @@
                     "{{baseUrl}}"
                   ],
                   "path": [
-                    "{{baseUrl}}",
                     "api",
                     "v1",
                     "auth",
@@ -145,6 +208,25 @@
               ],
               "body": "{\n  \"message\": \"Login successful\",\n  \"user\": {\n    \"id\": \"{{userId}}\",\n    \"email\": \"admin@mishwarak.com\"\n  }\n}"
             }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json = {};",
+                  "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+                  "// /auth/login is 2FA-gated and returns no token. It hands back the",
+                  "// userId needed by POST /auth/verify-2fa (or /verify-2fa-setup).",
+                  "if (json.userId) {",
+                  "  pm.environment.set('userId', json.userId);",
+                  "  console.log('2FA required for userId:', json.userId);",
+                  "}",
+                  "if (json.twoFactorSetupRequired) console.log('Enable 2FA first: POST /auth/verify-2fa-setup');"
+                ]
+              }
+            }
           ]
         },
         {
@@ -158,7 +240,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "auth",
@@ -168,7 +249,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phoneNumber\": \"+201011111111\"\n}",
+              "raw": "{\n  \"phoneNumber\": \"+201011111111\",\n  \"role\": \"customer\",\n  \"name\": \"Ahmed Ali\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -189,7 +270,6 @@
                     "{{baseUrl}}"
                   ],
                   "path": [
-                    "{{baseUrl}}",
                     "api",
                     "v1",
                     "auth",
@@ -221,7 +301,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "auth",
@@ -252,7 +331,6 @@
                     "{{baseUrl}}"
                   ],
                   "path": [
-                    "{{baseUrl}}",
                     "api",
                     "v1",
                     "auth",
@@ -271,6 +349,29 @@
               ],
               "body": "{\n  \"success\": true,\n  \"token\": \"{{token}}\",\n  \"user\": {\n    \"id\": \"{{userId}}\",\n    \"name\": \"John Customer\",\n    \"phoneNumber\": \"+201011111111\",\n    \"role\": \"Customer\"\n  }\n}"
             }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json = {};",
+                  "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+                  "const token = json.token;",
+                  "if (token) {",
+                  "  pm.environment.set('token', token);",
+                  "  console.log('token captured:', String(token).slice(0, 24) + '...');",
+                  "} else {",
+                  "  console.warn('No token returned. Check the response body/cookies.');",
+                  "}",
+                  "const role = json.role || (json.user && json.user.role && json.user.role.name);",
+                  "if (role) pm.environment.set('role', role);",
+                  "const uid = json.userId || (json.user && json.user.id);",
+                  "if (uid) pm.environment.set('userId', uid);"
+                ]
+              }
+            }
           ]
         },
         {
@@ -284,7 +385,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "auth",
@@ -293,7 +393,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"2fa-temp-token\",\n  \"otpCode\": \"123456\"\n}",
+              "raw": "{\n  \"userId\": \"USER_ID\",\n  \"token\": \"123456\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -302,7 +402,34 @@
             },
             "description": "Completes a 2FA challenge during login using a temporary token."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json = {};",
+                  "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+                  [
+                    "// this endpoint returns the JWT only as a `token` cookie,",
+                    "// so read it back out of the cookie jar.",
+                    "const token = pm.cookies.get('token');"
+                  ],
+                  "if (token) {",
+                  "  pm.environment.set('token', token);",
+                  "  console.log('token captured:', String(token).slice(0, 24) + '...');",
+                  "} else {",
+                  "  console.warn('No token returned. Check the response body/cookies.');",
+                  "}",
+                  "const role = json.role || (json.user && json.user.role && json.user.role.name);",
+                  "if (role) pm.environment.set('role', role);",
+                  "const uid = json.userId || (json.user && json.user.id);",
+                  "if (uid) pm.environment.set('userId', uid);"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /auth/verify-2fa-setup",
@@ -315,7 +442,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "auth",
@@ -324,7 +450,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"ali@mishwarak.com\",\n  \"otpCode\": \"123456\"\n}",
+              "raw": "{\n  \"userId\": \"USER_ID\",\n  \"token\": \"123456\",\n  \"secret\": \"TOTP_SECRET\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -333,7 +459,34 @@
             },
             "description": "Confirms and enables 2FA for a user."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json = {};",
+                  "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+                  [
+                    "// this endpoint returns the JWT only as a `token` cookie,",
+                    "// so read it back out of the cookie jar.",
+                    "const token = pm.cookies.get('token');"
+                  ],
+                  "if (token) {",
+                  "  pm.environment.set('token', token);",
+                  "  console.log('token captured:', String(token).slice(0, 24) + '...');",
+                  "} else {",
+                  "  console.warn('No token returned. Check the response body/cookies.');",
+                  "}",
+                  "const role = json.role || (json.user && json.user.role && json.user.role.name);",
+                  "if (role) pm.environment.set('role', role);",
+                  "const uid = json.userId || (json.user && json.user.id);",
+                  "if (uid) pm.environment.set('userId', uid);"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /auth/logout",
@@ -346,7 +499,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "auth",
@@ -374,7 +526,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "auth",
@@ -383,7 +534,20 @@
             },
             "description": "Bumps tokenVersion, invalidating every session for the user."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /auth/reset-2fa/:userId",
@@ -402,7 +566,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "auth",
@@ -412,7 +575,20 @@
             },
             "description": "Admin (user_password:manage). Resets a user's 2FA."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PUT /auth/change-password/:userId",
@@ -431,7 +607,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "auth",
@@ -441,7 +616,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"oldPassword\": \"oldpass\",\n  \"newPassword\": \"newpass123\"\n}",
+              "raw": "{\n  \"newPassword\": \"newpass123\",\n  \"reset2FA\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -450,7 +625,20 @@
             },
             "description": "Admin (user_password:manage). Changes a user's password and optionally resets 2FA. Protected by requirePermission."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /auth/2fa/setup",
@@ -469,7 +657,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "auth",
@@ -479,7 +666,20 @@
             },
             "description": "Returns TOTP secret + QR code data URL for authenticator enrollment."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /auth/2fa/verify",
@@ -498,7 +698,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "auth",
@@ -508,7 +707,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"2fa-temp-token\",\n  \"otpCode\": \"123456\"\n}",
+              "raw": "{\n  \"token\": \"123456\",\n  \"secret\": \"JBSWY3DPEHPK3PXP\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -517,7 +716,20 @@
             },
             "description": "Validates an OTP to enable 2FA."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /auth/2fa/disable",
@@ -536,7 +748,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "auth",
@@ -544,18 +755,22 @@
                 "disable"
               ]
             },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"password\": \"secret123\",\n  \"otpCode\": \"123456\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
             "description": "Disables 2FA for the authenticated user."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -573,7 +788,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "vehicles"
@@ -592,7 +806,27 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json = {};",
+                  "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const pick = (json) => { const list = (json.data && json.data.items) || json.data || []; return Array.isArray(list) ? (list[0] && (list[0].vehicleId || list[0].id)) : null; };",
+                  "  const value = pick(json);",
+                  "  if (value) {",
+                  "    pm.environment.set('vehicleId', String(value));",
+                  "    console.log('vehicleId =', value);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /vehicles/:id",
@@ -605,7 +839,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "vehicles",
@@ -626,7 +859,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "vehicles",
@@ -660,7 +892,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "bookings",
@@ -669,14 +900,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"vehicleCategory\": \"VAN\",\n  \"distanceKm\": 25,\n  \"durationMinutes\": 120,\n  \"isPeakHour\": false,\n  \"surgeMultiplier\": 1,\n  \"packageDiscount\": 10,\n  \"referralDiscount\": 5,\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"packageId\": \"\",\n  \"referralCode\": \"\"\n}",
+              "raw": "{\n  \"vehicleCategory\": \"VAN\",\n  \"startPoint\": {\n    \"latitude\": 30.0444,\n    \"longitude\": 31.2357\n  },\n  \"endPoint\": {\n    \"latitude\": 31.2001,\n    \"longitude\": 29.9187\n  },\n  \"distanceKm\": 25,\n  \"durationMinutes\": 120,\n  \"isPeakHour\": false,\n  \"surgeMultiplier\": 1,\n  \"packageDiscount\": 10,\n  \"referralDiscount\": 5,\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"packageId\": \"\",\n  \"referralCode\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "PUBLIC. Server-side price estimate. Never trust a client-side price."
+            "description": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected."
           },
           "response": [
             {
@@ -690,7 +921,6 @@
                     "{{baseUrl}}"
                   ],
                   "path": [
-                    "{{baseUrl}}",
                     "api",
                     "v1",
                     "bookings",
@@ -706,7 +936,66 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"basePrice\": 100,\n    \"distancePrice\": 30,\n    \"timePrice\": 20,\n    \"surgeMultiplier\": 1,\n    \"discountAmount\": 5,\n    \"totalPrice\": 145,\n    \"depositPaid\": 30\n  }\n}"
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"basePrice\": 100,\n    \"distancePrice\": 30,\n    \"timePrice\": 20,\n    \"surgeMultiplier\": 1,\n    \"discountAmount\": 5,\n    \"totalPrice\": 145,\n    \"depositPaid\": 30\n  },\n  \"route\": {\n    \"distanceKm\": 230,\n    \"durationMinutes\": 165,\n    \"source\": \"openrouteservice\",\n    \"start\": {\n      \"latitude\": 30.0444,\n      \"longitude\": 31.2357\n    },\n    \"end\": {\n      \"latitude\": 31.2001,\n      \"longitude\": 29.9187\n    }\n  },\n  \"comparison\": {\n    \"serverDistanceKm\": 230,\n    \"serverDurationMinutes\": 165,\n    \"claimedDistanceKm\": null,\n    \"claimedDurationMinutes\": null,\n    \"distanceDifferenceKm\": null,\n    \"withinTolerance\": true\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /bookings/estimate-distance",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings/estimate-distance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                "estimate-distance"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startPoint\": {\n    \"latitude\": 30.0444,\n    \"longitude\": 31.2357\n  },\n  \"endPoint\": {\n    \"latitude\": 31.2001,\n    \"longitude\": 29.9187\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "PUBLIC. Resolves startPoint/endPoint (coordinates or a place name) into distanceKm and durationMinutes. Coordinates are passed through; free text is geocoded via OpenRouteService. Without ORS_API_KEY the server falls back to a straight-line estimate and says so in `source` and `warning`."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/bookings/estimate-distance",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "bookings",
+                    "estimate-distance"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"distanceKm\": 230.4,\n    \"durationMinutes\": 168,\n    \"source\": \"openrouteservice\",\n    \"start\": {\n      \"latitude\": 30.0444,\n      \"longitude\": 31.2357\n    },\n    \"end\": {\n      \"latitude\": 31.2001,\n      \"longitude\": 29.9187\n    }\n  }\n}"
             }
           ]
         },
@@ -727,7 +1016,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "bookings"
@@ -735,7 +1023,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"customerId\": \"\",\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"driverId\": \"\",\n  \"bookingDate\": \"2026-09-15\",\n  \"startTime\": \"10:00\",\n  \"endTime\": \"12:00\",\n  \"distanceKm\": 30,\n  \"durationMinutes\": 120,\n  \"startPoint\": \"Cairo\",\n  \"endPoint\": \"Alexandria\",\n  \"notes\": \"Airport pickup\",\n  \"driverNotes\": \"\",\n  \"packageId\": \"\",\n  \"eventType\": \"wedding\",\n  \"isPeakHour\": false,\n  \"surgeMultiplier\": 1\n}",
+              "raw": "{\n  \"customerId\": \"\",\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"driverId\": \"\",\n  \"bookingDate\": \"2026-09-15\",\n  \"startTime\": \"10:00\",\n  \"endTime\": \"12:00\",\n  \"startPoint\": {\n    \"latitude\": 30.0444,\n    \"longitude\": 31.2357\n  },\n  \"endPoint\": {\n    \"latitude\": 31.2001,\n    \"longitude\": 29.9187\n  },\n  \"distanceKm\": 30,\n  \"durationMinutes\": 120,\n  \"notes\": \"Airport pickup\",\n  \"driverNotes\": \"\",\n  \"packageId\": \"\",\n  \"eventType\": \"wedding\",\n  \"isPeakHour\": false,\n  \"surgeMultiplier\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -762,7 +1050,6 @@
                     "{{baseUrl}}"
                   ],
                   "path": [
-                    "{{baseUrl}}",
                     "api",
                     "v1",
                     "bookings"
@@ -778,6 +1065,37 @@
                 }
               ],
               "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"{{bookingId}}\",\n    \"vehicleId\": \"{{vehicleId}}\",\n    \"status\": \"PENDING\",\n    \"tripStatus\": \"NOTSTARTED\",\n    \"totalPrice\": 145\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json = {};",
+                  "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const pick = (json) => { return json.data && json.data.id; };",
+                  "  const value = pick(json);",
+                  "  if (value) {",
+                  "    pm.environment.set('bookingId', String(value));",
+                  "    console.log('bookingId =', value);",
+                  "  }",
+                  "}"
+                ]
+              }
             }
           ]
         },
@@ -798,7 +1116,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "bookings"
@@ -822,7 +1139,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /bookings/:id",
@@ -841,7 +1171,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "bookings",
@@ -850,7 +1179,20 @@
             },
             "description": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PATCH /bookings/:id/status",
@@ -869,7 +1211,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "bookings",
@@ -888,7 +1229,20 @@
             },
             "description": "Transitions booking status. PENDING→CONFIRMED/CANCELLED, CONFIRMED→COMPLETED/CANCELLED."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PATCH /bookings/:id/trip-status",
@@ -907,7 +1261,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "bookings",
@@ -926,7 +1279,20 @@
             },
             "description": "NOTSTARTED→INPROGRESS→ARRIVED→COMPLETED. Trip COMPLETED auto-completes the booking and releases the driver."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "DELETE /bookings/:id",
@@ -945,7 +1311,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "bookings",
@@ -954,7 +1319,20 @@
             },
             "description": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -978,7 +1356,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "driver",
@@ -986,7 +1363,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PUT /driver/profile",
@@ -1005,7 +1395,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "driver",
@@ -1022,7 +1411,20 @@
               }
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PATCH /driver/status",
@@ -1041,7 +1443,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "driver",
@@ -1058,7 +1459,20 @@
               }
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /driver/bookings",
@@ -1077,7 +1491,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "driver",
@@ -1103,7 +1516,20 @@
             },
             "description": "Driver's trips. filter=today|upcoming|completed."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /driver/vehicles",
@@ -1122,7 +1548,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "driver",
@@ -1139,7 +1564,20 @@
               }
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "DELETE /driver/vehicles/:vehicleId",
@@ -1158,7 +1596,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "driver",
@@ -1167,7 +1604,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /driver/stats",
@@ -1186,7 +1636,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "driver",
@@ -1206,7 +1655,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /driver/:id",
@@ -1219,7 +1681,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "driver",
@@ -1252,7 +1713,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "reviews"
@@ -1287,7 +1747,6 @@
                     "{{baseUrl}}"
                   ],
                   "path": [
-                    "{{baseUrl}}",
                     "api",
                     "v1",
                     "reviews"
@@ -1303,6 +1762,37 @@
                 }
               ],
               "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"{{reviewId}}\",\n    \"bookingId\": \"{{bookingId}}\",\n    \"overallRating\": 5,\n    \"visible\": false\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json = {};",
+                  "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const pick = (json) => { return json.data && json.data.id; };",
+                  "  const value = pick(json);",
+                  "  if (value) {",
+                  "    pm.environment.set('reviewId', String(value));",
+                  "    console.log('reviewId =', value);",
+                  "  }",
+                  "}"
+                ]
+              }
             }
           ]
         },
@@ -1323,7 +1813,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "reviews",
@@ -1343,7 +1832,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /reviews/booking/:id",
@@ -1362,7 +1864,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "reviews",
@@ -1371,7 +1872,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /reviews/:id",
@@ -1390,7 +1904,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "reviews",
@@ -1398,7 +1911,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -1422,7 +1948,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "payments"
@@ -1457,7 +1982,6 @@
                     "{{baseUrl}}"
                   ],
                   "path": [
-                    "{{baseUrl}}",
                     "api",
                     "v1",
                     "payments"
@@ -1473,6 +1997,37 @@
                 }
               ],
               "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"{{paymentId}}\",\n    \"bookingId\": \"{{bookingId}}\",\n    \"amount\": 100,\n    \"paymentMethod\": \"CASH\",\n    \"status\": \"PENDING\"\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json = {};",
+                  "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const pick = (json) => { return json.data && json.data.id; };",
+                  "  const value = pick(json);",
+                  "  if (value) {",
+                  "    pm.environment.set('paymentId', String(value));",
+                  "    console.log('paymentId =', value);",
+                  "  }",
+                  "}"
+                ]
+              }
             }
           ]
         },
@@ -1493,7 +2048,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "payments",
@@ -1512,7 +2066,20 @@
             },
             "description": "Updates payment record and recomputes booking aggregate paymentStatus."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /payments/:id",
@@ -1531,7 +2098,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "payments",
@@ -1539,7 +2105,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /payments/:id/refund",
@@ -1558,7 +2137,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "payments",
@@ -1567,7 +2145,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /payments/booking/:bookingId",
@@ -1586,7 +2177,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "payments",
@@ -1595,7 +2185,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /payments/summary/:bookingId",
@@ -1614,7 +2217,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "payments",
@@ -1624,7 +2226,20 @@
             },
             "description": "Returns totalPrice, totalPaid, remaining."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -1648,7 +2263,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "waitlist"
@@ -1683,7 +2297,6 @@
                     "{{baseUrl}}"
                   ],
                   "path": [
-                    "{{baseUrl}}",
                     "api",
                     "v1",
                     "waitlist"
@@ -1699,6 +2312,37 @@
                 }
               ],
               "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"{{waitlistId}}\",\n    \"position\": 2,\n    \"status\": \"WAITING\"\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json = {};",
+                  "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const pick = (json) => { return json.data && json.data.id; };",
+                  "  const value = pick(json);",
+                  "  if (value) {",
+                  "    pm.environment.set('waitlistId', String(value));",
+                  "    console.log('waitlistId =', value);",
+                  "  }",
+                  "}"
+                ]
+              }
             }
           ]
         },
@@ -1719,7 +2363,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "waitlist",
@@ -1727,7 +2370,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /waitlist/:id",
@@ -1746,7 +2402,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "waitlist",
@@ -1754,7 +2409,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "DELETE /waitlist/:id",
@@ -1773,7 +2441,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "waitlist",
@@ -1781,7 +2448,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /waitlist/:id/convert",
@@ -1800,7 +2480,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "waitlist",
@@ -1809,7 +2488,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -1833,7 +2525,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "packages"
@@ -1850,7 +2541,38 @@
             },
             "description": "Creates a package with a server-applied discount."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json = {};",
+                  "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const pick = (json) => { return json.data && (json.data.id || json.data.packageId); };",
+                  "  const value = pick(json);",
+                  "  if (value) {",
+                  "    pm.environment.set('packageId', String(value));",
+                  "    console.log('packageId =', value);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /packages/me",
@@ -1869,7 +2591,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "packages",
@@ -1877,7 +2598,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /packages/:id",
@@ -1896,7 +2630,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "packages",
@@ -1904,7 +2637,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /packages/:id/booking",
@@ -1923,7 +2669,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "packages",
@@ -1941,7 +2686,20 @@
               }
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "DELETE /packages/:id/booking",
@@ -1960,7 +2718,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "packages",
@@ -1969,7 +2726,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PATCH /packages/:id/cancel",
@@ -1988,7 +2758,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "packages",
@@ -1997,7 +2766,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -2021,7 +2803,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "chat",
@@ -2031,7 +2812,20 @@
             },
             "description": "Auto-creates the conversation for a booking on first call."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /chat/booking/:id",
@@ -2050,7 +2844,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "chat",
@@ -2060,7 +2853,20 @@
             },
             "description": "Auto-creates the conversation for a booking on first call."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /chat/:conversationId/messages",
@@ -2079,7 +2885,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "chat",
@@ -2089,7 +2894,20 @@
             },
             "description": "Sends a chat message. messageType: TEXT|QUICK_REPLY."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /chat/:conversationId/messages",
@@ -2108,7 +2926,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "chat",
@@ -2127,7 +2944,20 @@
             },
             "description": "Sends a chat message. messageType: TEXT|QUICK_REPLY."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PATCH /chat/:conversationId/read",
@@ -2146,7 +2976,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "chat",
@@ -2155,7 +2984,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PATCH /chat/:conversationId/close",
@@ -2174,7 +3016,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "chat",
@@ -2183,7 +3024,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -2207,7 +3061,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "referrals",
@@ -2216,7 +3069,38 @@
             },
             "description": "Generates/returns the user's referral code."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json = {};",
+                  "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const pick = (json) => { return (json.data && json.data.code) || json.referralCode; };",
+                  "  const value = pick(json);",
+                  "  if (value) {",
+                  "    pm.environment.set('referralCode', String(value));",
+                  "    console.log('referralCode =', value);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /referrals/apply",
@@ -2235,7 +3119,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "referrals",
@@ -2253,7 +3136,20 @@
             },
             "description": "Applies a referral code to the authenticated user."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /referrals/:id/complete",
@@ -2266,7 +3162,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "referrals",
@@ -2304,7 +3199,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "referrals",
@@ -2312,7 +3206,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /referrals/:id",
@@ -2331,7 +3238,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "referrals",
@@ -2339,7 +3245,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -2363,7 +3282,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "wallet",
@@ -2371,7 +3289,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /wallet/transactions",
@@ -2390,7 +3321,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "wallet",
@@ -2415,7 +3345,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /wallet/credit",
@@ -2434,7 +3377,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "wallet",
@@ -2452,7 +3394,20 @@
             },
             "description": "Credits the wallet. type: REFERRAL_REWARD|REFUND|MANUAL_ADJUSTMENT|PAYMENT_DEDUCTION|DEPOSIT."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST /wallet/debit",
@@ -2471,7 +3426,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "wallet",
@@ -2488,7 +3442,20 @@
               }
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -2512,7 +3479,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "notifications"
@@ -2536,7 +3502,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /notifications/unread-count",
@@ -2555,7 +3534,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "notifications",
@@ -2563,7 +3541,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PATCH /notifications/:id/read",
@@ -2582,7 +3573,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "notifications",
@@ -2591,7 +3581,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PATCH /notifications/read-all",
@@ -2610,7 +3613,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "notifications",
@@ -2618,7 +3620,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -2642,7 +3657,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "admin",
@@ -2663,7 +3677,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /admin/bookings/calendar",
@@ -2682,7 +3709,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "admin",
@@ -2699,7 +3725,20 @@
             },
             "description": "Bookings grouped by day for a month (YYYY-MM)."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /admin/bookings",
@@ -2718,7 +3757,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "admin",
@@ -2744,7 +3782,20 @@
             },
             "description": "Bookings filtered by a specific date (YYYY-MM-DD)."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /admin/bookings/all",
@@ -2763,7 +3814,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "admin",
@@ -2772,7 +3822,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /admin/vehicles/status",
@@ -2791,7 +3854,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "admin",
@@ -2800,7 +3862,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /admin/drivers/:id/stats",
@@ -2819,7 +3894,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "admin",
@@ -2829,7 +3903,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /admin/drivers",
@@ -2848,7 +3935,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "admin",
@@ -2863,7 +3949,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PATCH /admin/drivers/:id/status",
@@ -2882,7 +3981,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "admin",
@@ -2901,7 +3999,20 @@
               }
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /admin/users",
@@ -2920,7 +4031,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "admin",
@@ -2935,7 +4045,20 @@
               ]
             }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PATCH /admin/users/role",
@@ -2954,7 +4077,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "admin",
@@ -2973,7 +4095,20 @@
             },
             "description": "Changes a user's role."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET /admin/settings",
@@ -2992,7 +4127,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "admin",
@@ -3001,7 +4135,20 @@
             },
             "description": "System & evaluation-related settings."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PUT /admin/settings",
@@ -3020,7 +4167,6 @@
                 "{{baseUrl}}"
               ],
               "path": [
-                "{{baseUrl}}",
                 "api",
                 "v1",
                 "admin",
@@ -3038,7 +4184,20 @@
             },
             "description": "System & evaluation-related settings."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

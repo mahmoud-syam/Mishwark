@@ -1,17 +1,49 @@
 import { Request, Response } from "express";
-import BookingService from "../services/booking.service";
+import BookingService, { ListBookingsParams } from "../services/booking.service";
 import PricingService from "../services/pricing.service";
+import MapsService from "../services/maps.service";
+import { queryNum, queryStr } from "../utils/routeParams";
+import {
+  calculatePriceSchema,
+  createBookingSchema,
+  estimateDistanceSchema,
+} from "../schemas/booking.schema";
 
 export const calculatePrice = async (req: Request, res: Response) => {
-  const breakdown = await PricingService.calculatePrice(req.body);
+  // Parsed rather than passed through: this endpoint is public, and the schema
+  // is what rejects client-supplied price overrides.
+  const input = calculatePriceSchema.parse(req.body);
+  const quote = await PricingService.quote(input);
+
   res.status(200).json({
     success: true,
-    data: breakdown,
+    data: quote.breakdown,
+    route: quote.route,
+    comparison: quote.comparison,
+  });
+};
+
+export const estimateDistance = async (req: Request, res: Response) => {
+  const { startPoint, endPoint } = estimateDistanceSchema.parse(req.body);
+  const route = await MapsService.route(startPoint, endPoint);
+
+  res.status(200).json({
+    success: true,
+    data: {
+      distanceKm: route.distanceKm,
+      durationMinutes: route.durationMinutes,
+      source: route.source,
+      start: route.start,
+      end: route.end,
+      ...(route.warning ? { warning: route.warning } : {}),
+    },
   });
 };
 
 export const createBooking = async (req: Request, res: Response) => {
-  const booking = await BookingService.createBooking(req.body, req.user);
+  const input = createBookingSchema.parse(req.body);
+  const booking = await BookingService.createBooking(input, req.user);
+
   res.status(201).json({
     success: true,
     data: booking,
@@ -19,7 +51,21 @@ export const createBooking = async (req: Request, res: Response) => {
 };
 
 export const getBookings = async (req: Request, res: Response) => {
-  const result = await BookingService.listBookings(req.query as any, req.user);
+  // req.query is stringly typed; page/limit must be coerced before they reach
+  // Prisma's `take`/`skip`, which reject a string with a 500.
+  const result = await BookingService.listBookings(
+    {
+      page: queryNum(req.query.page, 1),
+      limit: queryNum(req.query.limit, 10),
+      status: queryStr(req.query.status) as ListBookingsParams["status"],
+      tripStatus: queryStr(req.query.tripStatus) as ListBookingsParams["tripStatus"],
+      bookingDate: queryStr(req.query.bookingDate),
+      customerId: queryStr(req.query.customerId),
+      driverId: queryStr(req.query.driverId),
+      vehicleId: queryStr(req.query.vehicleId),
+    },
+    req.user
+  );
   res.status(200).json({
     success: true,
     data: result.items,
