@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { errorHandler } from "../../error-handler";
-import { changePassword, login, logout, logoutAllDevices, reset2FAOnly, signup, verify2FALogin, verifyAndEnable2FALogin, otpRequest, otpVerify } from "../controllers/auth.controller";
+import { changePassword, login, logout, logoutAllDevices, reset2FAOnly, signup, verify2FALogin, verifyAndEnable2FALogin, otpRequest, otpVerify, me } from "../controllers/auth.controller";
 import { setup2FA, verifyAndEnable2FA, disable2FA } from "../controllers/two-factor.controller";
 import { employeeUpload } from "../middlewares/multer.middleware";
 import { requirePermission } from "../middlewares/permission.middleware";
@@ -15,6 +15,7 @@ authRouterV1.post("/otp/verify", errorHandler(otpVerify));
 authRouterV1.post("/verify-2fa", errorHandler(verify2FALogin));
 authRouterV1.post("/verify-2fa-setup", errorHandler(verifyAndEnable2FALogin));
 authRouterV1.post("/logout", errorHandler(logout));
+authRouterV1.get("/me", authMiddleware, errorHandler(me));
 authRouterV1.post("/logout-all-devices", authMiddleware, errorHandler(logoutAllDevices));
 authRouterV1.post("/reset-2fa/:userId", [authMiddleware, requirePermission(["user_password:manage"])], errorHandler(reset2FAOnly));
 authRouterV1.put("/change-password/:userId", [authMiddleware, requirePermission(["user_password:manage"])], errorHandler(changePassword));

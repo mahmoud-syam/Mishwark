@@ -92,8 +92,14 @@ export class ChatService {
       throw new NotFoundException(`Conversation with ID ${conversationId} not found`);
     }
 
-    if (conversation.customerId !== userId && conversation.driverId !== userId) {
-      throw new ForbiddenException("You are not part of this conversation");
+    // conversation.driverId is a Drivers.id, not a user id, so the driver has
+    // to be resolved first. Comparing it to the user id locked every driver
+    // out of their own conversations.
+    if (conversation.customerId !== userId) {
+      const driver = await prismaClient.drivers.findUnique({ where: { userId }, select: { id: true } });
+      if (!driver || conversation.driverId !== driver.id) {
+        throw new ForbiddenException("You are not part of this conversation");
+      }
     }
 
     const messages = await prismaClient.messages.findMany({

@@ -71,6 +71,14 @@ export class ReferralService {
     return referral;
   }
 
+  /**
+   * Pays the referral reward when the referred customer's trip completes.
+   *
+   * Called by the server from the trip lifecycle (never from a client: the old
+   * public POST /referrals/:id/complete let anyone trigger payouts). It is
+   * idempotent — the PENDING → COMPLETED flip is a conditional update, so a
+   * retry or a concurrent completion can't credit the wallets twice.
+   */
   public static async completeReferral(bookingId: string) {
     const booking = await prismaClient.bookings.findUnique({
       where: { id: bookingId },
@@ -80,8 +88,8 @@ export class ReferralService {
       throw new NotFoundException(`Booking with ID ${bookingId} not found`);
     }
 
-    if (booking.status !== BookingStatus.CONFIRMED) {
-      throw new BadRequestException("Only confirmed bookings can trigger referral completion");
+    if (booking.status !== BookingStatus.COMPLETED) {
+      throw new BadRequestException("Only a completed trip can trigger the referral reward");
     }
 
     const existingReferral = await prismaClient.referrals.findFirst({
@@ -93,34 +101,37 @@ export class ReferralService {
 
     if (!existingReferral) return null;
 
-    const referral = await prismaClient.referrals.update({
-      where: { id: existingReferral.id },
-      data: {
-        status: ReferralStatus.COMPLETED,
-        triggeringBookingId: bookingId,
-        completedAt: new Date(),
-      },
-    });
+    return prismaClient.$transaction(async (tx) => {
+      const flipped = await tx.referrals.updateMany({
+        where: { id: existingReferral.id, status: ReferralStatus.PENDING },
+        data: {
+          status: ReferralStatus.COMPLETED,
+          triggeringBookingId: bookingId,
+          completedAt: new Date(),
+        },
+      });
+      if (flipped.count === 0) return null;
 
-    await prismaClient.walletTransactions.create({
-      data: {
-        userId: referral.referrerId,
-        amount: referral.rewardAmount,
-        type: WalletTransactionType.REFERRAL_REWARD,
-        description: `Referral reward for referring user`,
-      },
+      if (existingReferral.rewardAmount > 0) {
+        await tx.walletTransactions.createMany({
+          data: [
+            {
+              userId: existingReferral.referrerId,
+              amount: existingReferral.rewardAmount,
+              type: WalletTransactionType.REFERRAL_REWARD,
+              description: "Referral reward for referring user",
+            },
+            {
+              userId: existingReferral.referredId,
+              amount: existingReferral.rewardAmount,
+              type: WalletTransactionType.REFERRAL_REWARD,
+              description: "Referral welcome bonus",
+            },
+          ],
+        });
+      }
+      return tx.referrals.findUnique({ where: { id: existingReferral.id } });
     });
-
-    await prismaClient.walletTransactions.create({
-      data: {
-        userId: referral.referredId,
-        amount: referral.rewardAmount,
-        type: WalletTransactionType.REFERRAL_REWARD,
-        description: `Referral welcome bonus`,
-      },
-    });
-
-    return referral;
   }
 
   public static async getReferralStats(userId: string) {

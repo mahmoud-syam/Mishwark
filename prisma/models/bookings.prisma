@@ -37,9 +37,17 @@ model Bookings {
 
   status                 BookingStatus            @default(PENDING)
   tripStatus             TripStatus               @default(NOTSTARTED)
+  // Wall-clock times the driver actually started/finished the trip. Drive the
+  // admin live-operations view (elapsed, remaining, delay).
+  tripStartedAt          DateTime?
+  tripCompletedAt        DateTime?
   basePrice              Float                    @default(0)
   distancePrice          Float                    @default(0)
   totalPrice             Float                    @default(0)
+  // Deposit the customer must pay to confirm (a % of totalPrice), and what has
+  // actually been paid so far (sum of SUCCESS payments). They used to be one
+  // field, which recorded the deposit as paid the moment the booking existed.
+  depositRequired        Float                    @default(0)
   depositPaid            Float                    @default(0)
   paymentStatus          PaymentStatus            @default(UNPAID)
   driverNotes            String                   @default("")

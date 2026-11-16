@@ -6,6 +6,13 @@ import { BadRequestsException } from "../exceptions/bad-requests";
 import { ConflictException } from "../utils/errors";
 import { ErrorCodes } from "../exceptions/root";
 import jwt from "jsonwebtoken";
+import { randomInt } from "crypto";
+import SmsService from "../services/sms.service";
+import { authCookieOptions, clearAuthCookieOptions } from "../utils/authCookie";
+
+const OTP_TTL_MINUTES = Number(process.env.OTP_TTL_MINUTES ?? 5);
+const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS ?? 5);
+const OTP_RESEND_SECONDS = Number(process.env.OTP_RESEND_SECONDS ?? 60);
 import { generate2FASecret, verify2FAToken } from "../services/two-factor.service";
 import { buildTokenUser, findOrCreateRole } from "../services/role.service";
 import { normalizeRoleName, USER_ROLES } from "../constants/roles";
@@ -226,13 +233,7 @@ export const verifyAndEnable2FALogin = async (req: Request, res: Response, next:
 
         const token = jwt.sign({ user: optimizedUser }, process.env.JWT_SECRET as string, { expiresIn: "24h" });
 
-        res.cookie("token", token, {
-            httpOnly: false,
-            secure: false,
-            sameSite: "lax",
-            path: "/",
-            maxAge: 1000 * 60 * 60 * 24 * 7
-        });
+        res.cookie("token", token, authCookieOptions());
 
         res.status(200).json({ message: "Login successful", user: optimizedUser });
     } catch (error) {
@@ -291,13 +292,7 @@ export const verify2FALogin = async (req: Request, res: Response, next: NextFunc
 
         const token = jwt.sign({ user: optimizedUser }, process.env.JWT_SECRET as string, { expiresIn: "24h" });
 
-        res.cookie("token", token, {
-            httpOnly: false,
-            secure: false,
-            sameSite: "lax",
-            path: "/",
-            maxAge: 1000 * 60 * 60 * 24 * 7
-        });
+        res.cookie("token", token, authCookieOptions());
 
         res.status(200).json({ message: "Login successful", optimizedUser });
     } catch (error) {
@@ -305,9 +300,21 @@ export const verify2FALogin = async (req: Request, res: Response, next: NextFunc
     }
 };
 
+/** The signed-in user, as resolved by authMiddleware (role re-read from the DB). */
+export const me = async (req: Request, res: Response) => {
+    const u = req.user!;
+    res.status(200).json({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phoneNumber: u.phoneNumber,
+        role: u.role,
+    });
+};
+
 export const logout = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        res.clearCookie("token");
+        res.clearCookie("token", clearAuthCookieOptions());
         res.status(200).json({ message: "Logout successful" });
     } catch (error) {
         next(error);
@@ -325,7 +332,7 @@ export const logoutAllDevices = async (req: Request, res: Response, next: NextFu
             }
         });
 
-        res.clearCookie("token");
+        res.clearCookie("token", clearAuthCookieOptions());
         res.status(200).json({ message: "Successfully logged out from all devices" });
     } catch (error) {
         next(error);
@@ -389,7 +396,7 @@ export const changePassword = async (req: Request, res: Response, next: NextFunc
         });
 
         if ((req.user as any).id === userId) {
-            res.clearCookie("token");
+            res.clearCookie("token", clearAuthCookieOptions());
         }
 
         res.status(200).json({ message: `Password changed successfully${reset2FA ? " and 2FA reset" : ""}` });
@@ -404,10 +411,27 @@ export const otpRequest = async (req: Request, res: Response, next: NextFunction
 
         const existingUser = await prismaClient.users.findUnique({
             where: { phoneNumber },
-            select: { id: true },
+            select: { id: true, otpSentAt: true },
         });
 
-        const otpCode = Math.floor(1000 + Math.random() * 9000).toString(); // 4 digit code
+        if (existingUser?.otpSentAt && Date.now() - existingUser.otpSentAt.getTime() < OTP_RESEND_SECONDS * 1000) {
+            return res.status(429).json({
+                message: `Please wait ${OTP_RESEND_SECONDS} seconds before requesting a new code`,
+                errorCode: ErrorCodes.INVALID_CREDENTIALS,
+                errors: null,
+            });
+        }
+
+        // 4 digits to match the app's OTP screen; crypto RNG, expiry, attempt cap
+        // and resend throttle make it safe to deliver by SMS.
+        const otpCode = randomInt(1000, 10000).toString();
+        const now = new Date();
+        const otpFields = {
+            otpCode,
+            otpExpiresAt: new Date(now.getTime() + OTP_TTL_MINUTES * 60_000),
+            otpAttempts: 0,
+            otpSentAt: now,
+        };
 
         let userId: string;
 
@@ -425,7 +449,7 @@ export const otpRequest = async (req: Request, res: Response, next: NextFunction
                         phoneNumber,
                         name: name ?? phoneNumber,
                         email: null,
-                        otpCode,
+                        ...otpFields,
                         roleId: roleRecord.id,
                         phoneNumbers: { create: [{ number: phoneNumber }] },
                     },
@@ -451,14 +475,27 @@ export const otpRequest = async (req: Request, res: Response, next: NextFunction
         } else {
             await prismaClient.users.update({
                 where: { id: existingUser.id },
-                data: { otpCode }
+                data: otpFields
             });
 
             userId = existingUser.id;
         }
 
-        // In a real app, send SMS here. For now, we return it in dev.
-        res.status(200).json({ message: "OTP sent successfully", userId, dev_otp: otpCode });
+        // With an SMS provider configured the code only travels by SMS. Without
+        // one (local dev) it is returned as dev_otp so the apps keep working.
+        try {
+            await SmsService.send(phoneNumber, `كود الدخول لمشوارك: ${otpCode}\nصالح لمدة ${OTP_TTL_MINUTES} دقائق. متشاركوش مع حد.`);
+        } catch (err) {
+            console.error("[sms] OTP delivery failed", err);
+            // Let the user retry right away instead of waiting out the throttle.
+            await prismaClient.users.update({ where: { id: userId }, data: { otpSentAt: null } });
+            return res.status(502).json({ message: "Couldn't send the SMS. Please try again.", errorCode: ErrorCodes.INTERNAL_EXCEPTION, errors: null });
+        }
+        res.status(200).json({
+            message: "OTP sent successfully",
+            userId,
+            ...(!SmsService.isConfigured() && { dev_otp: otpCode }),
+        });
     } catch (error) {
         next(error);
     }
@@ -477,8 +514,21 @@ export const otpVerify = async (req: Request, res: Response, next: NextFunction)
             throw new BadRequestsException("User not found", ErrorCodes.USER_NOT_FOUND);
         }
 
-        if (user.otpCode !== code && code !== "0000") { // 0000 as universal bypass for testing
-            throw new BadRequestsException("Invalid OTP code", ErrorCodes.INVALID_CREDENTIALS);
+        // "0000" is a testing bypass. It must never work in production, where it
+        // would let anyone sign in as any phone number. Set OTP_TEST_BYPASS=true
+        // to keep it on a non-production server used by the app testers.
+        const bypassAllowed = process.env.NODE_ENV !== "production" || process.env.OTP_TEST_BYPASS === "true";
+        const isBypass = bypassAllowed && code === "0000";
+        if (!isBypass) {
+            const expired = !user.otpCode || !user.otpExpiresAt || user.otpExpiresAt.getTime() < Date.now();
+            if (expired || user.otpAttempts >= OTP_MAX_ATTEMPTS) {
+                throw new BadRequestsException("OTP code expired. Request a new one.", ErrorCodes.INVALID_CREDENTIALS);
+            }
+            if (user.otpCode !== code) {
+                // Count the miss; after OTP_MAX_ATTEMPTS the code is dead.
+                await prismaClient.users.update({ where: { id: user.id }, data: { otpAttempts: { increment: 1 } } });
+                throw new BadRequestsException("Invalid OTP code", ErrorCodes.INVALID_CREDENTIALS);
+            }
         }
 
         const updatedUser = await prismaClient.users.update({
@@ -486,6 +536,8 @@ export const otpVerify = async (req: Request, res: Response, next: NextFunction)
             data: {
                 otpVerified: true,
                 otpCode: null,
+                otpExpiresAt: null,
+                otpAttempts: 0,
                 tokenVersion: { increment: 1 }
             },
             include: { role: { include: { permissions: true } } }
@@ -496,13 +548,7 @@ export const otpVerify = async (req: Request, res: Response, next: NextFunction)
         const tokenUser = buildTokenUser(updatedUser);
         const token = jwt.sign({ user: tokenUser }, process.env.JWT_SECRET as string, { expiresIn: "24h" });
 
-        res.cookie("token", token, {
-            httpOnly: false,
-            secure: false,
-            sameSite: "lax",
-            path: "/",
-            maxAge: 1000 * 60 * 60 * 24 * 7
-        });
+        res.cookie("token", token, authCookieOptions());
 
         res.status(200).json({
             message: "OTP verified successfully",

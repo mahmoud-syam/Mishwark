@@ -1,6 +1,12 @@
 import { Request, Response } from "express";
+import { z } from "zod";
 import AdminService from "../services/admin.service";
 import { paramStr, queryNum, queryStr } from "../utils/routeParams";
+import AuditService from "../services/audit.service";
+import prismaClient from "../utils/prismaClientHelper";
+import { AuditAction } from "../../../generated/prisma";
+
+const actorOf = (req: Request) => ({ id: req.user!.id, name: req.user!.name });
 
 export const getDashboardStats = async (req: Request, res: Response) => {
   const stats = await AdminService.getDashboardStats();
@@ -50,12 +56,37 @@ export const listDrivers = async (req: Request, res: Response) => {
 };
 
 export const updateUserRole = async (req: Request, res: Response) => {
+  req.body = z.object({ userId: z.string().min(1), roleId: z.string().min(1) }).parse(req.body);
+  const before = await prismaClient.users.findUnique({
+    where: { id: req.body.userId },
+    select: { name: true, role: { select: { name: true } } },
+  });
   const user = await AdminService.updateUserRole(req.body.userId, req.body.roleId);
+  await AuditService.record(actorOf(req), {
+    action: AuditAction.UPDATE,
+    entityType: "user",
+    entityId: user.id,
+    entityLabel: `مستخدم: ${user.name}`,
+    details: `role: ${before?.role?.name ?? "-"} → ${user.role?.name ?? "-"}`,
+  });
   res.status(200).json({ success: true, data: user });
 };
 
 export const toggleDriverStatus = async (req: Request, res: Response) => {
+  const before = await prismaClient.drivers.findUnique({
+    where: { id: paramStr(req.params.id) },
+    select: { status: true },
+  });
   const driver = await AdminService.toggleDriverStatus(paramStr(req.params.id), req.body.status);
+  if (before && before.status !== driver.status) {
+    await AuditService.record(actorOf(req), {
+      action: AuditAction.UPDATE,
+      entityType: "driver",
+      entityId: driver.id,
+      entityLabel: `سائق: ${driver.fullName}`,
+      details: `status: ${before.status.toLowerCase()} → ${driver.status.toLowerCase()}`,
+    });
+  }
   res.status(200).json({ success: true, data: driver });
 };
 
@@ -65,7 +96,22 @@ export const getSystemSettings = async (req: Request, res: Response) => {
 };
 
 export const updateSystemSettings = async (req: Request, res: Response) => {
+  const before = await AdminService.getSystemSettings();
   const settings = await AdminService.updateSystemSettings(req.body);
+  const details = AuditService.diff(before as any, settings as any, [
+    "performanceHistoryVisible",
+    "evaluationsVisible",
+    "selfAppraisalsVisible",
+  ]);
+  if (details) {
+    await AuditService.record(actorOf(req), {
+      action: AuditAction.UPDATE,
+      entityType: "settings",
+      entityId: "global",
+      entityLabel: "إعدادات النظام",
+      details,
+    });
+  }
   res.status(200).json({ success: true, data: settings });
 };
 

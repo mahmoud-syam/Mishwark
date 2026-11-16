@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { assignVehicleSchema } from "../schemas/driver.schema";
 import DriverService from "../services/driver.service";
 import { paramStr, queryNum, queryStr } from "../utils/routeParams";
 
@@ -37,7 +38,8 @@ export const getDriverBookings = async (req: Request, res: Response) => {
 export const assignVehicle = async (req: Request, res: Response) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ message: "Unauthorized" });
-  const assignment = await DriverService.assignVehicle(userId, req.body.vehicleId, req.body.isPrimary);
+  const { vehicleId, isPrimary } = assignVehicleSchema.parse(req.body);
+  const assignment = await DriverService.assignVehicle(userId, vehicleId, isPrimary);
   res.status(201).json({ success: true, data: assignment });
 };
 

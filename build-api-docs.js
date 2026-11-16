@@ -199,7 +199,6 @@ const BODY_EXAMPLES = {
 
   // referrals
   "/referrals/apply": { referralCode: "MRK123" },
-  "/referrals/{id}/complete": { bookingId: "{{bookingId}}" },
 
   // wallet
   "/wallet/credit": { amount: 25, type: "REFERRAL_REWARD", description: "Referral reward" },
@@ -209,6 +208,20 @@ const BODY_EXAMPLES = {
   "/admin/drivers/{id}/status": { status: "OFF" },
   "/admin/users/role": { userId: "{{userId}}", roleId: "{{roleId}}" },
   "/admin/settings": { performanceHistoryVisible: true, evaluationsVisible: true, selfAppraisalsVisible: true },
+  "/admin/drivers/{id}/commission": { commissionRate: 20 },
+  "/admin/customers": { name: "Hind Abdelrahman", phoneNumber: "+201012345678" },
+  "/admin/bookings": {
+    customerId: "{{userId}}",
+    vehicleId: "{{vehicleId}}",
+    bookingDate: "2026-12-20",
+    startTime: "19:00",
+    endTime: "22:00",
+    startPoint: { latitude: 30.0566, longitude: 31.3301, label: "Wedding hall, Nasr City" },
+    endPoint: { latitude: 30.0911, longitude: 31.3253, label: "Fairmont, Cairo" },
+    eventType: "Wedding",
+    markPaid: false,
+  },
+  "/admin/vehicles/{id}": { basePrice: 1800, pricePerKm: 80 },
 
   // change password: admin-permissioned, no oldPassword, optionally resets 2FA
   "/auth/change-password/{userId}": { newPassword: "newpass123", reset2FA: false },
@@ -289,7 +302,21 @@ const DESCRIPTIONS = {
   "/admin/settings": "System & evaluation-related settings.",
   "/admin/users/role": "Changes a user's role.",
   "/admin/bookings/calendar": "Bookings grouped by day for a month (YYYY-MM).",
-  "/admin/bookings": "Bookings filtered by a specific date (YYYY-MM-DD).",
+  "/admin/bookings": "GET: bookings for a date (YYYY-MM-DD). POST: book on behalf of a customer (confirmed immediately; priceOverride is Super Admin only; markPaid records a manual payment).",
+  "/admin/overview": "Web dashboard KPIs: today vs yesterday bookings, month revenue vs same span last month, fleet availability, 7-day occupancy and revenue, maintenance/complaint alerts.",
+  "/admin/days/{date}": "Everything booked on one day (YYYY-MM-DD) with stats and per-driver assignments.",
+  "/admin/trips/live": "Trips in progress with elapsed/remaining minutes and delay detection.",
+  "/admin/drivers-summary": "Drivers ranked by this month's revenue, with rating, reviews and complaints (rating <= 2). ?limit=",
+  "/admin/drivers-assignable": "Drivers that can be assigned to a new booking.",
+  "/admin/drivers/{id}/analytics": "Driver income vs company commission. ?period=day|month|year",
+  "/admin/drivers/{id}/commission": "Sets the company commission percentage for a driver (0-100). Audit-logged.",
+  "/admin/customers/search": "Customer search by name or phone. ?q=",
+  "/admin/customers": "Quick-creates a customer account (name + phone). Audit-logged.",
+  "/admin/customers/{id}/analytics": "Customer spend, bookings, wallet and referrals. ?period=day|month|year",
+  "/admin/vehicles/{id}": "Updates vehicle pricing/status. Audit-logged.",
+  "/admin/audit-logs": "Append-only audit trail. ?action=CREATE|UPDATE|DELETE&page=&limit=",
+  "/admin/audit-logs/export": "Audit trail as an .xlsx download. ?action=",
+  "/auth/me": "The signed-in user and role (role re-read from the database).",
 };
 
 const SUCCESS_RESPONSES = {
@@ -333,7 +360,6 @@ const REQUEST_SCHEMAS = {
   "/packages/{id}/booking": "AddPackageBookingBody",
   "/chat/{conversationId}/messages": "SendMessageBody",
   "/referrals/apply": "ApplyReferralBody",
-  "/referrals/{id}/complete": "CompleteReferralBody",
   "/wallet/credit": "WalletOperationBody",
   "/wallet/debit": "WalletOperationBody",
   "/admin/drivers/{id}/status": "DriverStatusBody",

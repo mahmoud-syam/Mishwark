@@ -7,17 +7,40 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from "../utils/errors";
 
 export class ReviewService {
   public static async createReview(data: any, reviewerId: string) {
     const booking = await prismaClient.bookings.findUnique({
       where: { id: data.bookingId },
-      include: { reviews: true },
+      include: { reviews: true, driver: { select: { userId: true } } },
     });
 
     if (!booking) {
       throw new NotFoundException(`Booking with ID ${data.bookingId} not found`);
+    }
+
+    // Only the two parties of the trip may review each other, and the reviewee
+    // is derived from the booking rather than trusted from the client.
+    // Previously anyone could post a review (e.g. a fake 1-star complaint) on
+    // any completed booking, against any user id.
+    let revieweeId: string;
+    if (data.reviewerType === ReviewerType.CUSTOMER_TO_DRIVER) {
+      if (booking.customerId !== reviewerId) {
+        throw new ForbiddenException("Only the booking's customer can review the driver");
+      }
+      revieweeId = booking.driver.userId;
+    } else if (data.reviewerType === ReviewerType.DRIVER_TO_CUSTOMER) {
+      if (booking.driver.userId !== reviewerId) {
+        throw new ForbiddenException("Only the assigned driver can review the customer");
+      }
+      revieweeId = booking.customerId;
+    } else {
+      throw new BadRequestException("reviewerType must be CUSTOMER_TO_DRIVER or DRIVER_TO_CUSTOMER");
+    }
+    if (data.revieweeId && data.revieweeId !== revieweeId) {
+      throw new BadRequestException("revieweeId does not match the other party of this booking");
     }
 
     if (booking.status !== BookingStatus.COMPLETED) {
@@ -35,7 +58,7 @@ export class ReviewService {
       data: {
         bookingId: data.bookingId,
         reviewerId,
-        revieweeId: data.revieweeId,
+        revieweeId,
         reviewerType: data.reviewerType,
         overallRating: data.overallRating,
         vehicleRating: data.vehicleRating || null,

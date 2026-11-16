@@ -1,0 +1,18 @@
+// Append-only trail of sensitive admin actions. Rows are never updated or
+// deleted by the application; the dashboard's audit log reads from here.
+model AuditLogs {
+  id          String      @id @default(uuid())
+  actor       Users?      @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorId     String?
+  actorName   String      @default("")
+  action      AuditAction
+  entityType  String
+  entityId    String      @default("")
+  entityLabel String      @default("")
+  details     String      @default("")
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+}

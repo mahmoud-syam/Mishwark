@@ -9,8 +9,12 @@ const longitude = z.number().min(-180).max(180);
  * geocodes. Exactly one shape is accepted per endpoint; the union with a
  * refinement keeps "both supplied" from silently winning.
  */
+// `label` is an optional human-readable name for a coordinate pair (e.g. the
+// place a user picked on the map) and is what gets stored on the booking.
+const label = z.string().trim().min(1).max(200).optional();
+
 const locationInput = z.union([
-  z.object({ latitude, longitude }),
+  z.object({ latitude, longitude, label }),
   z.object({ startLat: latitude, startLng: longitude }),
   z.object({ lat: latitude, lng: longitude }),
   z.string().min(1).max(200),

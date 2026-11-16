@@ -17,7 +17,10 @@
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run api-docs:check && npm test && npm run smoke",
     "seed": "npx tsx prisma/seed/seed.ts",
-    "seed:api": "npx tsx prisma/seed/api_seed_roles.ts"
+    "seed:api": "npx tsx prisma/seed/api_seed_roles.ts",
+    "seed:demo": "npx tsx prisma/seed/demo.ts",
+    "dashboard:dev": "npm --prefix dashboard run dev",
+    "dashboard:build": "npm --prefix dashboard ci && npm --prefix dashboard run build"
   },
   "prisma": {
     "seed": "tsx prisma/seed/seed.ts"

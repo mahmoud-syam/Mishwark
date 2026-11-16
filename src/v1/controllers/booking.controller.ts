@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
-import BookingService, { ListBookingsParams } from "../services/booking.service";
+import BookingService, { ListBookingsParams, bookingPartyOf } from "../services/booking.service";
+import prismaClient from "../utils/prismaClientHelper";
+import { ForbiddenException, NotFoundException } from "../utils/errors";
 import PricingService from "../services/pricing.service";
 import MapsService from "../services/maps.service";
 import { queryNum, queryStr } from "../utils/routeParams";
@@ -76,6 +78,11 @@ export const getBookings = async (req: Request, res: Response) => {
 export const getBookingById = async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const booking = await BookingService.getBookingById(id);
+  // Only the booking's customer, its assigned driver or an admin may see it.
+  // Others get the same 404 as a missing booking, so ids can't be probed.
+  if ((await bookingPartyOf(booking, req.user)) === null) {
+    throw new NotFoundException(`Booking with ID ${id} not found`);
+  }
   res.status(200).json({
     success: true,
     data: booking,
@@ -104,6 +111,11 @@ export const updateTripStatus = async (req: Request, res: Response) => {
 
 export const cancelBooking = async (req: Request, res: Response) => {
   const id = req.params.id as string;
+  const existing = await prismaClient.bookings.findUnique({ where: { id }, select: { customerId: true, driverId: true } });
+  const party = existing ? await bookingPartyOf(existing, req.user) : null;
+  if (party === null) throw new NotFoundException(`Booking with ID ${id} not found`);
+  // Drivers can't cancel a customer's booking; admins and the customer can.
+  if (party === "driver") throw new ForbiddenException("Drivers cannot cancel bookings");
   const result = await BookingService.cancelBooking(id, req.user?.id);
   res.status(200).json({
     success: true,

@@ -40,7 +40,7 @@ export interface GeocodeResult {
 }
 
 export type LocationInput =
-  | { latitude: number; longitude: number }
+  | { latitude: number; longitude: number; label?: string }
   | { startLat: number; startLng: number }
   | { lat: number; lng: number }
   | string;
