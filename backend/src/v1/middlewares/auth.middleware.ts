@@ -49,6 +49,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
                 email: true,
                 phoneNumber: true,
                 isDeleted: true,
+                disabledAt: true,
                 tokenVersion: true,
                 role: {
                     select: {
@@ -60,7 +61,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
             },
         });
 
-        if (!user || user.isDeleted || user.tokenVersion !== decodedToken.user.tokenVersion) {
+        if (!user || user.isDeleted || user.disabledAt || user.tokenVersion !== decodedToken.user.tokenVersion) {
             throw new UnauthorizedException("Session invalidated. Please login again.", ErrorCodes.UNAUTHORIZED);
         }
 

@@ -52,7 +52,7 @@ import {
   cancelMaintenance,
 } from "../controllers/fleet.controller";
 import { PERMISSIONS } from "../constants/roles";
-import { createTeamMember, listTeam, requireSuperAdmin, resetTeamMember2FA, resetTeamMemberPassword, setTeamMemberRole } from "../controllers/team.controller";
+import { createTeamMember, disableTeamMember, enableTeamMember, listTeam, requireSuperAdmin, resetTeamMember2FA, resetTeamMemberPassword, setTeamMemberRole } from "../controllers/team.controller";
 
 const adminRouter: Router = Router();
 
@@ -109,6 +109,8 @@ adminRouter.post("/team", requireSuperAdmin, errorHandler(createTeamMember));
 adminRouter.post("/team/:id/reset-2fa", requireSuperAdmin, errorHandler(resetTeamMember2FA));
 adminRouter.post("/team/:id/reset-password", requireSuperAdmin, errorHandler(resetTeamMemberPassword));
 adminRouter.patch("/team/:id/role", requireSuperAdmin, errorHandler(setTeamMemberRole));
+adminRouter.post("/team/:id/disable", requireSuperAdmin, errorHandler(disableTeamMember));
+adminRouter.post("/team/:id/enable", requireSuperAdmin, errorHandler(enableTeamMember));
 
 // Changing business settings needs settings:manage (Super Admin by default).
 adminRouter.put("/settings", requirePermission(PERMISSIONS.SETTINGS_MANAGE), errorHandler(updateSystemSettings));

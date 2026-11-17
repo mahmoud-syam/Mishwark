@@ -142,7 +142,10 @@ describe('Tier 2: Booking, payment, driver & OTP rules', () => {
     for (let i = 0; i < 5; i++) {
       expect((await ctx.api.post('/auth/otp/verify', { phoneNumber: phone, code: '9' + String(i).repeat(3) === first.body.dev_otp ? '1111' : '9' + String(i).repeat(3) })).status).toBe(400);
     }
-    const late = await ctx.api.post('/auth/otp/verify', { phoneNumber: phone, code: first.body.dev_otp });
+    // This device is now blocked for that phone (sign-in guard)...
+    expect((await ctx.api.post('/auth/otp/verify', { phoneNumber: phone, code: first.body.dev_otp })).status).toBe(429);
+    // ...and from any device the code itself is dead.
+    const late = await ctx.api.post('/auth/otp/verify', { phoneNumber: phone, code: first.body.dev_otp }, { headers: { 'X-Forwarded-For': '198.51.100.44' } });
     expect(late.status).toBe(400);
     expect(String(late.body.message)).toContain('expired');
   });

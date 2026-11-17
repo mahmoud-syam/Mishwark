@@ -282,5 +282,6 @@ export interface TeamMember {
   twoFactorEnabled: boolean;
   mustChangePassword: boolean;
   lastLoginAt: string | null;
+  disabledAt: string | null;
   createdAt: string;
 }

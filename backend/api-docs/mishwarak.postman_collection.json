@@ -185,7 +185,7 @@
                 }
               }
             },
-            "description": "Email/password sign-in, step 1. Never returns a session: it answers with the next step and a `loginToken` (signed, 5 minutes): `passwordChangeRequired` (temporary password: call /auth/set-password), `twoFactorSetupRequired` (with `secret` + `qrCodeDataURL`: call /auth/verify-2fa-setup) or `twoFactorRequired` (call /auth/verify-2fa). 400 on a wrong email or password."
+            "description": "Email/password sign-in, step 1. Limits: 5 wrong passwords for one account from one device (IP) block that device from that account for 15 minutes (429, `errors.retryAfterSeconds`); the owner on another device is unaffected. 403 for a disabled account. Never returns a session: it answers with the next step and a `loginToken` (signed, 5 minutes): `passwordChangeRequired` (temporary password: call /auth/set-password), `twoFactorSetupRequired` (with `secret` + `qrCodeDataURL`: call /auth/verify-2fa-setup) or `twoFactorRequired` (call /auth/verify-2fa). 400 on a wrong email or password."
           },
           "response": [
             {
@@ -5807,6 +5807,90 @@
               }
             },
             "description": "Changes a member's role (ADMIN or SUPER_ADMIN). Signs them out so the new permissions apply. Super Admin only; not on your own account. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/team/:id/disable",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/team/:id/disable",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "team",
+                ":id",
+                "disable"
+              ]
+            },
+            "description": "Disables a team account (someone left): signed out everywhere at once, can't sign in (403 \"This account is disabled\"), history and audit entries kept. Any account but your own, Super Admins included. Super Admin only. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/team/:id/enable",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/team/:id/enable",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "team",
+                ":id",
+                "enable"
+              ]
+            },
+            "description": "Enables a disabled team account again; the member signs in as before (password + 2FA). Super Admin only. Audit-logged."
           },
           "response": [],
           "event": [

@@ -121,6 +121,18 @@ Found while building the Team page and fixed on `feature/team-accounts`.
 | F-36 | High | `PUT /auth/change-password/:userId` and `POST /auth/reset-2fa/:userId` let any admin holding `user_password:manage` reset any account, including the Super Admin's. No password rules (an empty or 1-character password was accepted). | Dashboard accounts are reset by a Super Admin only (403); passwords need 8+ characters (422). The Team page is the place for dashboard accounts. |
 | F-37 | Low | The authenticator app showed the accounts as "ACS Portal". | Shown as "Mishwark". |
 
+### Sign-in limits & disabling accounts (2026-11-17)
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-38 | High | No limit on sign-in attempts: passwords, 2FA codes and OTP codes could be guessed without end (OTP only reset its own counter after 5). | 5 wrong attempts per device and account → that device is blocked from that account for 15 minutes (the owner elsewhere is unaffected, so nobody can lock someone out on purpose). A device failing across 30 accounts is blocked from all. Per-IP request limits on `/auth` (100/15 min) and `/auth/otp/request` (10/15 min, SMS cost). |
+| F-39 | Medium | No security headers; anyone leaving the team kept a working account (resets only). | helmet headers on every response and a strict Content-Security-Policy on the dashboard. A Super Admin can disable and re-enable team accounts (signed out at once, history kept). |
+
+Deploying behind Cloudflare Tunnel needs nothing more (`TRUST_PROXY=loopback`,
+the default). Behind another proxy set `TRUST_PROXY`, or every visitor shares
+the proxy's address and the per-IP limits hit everyone at once. Counters are
+in memory: right for one API instance.
+
 New: Team page (Super Admin only) to create dashboard accounts with a
 temporary password (changed at first sign-in, then 2FA), reset 2FA or the
 password, and change the role. Every action signs the member out and is
