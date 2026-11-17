@@ -2,7 +2,9 @@ import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
 import { api, ApiError, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { Moon, Sun } from "lucide-react";
 import { BrandMark, Button, ErrorBox } from "../components/ui";
+import { useTheme } from "../lib/theme";
 
 // Every step after the password carries the signed, short-lived loginToken.
 type LoginResponse =
@@ -37,6 +39,7 @@ const signInError = (err: unknown): string | null => {
 
 export default function Login() {
   const { me, refresh } = useAuth();
+  const { theme, toggle } = useTheme();
   const nav = useNavigate();
   const loc = useLocation();
   const from = (loc.state as { from?: string } | null)?.from || "/";
@@ -125,7 +128,16 @@ export default function Login() {
   };
 
   return (
-    <main className="page-enter flex min-h-dvh items-center justify-center px-4 py-10">
+    <main className="page-enter relative flex min-h-dvh items-center justify-center px-4 py-10">
+      <button
+        type="button"
+        onClick={toggle}
+        className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-2 text-[12px] text-cream shadow-[var(--shadow-card)] transition hover:border-gold/60 [&_svg]:size-4"
+        aria-label={theme === "dark" ? "الوضع الفاتح" : "الوضع الداكن"}
+      >
+        {theme === "dark" ? <Sun /> : <Moon />}
+        {theme === "dark" ? "الوضع الفاتح" : "الوضع الداكن"}
+      </button>
       <div className="w-full max-w-[380px] rounded-[22px] border border-line bg-surface p-7 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)]">
         <div className="mb-7 flex flex-col items-center gap-2 text-center">
           <BrandMark size={56} />
