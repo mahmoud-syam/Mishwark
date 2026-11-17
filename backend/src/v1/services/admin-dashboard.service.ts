@@ -1,0 +1,749 @@
+import prismaClient from "../utils/prismaClientHelper";
+import {
+  AuditAction,
+  BookingStatus,
+  DriverStatus,
+  PaymentMethod,
+  PaymentRecordStatus,
+  PaymentStatus,
+  Prisma,
+  ReferralStatus,
+  ReviewerType,
+  TripStatus,
+  VehicleStatus,
+} from "../../../generated/prisma";
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from "../utils/errors";
+import { isSuperAdminRole, USER_ROLES } from "../constants/roles";
+import BookingService from "./booking.service";
+import AuditService, { AuditActor } from "./audit.service";
+import PaymentService from "./payment.service";
+import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
+import {
+  addDays,
+  addMonths,
+  dateKey,
+  diffDays,
+  monthStart,
+  yearStart,
+  zonedToInstant,
+} from "../utils/businessTime";
+
+/** Bookings that represent money the business has earned or locked in. */
+const REVENUE_STATUSES: BookingStatus[] = [BookingStatus.CONFIRMED, BookingStatus.COMPLETED];
+const LIVE_TRIP_STATUSES: TripStatus[] = [TripStatus.INPROGRESS, TripStatus.ARRIVED];
+/**
+ * Thresholds (complaint rating, punctuality grace, delay alert, maintenance
+ * alert, VIP spend, deposit %) come from the Settings page: SettingsService.
+ */
+export const COMPLAINT_MAX_RATING = DEFAULT_SETTINGS.complaintMaxRating;
+
+export type AnalyticsPeriod = "day" | "month" | "year";
+
+export const bookingRef = (id: string) => `MW-${id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+
+const round = (n: number, digits = 0) => {
+  const f = 10 ** digits;
+  return Math.round(n * f) / f;
+};
+
+const vehicleName = (v: { make: string; model: string }) => `${v.make} ${v.model}`.trim();
+
+/** Inclusive [from, to] date-key range covered by an analytics period. */
+const periodRange = (period: AnalyticsPeriod, today: string) => {
+  if (period === "year") return { from: yearStart(today), to: today };
+  if (period === "month") return { from: monthStart(today), to: today };
+  return { from: today, to: today };
+};
+
+/**
+ * Chart buckets for a period: last 7 days for "day", last 6 months for
+ * "month", last 3 years for "year". Each bucket is an inclusive key range.
+ */
+const chartBuckets = (period: AnalyticsPeriod, today: string) => {
+  const buckets: { key: string; from: string; to: string }[] = [];
+  if (period === "day") {
+    for (let i = 6; i >= 0; i--) {
+      const d = addDays(today, -i);
+      buckets.push({ key: d, from: d, to: d });
+    }
+  } else if (period === "month") {
+    for (let i = 5; i >= 0; i--) {
+      const from = addMonths(today, -i);
+      buckets.push({ key: from.slice(0, 7), from, to: addDays(addMonths(from, 1), -1) });
+    }
+  } else {
+    const y = Number(today.slice(0, 4));
+    for (let i = 2; i >= 0; i--) {
+      buckets.push({ key: String(y - i), from: `${y - i}-01-01`, to: `${y - i}-12-31` });
+    }
+  }
+  return buckets;
+};
+
+const sumInBucket = <T extends { bookingDate: string }>(rows: T[], b: { from: string; to: string }, pick: (r: T) => number) =>
+  rows.filter((r) => r.bookingDate >= b.from && r.bookingDate <= b.to).reduce((s, r) => s + pick(r), 0);
+
+export interface BookOnBehalfInput {
+  customerId: string;
+  vehicleId: string;
+  driverId?: string;
+  bookingDate: string;
+  startTime: string;
+  endTime: string;
+  startPoint?: any;
+  endPoint?: any;
+  eventType?: string;
+  notes?: string;
+  priceOverride?: number;
+  markPaid?: boolean;
+  paymentMethod?: PaymentMethod;
+}
+
+export class AdminDashboardService {
+  // ---------------------------------------------------------------- overview
+  public static async overview() {
+    const cfg = await SettingsService.get();
+    const today = dateKey();
+    const yesterday = addDays(today, -1);
+    const mStart = monthStart(today);
+    const dayOfMonth = diffDays(mStart, today);
+    const lmStart = addMonths(today, -1);
+    const lmEndCap = addDays(mStart, -1);
+    const lmSpanEnd = addDays(lmStart, dayOfMonth);
+    const lmEnd = lmSpanEnd < lmEndCap ? lmSpanEnd : lmEndCap;
+    const weekStart = addDays(today, -6);
+    const now = new Date();
+    const maintenanceHorizon = new Date(now.getTime() + cfg.maintenanceAlertDays * 86_400_000);
+    const complaintsSince = new Date(now.getTime() - 7 * 86_400_000);
+
+    const [
+      todayBookings,
+      yesterdayBookings,
+      monthRevenue,
+      lastMonthRevenue,
+      vehicles,
+      todayRows,
+      weekRows,
+      maintenance,
+      complaints,
+      liveTrips,
+      pendingBookings,
+    ] = await Promise.all([
+      prismaClient.bookings.count({ where: { bookingDate: today, status: { not: BookingStatus.CANCELLED } } }),
+      prismaClient.bookings.count({ where: { bookingDate: yesterday, status: { not: BookingStatus.CANCELLED } } }),
+      prismaClient.bookings.aggregate({
+        where: { bookingDate: { gte: mStart, lte: today }, status: { in: REVENUE_STATUSES } },
+        _sum: { totalPrice: true },
+      }),
+      prismaClient.bookings.aggregate({
+        where: { bookingDate: { gte: lmStart, lte: lmEnd }, status: { in: REVENUE_STATUSES } },
+        _sum: { totalPrice: true },
+      }),
+      prismaClient.vehicles.findMany({ select: { id: true, status: true } }),
+      prismaClient.bookings.findMany({
+        where: { bookingDate: today, status: { not: BookingStatus.CANCELLED } },
+        select: { vehicleId: true },
+        distinct: ["vehicleId"],
+      }),
+      prismaClient.bookings.findMany({
+        where: { bookingDate: { gte: weekStart, lte: today }, status: { not: BookingStatus.CANCELLED } },
+        select: { vehicleId: true, bookingDate: true, status: true, totalPrice: true },
+      }),
+      prismaClient.vehicleMaintenance.findMany({
+        where: { completedDate: null, scheduledDate: { gte: new Date(now.getTime() - 86_400_000), lte: maintenanceHorizon } },
+        include: { vehicle: { select: { id: true, make: true, model: true } } },
+        orderBy: { scheduledDate: "asc" },
+      }),
+      prismaClient.reviews.findMany({
+        where: {
+          reviewerType: ReviewerType.CUSTOMER_TO_DRIVER,
+          overallRating: { lte: cfg.complaintMaxRating },
+          createdAt: { gte: complaintsSince },
+        },
+        include: { reviewee: { select: { id: true, name: true, drivers: { select: { id: true } } } } },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      }),
+      prismaClient.bookings.count({ where: { tripStatus: { in: LIVE_TRIP_STATUSES }, status: { not: BookingStatus.CANCELLED } } }),
+      prismaClient.bookings.count({ where: { status: BookingStatus.PENDING, bookingDate: { gte: today } } }),
+    ]);
+
+    const totalVehicles = vehicles.length;
+    const maintenanceVehicles = vehicles.filter((v) => v.status === VehicleStatus.MAINTENANCE).length;
+    const operational = totalVehicles - maintenanceVehicles;
+    const bookedToday = todayRows.length;
+    const usedSlots = new Set(weekRows.map((r) => `${r.vehicleId}|${r.bookingDate}`)).size;
+
+    const weeklyRevenue = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = addDays(today, -i);
+      weeklyRevenue.push({
+        date: d,
+        revenue: weekRows
+          .filter((r) => r.bookingDate === d && REVENUE_STATUSES.includes(r.status))
+          .reduce((s, r) => s + r.totalPrice, 0),
+      });
+    }
+
+    const alerts = [
+      ...maintenance.map((m) => ({
+        type: "maintenance" as const,
+        severity: "warning" as const,
+        entityId: m.vehicle.id,
+        vehicleName: vehicleName(m.vehicle),
+        maintenanceType: m.maintenanceType,
+        daysUntil: Math.max(0, diffDays(today, dateKey(m.scheduledDate))),
+      })),
+      ...complaints.map((r) => ({
+        type: "complaint" as const,
+        severity: "danger" as const,
+        entityId: r.reviewee.drivers?.id ?? r.reviewee.id,
+        driverName: r.reviewee.name,
+        rating: r.overallRating,
+        bookingId: r.bookingId,
+      })),
+    ];
+
+    return {
+      today,
+      kpis: {
+        todayBookings,
+        yesterdayBookings,
+        monthRevenue: monthRevenue._sum.totalPrice ?? 0,
+        lastMonthRevenue: lastMonthRevenue._sum.totalPrice ?? 0,
+        totalVehicles,
+        availableVehicles: Math.max(0, operational - bookedToday),
+        bookedVehicles: bookedToday,
+        maintenanceVehicles,
+        occupancyRate: operational > 0 ? round((usedSlots / (operational * 7)) * 100) : 0,
+        liveTrips,
+        pendingBookings,
+      },
+      weeklyRevenue,
+      alerts,
+    };
+  }
+
+  // ------------------------------------------------------- drivers summary
+  public static async driversSummary(limit = 3) {
+    const cfg = await SettingsService.get();
+    const today = dateKey();
+    const mStart = monthStart(today);
+    const drivers = await prismaClient.drivers.findMany({
+      select: { id: true, fullName: true, status: true, statusSetByAdmin: true, rating: true, userId: true, user: { select: { name: true } } },
+    });
+    if (drivers.length === 0) return [];
+
+    const ids = drivers.map((d) => d.id);
+    const userIds = drivers.map((d) => d.userId);
+
+    const [monthAgg, completedAgg, ratingAgg, complaintAgg] = await Promise.all([
+      prismaClient.bookings.groupBy({
+        by: ["driverId"],
+        where: { driverId: { in: ids }, bookingDate: { gte: mStart, lte: today }, status: { in: REVENUE_STATUSES } },
+        _sum: { totalPrice: true },
+        _count: { _all: true },
+      }),
+      prismaClient.bookings.groupBy({
+        by: ["driverId"],
+        where: { driverId: { in: ids }, status: BookingStatus.COMPLETED },
+        _count: { _all: true },
+      }),
+      prismaClient.reviews.groupBy({
+        by: ["revieweeId"],
+        where: { revieweeId: { in: userIds }, reviewerType: ReviewerType.CUSTOMER_TO_DRIVER },
+        _avg: { overallRating: true },
+        _count: { _all: true },
+      }),
+      prismaClient.reviews.groupBy({
+        by: ["revieweeId"],
+        where: {
+          revieweeId: { in: userIds },
+          reviewerType: ReviewerType.CUSTOMER_TO_DRIVER,
+          overallRating: { lte: cfg.complaintMaxRating },
+        },
+        _count: { _all: true },
+      }),
+    ]);
+
+    return drivers
+      .map((d) => {
+        const m = monthAgg.find((a) => a.driverId === d.id);
+        const r = ratingAgg.find((a) => a.revieweeId === d.userId);
+        return {
+          id: d.id,
+          name: d.fullName || d.user.name,
+          status: d.status,
+          statusLocked: d.statusSetByAdmin,
+          rating: round(r?._avg.overallRating ?? d.rating ?? 5, 1),
+          reviewCount: r?._count._all ?? 0,
+          complaints: complaintAgg.find((a) => a.revieweeId === d.userId)?._count._all ?? 0,
+          monthRevenue: m?._sum.totalPrice ?? 0,
+          monthTrips: m?._count._all ?? 0,
+          totalTrips: completedAgg.find((a) => a.driverId === d.id)?._count._all ?? 0,
+        };
+      })
+      .sort((a, b) => b.monthRevenue - a.monthRevenue || b.totalTrips - a.totalTrips)
+      .slice(0, limit);
+  }
+
+  // ----------------------------------------------------------- day details
+  public static async day(date: string) {
+    const [bookings, totalVehicles, drivers] = await Promise.all([
+      prismaClient.bookings.findMany({
+        where: { bookingDate: date, status: { not: BookingStatus.CANCELLED } },
+        orderBy: { startTime: "asc" },
+        include: {
+          customer: { select: { id: true, name: true, phoneNumber: true } },
+          vehicle: { select: { id: true, make: true, model: true, plateNumber: true, category: true } },
+          driver: { select: { id: true, fullName: true } },
+          payments: {
+            select: { id: true, amount: true, paymentMethod: true, status: true, createdAt: true },
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      }),
+      prismaClient.vehicles.count(),
+      prismaClient.drivers.findMany({
+        select: { id: true, fullName: true, status: true },
+        orderBy: { fullName: "asc" },
+      }),
+    ]);
+
+    return {
+      date,
+      stats: {
+        total: bookings.length,
+        pending: bookings.filter((b) => b.status === BookingStatus.PENDING).length,
+        expectedRevenue: bookings.reduce((s, b) => s + b.totalPrice, 0),
+        vehiclesUsed: new Set(bookings.map((b) => b.vehicleId)).size,
+        totalVehicles,
+      },
+      bookings: bookings.map((b) => ({
+        id: b.id,
+        ref: bookingRef(b.id),
+        status: b.status,
+        tripStatus: b.tripStatus,
+        startTime: b.startTime,
+        endTime: b.endTime,
+        startPoint: b.startPoint,
+        endPoint: b.endPoint,
+        eventType: b.eventType,
+        packageId: b.packageId,
+        totalPrice: b.totalPrice,
+        packageDiscount: b.packageDiscount,
+        referralDiscount: b.referralDiscount,
+        paymentStatus: b.paymentStatus,
+        depositRequired: b.depositRequired,
+        paid: b.depositPaid,
+        payments: b.payments,
+        customer: b.customer,
+        vehicle: { ...b.vehicle, name: vehicleName(b.vehicle) },
+        driver: b.driver,
+      })),
+      drivers: drivers.map((d) => {
+        const trips = bookings.filter((b) => b.driverId === d.id).map((b) => b.startTime);
+        return { id: d.id, name: d.fullName, status: d.status, trips };
+      }),
+    };
+  }
+
+  // ------------------------------------------------------------ live trips
+  public static async liveTrips() {
+    const cfg = await SettingsService.get();
+    const rows = await prismaClient.bookings.findMany({
+      where: { tripStatus: { in: LIVE_TRIP_STATUSES }, status: { not: BookingStatus.CANCELLED } },
+      orderBy: [{ bookingDate: "asc" }, { startTime: "asc" }],
+      include: {
+        customer: { select: { id: true, name: true, phoneNumber: true } },
+        vehicle: { select: { id: true, make: true, model: true, plateNumber: true } },
+        driver: {
+          select: {
+            id: true,
+            fullName: true,
+            user: { select: { phoneNumber: true } },
+            phoneNumbers: { select: { number: true }, take: 1 },
+          },
+        },
+      },
+    });
+
+    const now = Date.now();
+    return rows.map((b) => {
+      const scheduledStart = zonedToInstant(b.bookingDate, b.startTime).getTime();
+      const scheduledEnd = zonedToInstant(b.bookingDate, b.endTime || b.startTime).getTime();
+      const plannedMinutes =
+        b.durationMinutes > 0 ? b.durationMinutes : Math.max(15, (scheduledEnd - scheduledStart) / 60_000);
+      const startedAt = b.tripStartedAt?.getTime() ?? scheduledStart;
+      const expectedEnd = startedAt + plannedMinutes * 60_000;
+      const scheduledArrival = scheduledStart + plannedMinutes * 60_000;
+      const elapsedMinutes = Math.max(0, (now - startedAt) / 60_000);
+      const remainingMinutes = Math.max(0, (expectedEnd - now) / 60_000);
+      const delayMinutes = Math.max(0, (Math.max(expectedEnd, now) - scheduledArrival) / 60_000);
+      const total = elapsedMinutes + remainingMinutes;
+
+      return {
+        id: b.id,
+        ref: bookingRef(b.id),
+        bookingDate: b.bookingDate,
+        tripStatus: b.tripStatus,
+        startPoint: b.startPoint,
+        endPoint: b.endPoint,
+        customer: b.customer,
+        vehicle: { ...b.vehicle, name: vehicleName(b.vehicle) },
+        driver: {
+          id: b.driver.id,
+          name: b.driver.fullName,
+          phone: b.driver.user?.phoneNumber || b.driver.phoneNumbers[0]?.number || null,
+        },
+        startedAt: new Date(startedAt).toISOString(),
+        startedOnRecord: Boolean(b.tripStartedAt),
+        elapsedMinutes: Math.round(elapsedMinutes),
+        remainingMinutes: Math.round(remainingMinutes),
+        delayMinutes: Math.round(delayMinutes),
+        isDelayed: delayMinutes >= cfg.delayAlertMinutes,
+        progress: total > 0 ? round(Math.min(1, elapsedMinutes / total), 3) : 0,
+      };
+    });
+  }
+
+  // ------------------------------------------------------ driver analytics
+  public static async driverAnalytics(driverId: string, period: AnalyticsPeriod) {
+    const cfg = await SettingsService.get();
+    const driver = await prismaClient.drivers.findUnique({
+      where: { id: driverId },
+      select: { id: true, fullName: true, status: true, commissionRate: true, userId: true, user: { select: { name: true } } },
+    });
+    if (!driver) throw new NotFoundException(`Driver with ID ${driverId} not found`);
+
+    const today = dateKey();
+    const range = periodRange(period, today);
+    const buckets = chartBuckets(period, today);
+    const rate = driver.commissionRate / 100;
+
+    const [earning, allCount, ratingAgg, complaints, punctualityRows, recent] = await Promise.all([
+      prismaClient.bookings.findMany({
+        where: { driverId, status: { in: REVENUE_STATUSES }, bookingDate: { lte: today } },
+        select: { bookingDate: true, totalPrice: true },
+      }),
+      prismaClient.bookings.count({ where: { driverId, bookingDate: { gte: range.from, lte: range.to }, status: { not: BookingStatus.CANCELLED } } }),
+      prismaClient.reviews.aggregate({
+        where: { revieweeId: driver.userId, reviewerType: ReviewerType.CUSTOMER_TO_DRIVER },
+        _avg: { overallRating: true },
+        _count: { _all: true },
+      }),
+      prismaClient.reviews.count({
+        where: { revieweeId: driver.userId, reviewerType: ReviewerType.CUSTOMER_TO_DRIVER, overallRating: { lte: cfg.complaintMaxRating } },
+      }),
+      prismaClient.bookings.findMany({
+        where: { driverId, tripStartedAt: { not: null } },
+        select: { bookingDate: true, startTime: true, tripStartedAt: true },
+      }),
+      prismaClient.bookings.findMany({
+        where: { driverId, status: { in: REVENUE_STATUSES }, bookingDate: { lte: today } },
+        orderBy: [{ bookingDate: "desc" }, { startTime: "desc" }],
+        take: 5,
+        include: { customer: { select: { id: true, name: true } } },
+      }),
+    ]);
+
+    const inRange = earning.filter((r) => r.bookingDate >= range.from && r.bookingDate <= range.to);
+    const periodIncome = round(inRange.reduce((s, r) => s + r.totalPrice, 0), 2);
+    const lifetimeIncome = round(earning.reduce((s, r) => s + r.totalPrice, 0), 2);
+    const onTime = punctualityRows.filter(
+      (r) => r.tripStartedAt!.getTime() <= zonedToInstant(r.bookingDate, r.startTime).getTime() + cfg.punctualityGraceMinutes * 60_000
+    ).length;
+
+    return {
+      driver: { id: driver.id, name: driver.fullName || driver.user.name, status: driver.status, commissionRate: driver.commissionRate },
+      period,
+      range,
+      periodStats: {
+        trips: allCount,
+        driverIncome: periodIncome,
+        // To the piaster, net = income - share, so the two always add up and
+        // match GET /driver/stats in the driver app.
+        companyShare: round(periodIncome * rate, 2),
+        driverNet: round(periodIncome - round(periodIncome * rate, 2), 2),
+      },
+      lifetime: {
+        trips: earning.length,
+        driverIncome: lifetimeIncome,
+        companyShare: round(lifetimeIncome * rate, 2),
+        averageTripValue: earning.length ? round(lifetimeIncome / earning.length) : 0,
+      },
+      quality: {
+        rating: ratingAgg._avg.overallRating != null ? round(ratingAgg._avg.overallRating, 1) : null,
+        reviewCount: ratingAgg._count._all,
+        complaints,
+        punctualityRate: punctualityRows.length ? round((onTime / punctualityRows.length) * 100) : null,
+      },
+      chart: buckets.map((b) => {
+        const income = round(sumInBucket(earning, b, (r) => r.totalPrice), 2);
+        return { key: b.key, income, share: round(income * rate, 2) };
+      }),
+      recentTrips: recent.map((b) => ({
+        id: b.id,
+        ref: bookingRef(b.id),
+        bookingDate: b.bookingDate,
+        customer: b.customer,
+        value: b.totalPrice,
+        share: round(b.totalPrice * rate),
+        status: b.status,
+      })),
+    };
+  }
+
+  public static async setCommission(driverId: string, rate: number, actor: AuditActor) {
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+      throw new BadRequestException("commissionRate must be between 0 and 100");
+    }
+    const before = await prismaClient.drivers.findUnique({ where: { id: driverId }, select: { commissionRate: true, fullName: true } });
+    if (!before) throw new NotFoundException(`Driver with ID ${driverId} not found`);
+
+    const updated = await prismaClient.drivers.update({
+      where: { id: driverId },
+      data: { commissionRate: rate },
+      select: { id: true, fullName: true, commissionRate: true },
+    });
+    await AuditService.record(actor, {
+      action: AuditAction.UPDATE,
+      entityType: "driver",
+      entityId: driverId,
+      entityLabel: `سائق: ${before.fullName}`,
+      details: `commission: ${before.commissionRate}% → ${rate}%`,
+    });
+    return updated;
+  }
+
+  // ---------------------------------------------------- customer analytics
+  public static async customerAnalytics(customerId: string, period: AnalyticsPeriod) {
+    const cfg = await SettingsService.get();
+    const customer = await prismaClient.users.findFirst({
+      where: { id: customerId, isDeleted: false },
+      select: { id: true, name: true, phoneNumber: true, email: true, createdAt: true, customerRating: true, role: { select: { name: true } } },
+    });
+    if (!customer) throw new NotFoundException(`Customer with ID ${customerId} not found`);
+
+    const today = dateKey();
+    const range = periodRange(period, today);
+    const buckets = chartBuckets(period, today);
+
+    const [bookings, wallet, referralsInvited, referralsConverted] = await Promise.all([
+      prismaClient.bookings.findMany({
+        where: { customerId },
+        orderBy: [{ bookingDate: "desc" }, { startTime: "desc" }],
+        select: {
+          id: true,
+          bookingDate: true,
+          status: true,
+          totalPrice: true,
+          vehicle: { select: { make: true, model: true } },
+        },
+      }),
+      prismaClient.walletTransactions.aggregate({ where: { userId: customerId }, _sum: { amount: true } }),
+      prismaClient.referrals.count({ where: { referrerId: customerId } }),
+      prismaClient.referrals.count({ where: { referrerId: customerId, status: ReferralStatus.COMPLETED } }),
+    ]);
+
+    // Money counts once the trip date has arrived; upcoming confirmed bookings
+    // still show in the history list but not in spend totals.
+    const spending = bookings.filter((b) => REVENUE_STATUSES.includes(b.status) && b.bookingDate <= today);
+    const lifetimeSpend = spending.reduce((s, b) => s + b.totalPrice, 0);
+    const inRange = (b: { bookingDate: string }) => b.bookingDate >= range.from && b.bookingDate <= range.to;
+
+    return {
+      customer: {
+        id: customer.id,
+        name: customer.name,
+        phoneNumber: customer.phoneNumber,
+        email: customer.email,
+        memberSince: customer.createdAt,
+        rating: customer.customerRating,
+        isVip: lifetimeSpend >= cfg.vipSpendThreshold,
+      },
+      period,
+      range,
+      periodStats: {
+        bookings: bookings.filter((b) => inRange(b) && b.status !== BookingStatus.CANCELLED).length,
+        spend: spending.filter(inRange).reduce((s, b) => s + b.totalPrice, 0),
+      },
+      lifetime: {
+        spend: lifetimeSpend,
+        bookings: bookings.filter((b) => b.status !== BookingStatus.CANCELLED).length,
+        averageBookingValue: spending.length ? round(lifetimeSpend / spending.length) : 0,
+        cancelled: bookings.filter((b) => b.status === BookingStatus.CANCELLED).length,
+        walletBalance: wallet._sum.amount ?? 0,
+      },
+      referrals: { invited: referralsInvited, converted: referralsConverted },
+      chart: buckets.map((b) => ({ key: b.key, spend: sumInBucket(spending, b, (r) => r.totalPrice) })),
+      recentBookings: bookings.slice(0, 5).map((b) => ({
+        id: b.id,
+        ref: bookingRef(b.id),
+        bookingDate: b.bookingDate,
+        vehicle: vehicleName(b.vehicle),
+        value: b.totalPrice,
+        status: b.status,
+      })),
+    };
+  }
+
+  // --------------------------------------------------------- customer CRUD
+  public static async searchCustomers(search: string, limit = 8) {
+    const q = search.trim();
+    if (!q) return [];
+    const digits = q.replace(/\D/g, "");
+    const or: Prisma.UsersWhereInput[] = [{ name: { contains: q, mode: "insensitive" } }];
+    if (digits.length >= 3) or.push({ phoneNumber: { contains: digits.replace(/^0/, "") } });
+
+    const users = await prismaClient.users.findMany({
+      where: { isDeleted: false, role: { name: USER_ROLES.CUSTOMER }, OR: or },
+      take: limit,
+      orderBy: [{ bookings: { _count: "desc" } }, { name: "asc" }],
+      select: { id: true, name: true, phoneNumber: true, _count: { select: { bookings: true } } },
+    });
+    return users.map((u) => ({ id: u.id, name: u.name, phoneNumber: u.phoneNumber, bookingsCount: u._count.bookings }));
+  }
+
+  public static async quickCreateCustomer(input: { name: string; phoneNumber: string }, actor: AuditActor) {
+    const phone = input.phoneNumber.trim();
+    const existing = await prismaClient.users.findUnique({ where: { phoneNumber: phone } });
+    if (existing) throw new ConflictException("A user with this phone number already exists");
+
+    const role = await prismaClient.role.findUnique({ where: { name: USER_ROLES.CUSTOMER } });
+    if (!role) throw new NotFoundException("Customer role is not seeded");
+
+    const user = await prismaClient.users.create({
+      data: { name: input.name.trim(), phoneNumber: phone, roleId: role.id },
+      select: { id: true, name: true, phoneNumber: true },
+    });
+    await AuditService.record(actor, {
+      action: AuditAction.CREATE,
+      entityType: "customer",
+      entityId: user.id,
+      entityLabel: `عميل: ${user.name}`,
+      details: "حساب جديد من لوحة التحكم",
+    });
+    return { ...user, bookingsCount: 0 };
+  }
+
+  // ------------------------------------------------------ book on behalf
+  public static async bookOnBehalf(input: BookOnBehalfInput, actor: AuditActor & { role?: { name?: string } | null }) {
+    const customer = await prismaClient.users.findFirst({
+      where: { id: input.customerId, isDeleted: false },
+      select: { id: true, name: true },
+    });
+    if (!customer) throw new NotFoundException(`Customer with ID ${input.customerId} not found`);
+
+    if (input.priceOverride !== undefined && !isSuperAdminRole(actor.role?.name)) {
+      throw new ForbiddenException("Only a Super Admin can override the computed price");
+    }
+
+    const booking = await BookingService.createBooking(
+      {
+        customerId: input.customerId,
+        vehicleId: input.vehicleId,
+        driverId: input.driverId,
+        bookingDate: input.bookingDate,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        startPoint: input.startPoint,
+        endPoint: input.endPoint,
+        eventType: input.eventType,
+        notes: input.notes,
+      },
+      actor
+    );
+
+    const computedPrice = booking.totalPrice;
+    const finalPrice = input.priceOverride ?? computedPrice;
+    const data: Prisma.BookingsUpdateInput = { status: BookingStatus.CONFIRMED };
+
+    if (input.priceOverride !== undefined && input.priceOverride !== computedPrice) {
+      data.totalPrice = finalPrice;
+      // An overridden price replaces any discount that was computed.
+      data.packageDiscount = 0;
+      data.referralDiscount = 0;
+      const { depositRate } = await SettingsService.get();
+      data.depositRequired = Math.round(finalPrice * (depositRate / 100) * 100) / 100;
+      data.notes = [booking.notes, `[price override: ${computedPrice} → ${finalPrice}]`].filter(Boolean).join("\n");
+    }
+
+    const updated = await prismaClient.$transaction(async (tx) => {
+      const b = await tx.bookings.update({ where: { id: booking.id }, data });
+      if (input.markPaid) {
+        await tx.payments.create({
+          data: {
+            bookingId: booking.id,
+            userId: input.customerId,
+            amount: finalPrice,
+            paymentMethod: input.paymentMethod ?? PaymentMethod.CASH,
+            status: PaymentRecordStatus.SUCCESS,
+            paidAt: new Date(),
+            transactionRef: `ADMIN-${actor.id.slice(0, 8)}`,
+          },
+        });
+      }
+      return b;
+    });
+    if (input.markPaid) {
+      // Same path as any confirmed payment: sets depositPaid / paymentStatus.
+      await PaymentService.recalculateBookingPaymentStatus(booking.id);
+    }
+    const final = await prismaClient.bookings.findUniqueOrThrow({ where: { id: booking.id } });
+
+    await AuditService.record(actor, {
+      action: AuditAction.CREATE,
+      entityType: "booking",
+      entityId: booking.id,
+      entityLabel: `حجز #${bookingRef(booking.id)} (نيابة عن عميل)`,
+      details: [
+        customer.name,
+        input.priceOverride !== undefined && input.priceOverride !== computedPrice ? `price: ${computedPrice} → ${finalPrice}` : "",
+        input.markPaid ? "مدفوع مقدمًا" : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    });
+
+    void updated;
+    return { ...final, ref: bookingRef(final.id), computedPrice };
+  }
+
+  // ------------------------------------------------------- fleet pricing
+  public static async updateVehicle(
+    vehicleId: string,
+    patch: { basePrice?: number; pricePerKm?: number; pricePerHour?: number; status?: VehicleStatus },
+    actor: AuditActor
+  ) {
+    const before = await prismaClient.vehicles.findUnique({ where: { id: vehicleId } });
+    if (!before) throw new NotFoundException(`Vehicle with ID ${vehicleId} not found`);
+
+    const updated = await prismaClient.vehicles.update({ where: { id: vehicleId }, data: patch });
+    const details = AuditService.diff(
+      { base_price: before.basePrice, price_per_km: before.pricePerKm, price_per_hour: before.pricePerHour, status: before.status },
+      { base_price: patch.basePrice, price_per_km: patch.pricePerKm, price_per_hour: patch.pricePerHour, status: patch.status }
+    );
+    if (details) {
+      await AuditService.record(actor, {
+        action: AuditAction.UPDATE,
+        entityType: "vehicle",
+        entityId: vehicleId,
+        entityLabel: `عربية: ${vehicleName(before)}`,
+        details,
+      });
+    }
+    return updated;
+  }
+
+  /** Drivers that can be assigned to a new booking, for the booking form. */
+  public static async assignableDrivers() {
+    return prismaClient.drivers.findMany({
+      where: { status: { in: [DriverStatus.ACTIVE, DriverStatus.ONTRIP] } },
+      select: { id: true, fullName: true, status: true },
+      orderBy: { fullName: "asc" },
+    });
+  }
+}
+
+export default AdminDashboardService;
