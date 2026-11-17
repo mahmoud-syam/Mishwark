@@ -107,6 +107,11 @@ jobs:
           if [ -n "$TUNNEL_TOKEN" ] && [ -z "$TOKEN" ]; then
             echo "::error::CLOUDFLARE_TUNNEL_TOKEN doesn't contain a tunnel token (it starts with eyJ)."; exit 1
           fi
+          if [ -n "$TOKEN" ]; then
+            # Safe diagnostics: length and the tunnel id inside the token (not the secret part).
+            echo "Token length: ${#TOKEN}"
+            echo "Tunnel id in token: $(printf '%s' "$TOKEN" | base64 -d 2>/dev/null | grep -oE '"t":"[^"]+"' || echo 'unreadable (token incomplete?)')"
+          fi
           if [ -n "$TOKEN" ] && [ -n "$FIXED_URL" ]; then
             URL="${FIXED_URL%/}"
             echo "::add-mask::$TOKEN"
