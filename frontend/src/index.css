@@ -25,7 +25,8 @@
   --color-wine: var(--c-danger);        /* danger borders/backgrounds */
   --color-wine-deep: var(--c-danger-deep);
   --color-rose: var(--c-danger-text);
-  --color-blush: var(--c-danger-text);
+  --color-blush: var(--c-danger-soft);
+  --color-on-accent: var(--c-on-accent); /* text on gold/coral fills */
   --color-mint: var(--c-success);
 
   --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
@@ -53,30 +54,35 @@
   --c-danger: #e5484d;
   --c-danger-deep: #b8333b;
   --c-danger-text: #cf3a40;
+  --c-danger-soft: #cf3a40;
+  --c-on-accent: #ffffff;
   --c-success: #1f9d68;
   --c-sidebar: #1f1d5c;
   --shadow-card: 0 10px 30px -18px rgba(31, 29, 92, 0.28);
 }
 
 :root[data-theme="dark"] {
+  /* The original Mishwark dark palette (gold, wine, cream). */
   color-scheme: dark;
-  --c-ink: #0f1026;
-  --c-surface: #17183b;
-  --c-raised: #1f2149;
-  --c-raised-2: #282a58;
-  --c-line: #2d2f5e;
-  --c-muted: #9a9dc2;
-  --c-text: #f1f1fa;
-  --c-accent: #f58a7f;
-  --c-accent-deep: #e8665c;
-  --c-navy: #8f8ce6;
-  --c-navy-soft: #5d5aa8;
-  --c-amber: #f2b357;
-  --c-danger: #e5484d;
-  --c-danger-deep: #8b2e3a;
-  --c-danger-text: #f19aa1;
-  --c-success: #4cc38a;
-  --c-sidebar: #0a0b1d;
+  --c-ink: #14151f;
+  --c-surface: #1d1f2b;
+  --c-raised: #262838;
+  --c-raised-2: #2f3244;
+  --c-line: #33354a;
+  --c-muted: #9496a6;
+  --c-text: #f3efe4;
+  --c-accent: #c9a24b;
+  --c-accent-deep: #8a6b23;
+  --c-on-accent: #14151f;
+  --c-navy: #8b2e3a;      /* wine: icon circles, highlighted bar, busy days */
+  --c-navy-soft: #c9a24b; /* gold: chart bars */
+  --c-amber: #d9893b;
+  --c-danger: #8b2e3a;
+  --c-danger-deep: #4a1620;
+  --c-danger-text: #d98a95;
+  --c-danger-soft: #f0c4cb;
+  --c-success: #5fae7f;
+  --c-sidebar: #101119;
   --shadow-card: none;
 }
 

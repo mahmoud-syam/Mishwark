@@ -132,7 +132,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         </button>
 
         <div className="mt-3 flex items-center gap-3 rounded-2xl bg-white/8 p-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-linear-135 from-gold to-gold-deep text-[12px] font-bold text-white">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-linear-135 from-gold to-gold-deep text-[12px] font-bold text-on-accent">
             {initials(me?.name ?? "")}
           </span>
           <span className="flex min-w-0 flex-1 flex-col">
@@ -160,7 +160,7 @@ function NavItem({ item }: { item: Item }) {
           cx(
             "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition [&_svg]:size-[18px]",
             isActive
-              ? "bg-linear-to-l from-gold to-gold-deep font-bold text-white shadow-[0_10px_22px_-12px_var(--color-gold)]"
+              ? "bg-linear-to-l from-gold to-gold-deep dark:to-gold font-bold text-on-accent shadow-[0_10px_22px_-12px_var(--color-gold)]"
               : "text-white/75 hover:bg-white/8 hover:text-white"
           )
         }
@@ -168,7 +168,7 @@ function NavItem({ item }: { item: Item }) {
         {item.icon}
         <span className="flex-1">{item.label}</span>
         {!!item.badge && (
-          <span className="flex min-w-5 items-center justify-center rounded-full bg-white/90 px-1.5 text-[10px] font-bold text-navy dark:bg-gold dark:text-white">{item.badge}</span>
+          <span className="flex min-w-5 items-center justify-center rounded-full bg-white/90 px-1.5 text-[10px] font-bold text-navy dark:bg-gold dark:text-on-accent">{item.badge}</span>
         )}
       </NavLink>
     </li>

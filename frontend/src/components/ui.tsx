@@ -67,7 +67,7 @@ export function CountUp({ text, duration = 750 }: { text: string; duration?: num
 export function BrandMark({ size = 30 }: { size?: number }) {
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center rounded-xl bg-linear-135 from-gold to-gold-deep font-display text-white shadow-[0_6px_16px_-6px_var(--color-gold)]"
+      className="inline-flex shrink-0 items-center justify-center rounded-xl bg-linear-135 from-gold to-gold-deep font-display text-on-accent shadow-[0_6px_16px_-6px_var(--color-gold)]"
       style={{ width: size, height: size, fontSize: size * 0.53 }}
       aria-hidden
     >
@@ -185,7 +185,7 @@ export function StatCard({
   return (
     <div className="card lift relative flex min-w-0 flex-col items-start gap-3 p-4 hover:border-gold/40 sm:flex-row sm:items-center sm:gap-4 sm:p-5">
       {icon && (
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-navy text-white shadow-[0_8px_18px_-8px_var(--color-navy)] dark:text-ink sm:size-12 [&_svg]:size-5" aria-hidden>
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-navy text-white shadow-[0_8px_18px_-8px_var(--color-navy)] sm:size-12 [&_svg]:size-5" aria-hidden>
           {icon}
         </span>
       )}
@@ -232,7 +232,7 @@ export function Badge({ tone, children, dot, className }: { tone: Tone; children
 // ----------------------------------------------------------------- buttons
 type Variant = "primary" | "secondary" | "danger" | "ghost";
 const btnVariant: Record<Variant, string> = {
-  primary: "bg-linear-to-l from-gold to-gold-deep text-white border border-gold shadow-[0_8px_18px_-10px_var(--color-gold)] hover:brightness-105",
+  primary: "bg-linear-to-l from-gold to-gold-deep dark:to-gold text-on-accent border border-gold shadow-[0_8px_18px_-10px_var(--color-gold)] hover:brightness-105",
   secondary: "bg-surface text-cream border border-line hover:border-gold/60",
   danger: "bg-wine/10 text-blush border border-wine/60 hover:bg-wine/20",
   ghost: "text-muted hover:text-cream border border-transparent",
@@ -303,7 +303,7 @@ export function Chips<T extends string>({
 // ---------------------------------------------------------------- avatars
 export function Avatar({ text, size = 36, tone = "wine" }: { text: string; size?: number; tone?: "wine" | "gold" | "plain" }) {
   const bg =
-    tone === "gold" ? "bg-linear-135 from-gold to-gold-deep text-white" : tone === "plain" ? "bg-raised border border-line text-cream" : "bg-linear-135 from-navy to-navy-soft text-white dark:text-ink";
+    tone === "gold" ? "bg-linear-135 from-gold to-gold-deep text-on-accent" : tone === "plain" ? "bg-raised border border-line text-cream" : "bg-linear-135 from-navy to-navy-soft text-white";
   return (
     <span className={cx("inline-flex shrink-0 items-center justify-center rounded-full font-bold", bg)} style={{ width: size, height: size, fontSize: size * 0.36 }}>
       {text}
@@ -351,7 +351,7 @@ export function BarChart({
                 <div className="relative flex w-full items-end justify-center" style={{ height }}>
                   <span
                     className={cx(
-                      "pointer-events-none absolute z-10 flex flex-col items-center whitespace-nowrap rounded-lg bg-navy px-2.5 py-1.5 text-center text-white shadow-lg transition dark:text-ink",
+                      "pointer-events-none absolute z-10 flex flex-col items-center whitespace-nowrap rounded-lg bg-navy px-2.5 py-1.5 text-center text-white shadow-lg transition",
                       hot ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                     )}
                     style={{ bottom: h + 8 }}

@@ -87,7 +87,7 @@ function Greeting() {
   return (
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div className="flex items-center gap-4">
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-linear-135 from-navy to-navy-soft text-[17px] font-bold text-white shadow-[var(--shadow-card)] dark:text-ink">
+        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-linear-135 from-navy to-navy-soft text-[17px] font-bold text-white shadow-[var(--shadow-card)]">
           {initials(me?.name ?? "")}
         </span>
         <div className="flex flex-col gap-1">
@@ -257,8 +257,8 @@ function FleetDonut({ data, loading }: { data?: OverviewData; loading: boolean }
 
 // ---------------------------------------------------------------- today
 const SLOT_TONES = [
-  "bg-linear-to-l from-gold to-gold-deep text-white",
-  "bg-navy text-white dark:text-ink",
+  "bg-linear-to-l from-gold to-gold-deep dark:to-gold text-on-accent",
+  "bg-navy text-white",
   "bg-linear-to-l from-amber to-amber/80 text-white",
 ];
 
@@ -286,7 +286,7 @@ function TodayPanel() {
               key={d}
               type="button"
               onClick={() => setDay(d)}
-              className={cx("flex flex-col items-center gap-1 rounded-xl py-2 text-[12px] transition", on ? "bg-navy text-white shadow-[0_8px_18px_-10px_var(--color-navy)] dark:text-ink" : "bg-raised text-cream hover:bg-raised-2")}
+              className={cx("flex flex-col items-center gap-1 rounded-xl py-2 text-[12px] transition", on ? "bg-navy text-white shadow-[0_8px_18px_-10px_var(--color-navy)]" : "bg-raised text-cream hover:bg-raised-2")}
               aria-pressed={on}
               aria-label={`${weekdayFull(d)} ${dayMonth(d)}: ${c} حجز`}
             >
@@ -294,7 +294,7 @@ function TodayPanel() {
               <span className={cx("text-[10px]", on ? "opacity-80" : "text-muted")}>{weekdayShort(d)}</span>
               <span className="flex h-1.5 gap-0.5">
                 {Array.from({ length: Math.min(3, c) }, (_, i) => (
-                  <span key={i} className={cx("size-1.5 rounded-full", on ? "bg-white/90 dark:bg-ink/70" : ["bg-gold", "bg-navy-soft", "bg-mint"][i])} />
+                  <span key={i} className={cx("size-1.5 rounded-full", on ? "bg-white/90" : ["bg-gold", "bg-navy-soft", "bg-mint"][i])} />
                 ))}
               </span>
             </button>
@@ -382,7 +382,7 @@ function CalendarPanel() {
               onClick={() => nav(`/day/${d}`)}
               className={cx(
                 "relative flex aspect-square flex-col items-center justify-center rounded-xl text-[11px] transition hover:brightness-110",
-                busy ? "bg-navy font-bold text-white shadow-[0_8px_18px_-10px_var(--color-navy)] dark:text-ink" : c > 0 ? "border border-gold/50 bg-gold/12 font-bold text-gold" : "bg-raised text-muted",
+                busy ? "bg-navy font-bold text-white shadow-[0_8px_18px_-10px_var(--color-navy)]" : c > 0 ? "border border-gold/50 bg-gold/12 font-bold text-gold" : "bg-raised text-muted",
                 past && "opacity-55",
                 d === today && "outline-2 outline-offset-2 outline-gold"
               )}
