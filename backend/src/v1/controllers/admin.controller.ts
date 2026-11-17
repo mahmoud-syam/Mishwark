@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import AdminService from "../services/admin.service";
-import { paramStr, queryNum, queryStr } from "../utils/routeParams";
+import { paramStr, queryNum, queryStr, queryLimit } from "../utils/routeParams";
 import AuditService from "../services/audit.service";
 import SettingsService, { updateSettingsSchema } from "../services/settings.service";
 import prismaClient from "../utils/prismaClientHelper";
@@ -23,7 +23,7 @@ export const getBookingsByDate = async (req: Request, res: Response) => {
   const result = await AdminService.getBookingsByDate(
     queryStr(req.query.date) as string,
     queryNum(req.query.page, 1),
-    queryNum(req.query.limit, 20)
+    queryLimit(req.query.limit, 20)
   );
   res.status(200).json({ success: true, data: result.items, pagination: result.pagination });
 };
@@ -41,7 +41,7 @@ export const getDriverStats = async (req: Request, res: Response) => {
 export const listUsers = async (req: Request, res: Response) => {
   const result = await AdminService.listUsers({
     page: queryNum(req.query.page, 1),
-    limit: queryNum(req.query.limit, 20),
+    limit: queryLimit(req.query.limit, 20),
     role: queryStr(req.query.role),
   });
   res.status(200).json({ success: true, data: result.items, pagination: result.pagination });
@@ -50,7 +50,7 @@ export const listUsers = async (req: Request, res: Response) => {
 export const listDrivers = async (req: Request, res: Response) => {
   const result = await AdminService.listDrivers({
     page: queryNum(req.query.page, 1),
-    limit: queryNum(req.query.limit, 20),
+    limit: queryLimit(req.query.limit, 20),
     status: queryStr(req.query.status),
   });
   res.status(200).json({ success: true, data: result.items, pagination: result.pagination });
@@ -150,7 +150,7 @@ export const updateSystemSettings = async (req: Request, res: Response) => {
 export const getAllBookings = async (req: Request, res: Response) => {
   const result = await AdminService.getAllBookings({
     page: queryNum(req.query.page, 1),
-    limit: queryNum(req.query.limit, 20),
+    limit: queryLimit(req.query.limit, 20),
     status: queryStr(req.query.status),
     customerId: queryStr(req.query.customerId),
     driverId: queryStr(req.query.driverId),

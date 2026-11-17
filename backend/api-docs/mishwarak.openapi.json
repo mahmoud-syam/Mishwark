@@ -246,7 +246,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Public. Sends a 4-digit OTP to the phone. In dev the code is returned as dev_otp.",
+        "summary": "Public. Sends a 4-digit OTP to the phone. 01…, +20… and 0020… are the same number (stored as +20…). In dev the code is returned as dev_otp.",
         "responses": {
           "200": {
             "description": "Success",
@@ -295,7 +295,7 @@
             }
           }
         },
-        "description": "Public. Sends a 4-digit OTP to the phone. In dev the code is returned as dev_otp.",
+        "description": "Public. Sends a 4-digit OTP to the phone. 01…, +20… and 0020… are the same number (stored as +20…). In dev the code is returned as dev_otp.",
         "operationId": "post_auth_otp_request"
       }
     },
@@ -532,7 +532,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Clears the auth cookie / current session.",
+        "summary": "Signs out: clears the auth cookie and revokes the token sent with the request (it gets 401 afterwards). Always 200.",
         "responses": {
           "200": {
             "description": "Success",
@@ -566,7 +566,7 @@
             "description": "Internal Server Error"
           }
         },
-        "description": "Clears the auth cookie / current session.",
+        "description": "Signs out: clears the auth cookie and revokes the token sent with the request (it gets 401 afterwards). Always 200.",
         "operationId": "post_auth_logout"
       }
     },
@@ -911,7 +911,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Disables 2FA for the authenticated user.",
+        "summary": "Disables 2FA for the authenticated user. Needs the current 6-digit code in `token` (400 without it).",
         "security": [
           {
             "bearerAuth": []
@@ -950,7 +950,7 @@
             "description": "Internal Server Error"
           }
         },
-        "description": "Disables 2FA for the authenticated user.",
+        "description": "Disables 2FA for the authenticated user. Needs the current 6-digit code in `token` (400 without it).",
         "operationId": "post_auth_2fa_disable"
       }
     },
@@ -1134,7 +1134,7 @@
         "tags": [
           "Bookings"
         ],
-        "summary": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount.",
+        "summary": "PUBLIC. Server-side price estimate. 400 for a retired car. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount.",
         "responses": {
           "200": {
             "description": "Success",
@@ -1198,7 +1198,7 @@
             }
           }
         },
-        "description": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount.",
+        "description": "PUBLIC. Server-side price estimate. 400 for a retired car. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount.",
         "operationId": "post_bookings_estimate_price"
       }
     },
@@ -6406,7 +6406,7 @@
         "tags": [
           "Admin"
         ],
-        "summary": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged.",
+        "summary": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged. 409 with errors.bookings when a driver being removed still has upcoming trips on this car.",
         "security": [
           {
             "bearerAuth": []
@@ -6471,7 +6471,7 @@
             }
           }
         },
-        "description": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged.",
+        "description": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged. 409 with errors.bookings when a driver being removed still has upcoming trips on this car.",
         "operationId": "put_admin_vehicles_id_drivers"
       }
     },

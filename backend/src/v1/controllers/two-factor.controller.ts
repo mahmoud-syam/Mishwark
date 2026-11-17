@@ -51,6 +51,14 @@ export const verifyAndEnable2FA = async (req: Request, res: Response, next: Next
 export const disable2FA = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const userId = (req as any).user.id;
+        // Needs a current code: a stolen session alone must not switch 2FA off.
+        const { token } = req.body ?? {};
+        const user = await prismaClient.users.findUnique({ where: { id: userId }, select: { twoFactorSecret: true, twoFactorEnabled: true } });
+        if (user?.twoFactorEnabled) {
+            if (typeof token !== "string" || !user.twoFactorSecret || !(await verify2FAToken(token, user.twoFactorSecret))) {
+                throw new BadRequestsException("Enter the current 6-digit code to turn 2FA off", ErrorCodes.INVALID_CREDENTIALS);
+            }
+        }
 
         await prismaClient.users.update({
             where: { id: userId },

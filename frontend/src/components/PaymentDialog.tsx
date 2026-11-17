@@ -69,7 +69,7 @@ export default function PaymentDialog({ booking, onClose }: { booking: Booking; 
     >
       <div className="flex flex-col gap-4 p-[22px]">
         <div className="flex items-center justify-between">
-          <h2 className="text-[15px] font-bold">
+          <h2 className="text-[17px] font-bold">
             الدفع · <span className="ltr text-muted">#{booking.ref}</span>
           </h2>
           <button type="button" onClick={() => dialog.current?.close()} className="text-muted hover:text-cream" aria-label="إغلاق">
@@ -84,17 +84,17 @@ export default function PaymentDialog({ booking, onClose }: { booking: Booking; 
             { k: "الباقي", v: egp(remaining), c: remaining > 0 ? "text-rose" : "text-mint" },
           ].map((x) => (
             <div key={x.k} className="rounded-xl border border-line bg-raised px-2 py-2.5">
-              <div className="text-[10px] text-muted">{x.k}</div>
-              <div className={`text-[13px] font-bold ${x.c}`}>{x.v}</div>
+              <div className="text-[12px] text-muted">{x.k}</div>
+              <div className={`text-[15px] font-bold ${x.c}`}>{x.v}</div>
             </div>
           ))}
         </div>
-        <p className="text-[11px] text-muted">
+        <p className="text-[13px] text-muted">
           العربون المطلوب للتأكيد: <b className="text-cream">{egp(booking.depositRequired)}</b>
           {depositDue > 0 ? <span className="text-gold"> · لسه {egp(depositDue)}</span> : <span className="text-mint"> · اتدفع ✓</span>}
         </p>
         {(booking.packageDiscount > 0 || booking.referralDiscount > 0) && (
-          <p className="text-[11px] text-muted">
+          <p className="text-[13px] text-muted">
             الإجمالي بعد الخصم
             {booking.packageDiscount > 0 && <span> · خصم الباكدج <b className="text-mint">{egp(booking.packageDiscount)}</b></span>}
             {booking.referralDiscount > 0 && <span> · خصم الإحالة <b className="text-mint">{egp(booking.referralDiscount)}</b></span>}
@@ -106,10 +106,10 @@ export default function PaymentDialog({ booking, onClose }: { booking: Booking; 
             {booking.payments.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-raised px-3 py-2">
                 <div className="min-w-0">
-                  <div className="text-[12px] font-bold text-cream">
+                  <div className="text-[14px] font-bold text-cream">
                     {egp(p.amount)} <span className="font-normal text-muted">· {METHOD[p.paymentMethod]}</span>
                   </div>
-                  <div className="text-[10px] text-muted">{relativeStamp(p.createdAt)}</div>
+                  <div className="text-[12px] text-muted">{relativeStamp(p.createdAt)}</div>
                 </div>
                 {p.status === "PENDING" ? (
                   <div className="flex gap-1.5">
@@ -130,7 +130,7 @@ export default function PaymentDialog({ booking, onClose }: { booking: Booking; 
 
         {remaining > 0 && (
           <form onSubmit={submit} className="flex flex-col gap-2.5 border-t border-line pt-4">
-            <div className="text-[12px] font-bold">تسجيل مبلغ اتستلم</div>
+            <div className="text-[14px] font-bold">تسجيل مبلغ اتستلم</div>
             <div className="grid grid-cols-2 gap-2.5">
               <Field label="المبلغ (ج.م)">
                 <input className={`${fieldControl} ltr text-right`} type="number" min={1} max={remaining} step="any" value={amount} onChange={(e) => setAmount(e.target.value)} />
@@ -145,7 +145,7 @@ export default function PaymentDialog({ booking, onClose }: { booking: Booking; 
                 </select>
               </Field>
             </div>
-            <div className="flex gap-2 text-[10px]">
+            <div className="flex gap-2 text-[12px]">
               {depositDue > 0 && (
                 <button type="button" className="text-gold hover:underline" onClick={() => setAmount(String(depositDue))}>
                   العربون ({egp(depositDue)})

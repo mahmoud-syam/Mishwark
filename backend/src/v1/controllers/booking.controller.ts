@@ -5,7 +5,7 @@ import { ForbiddenException, NotFoundException } from "../utils/errors";
 import PricingService from "../services/pricing.service";
 import { isAdminRole, normalizeRoleName } from "../constants/roles";
 import MapsService from "../services/maps.service";
-import { queryNum, queryStr } from "../utils/routeParams";
+import { queryNum, queryStr, queryLimit } from "../utils/routeParams";
 import {
   calculatePriceSchema,
   createBookingSchema,
@@ -64,7 +64,7 @@ export const getBookings = async (req: Request, res: Response) => {
   const result = await BookingService.listBookings(
     {
       page: queryNum(req.query.page, 1),
-      limit: queryNum(req.query.limit, 10),
+      limit: queryLimit(req.query.limit, 10),
       status: queryStr(req.query.status) as ListBookingsParams["status"],
       tripStatus: queryStr(req.query.tripStatus) as ListBookingsParams["tripStatus"],
       bookingDate: queryStr(req.query.bookingDate),

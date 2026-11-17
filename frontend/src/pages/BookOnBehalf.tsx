@@ -176,7 +176,7 @@ export default function BookOnBehalf() {
                   required
                   aria-label="ميعاد البداية"
                 />
-                <span className="text-[11px] text-muted">لحد</span>
+                <span className="text-[13px] text-muted">لحد</span>
                 <input className={`${fieldControl} ltr text-right`} type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required aria-label="ميعاد النهاية" />
               </div>
             </Field>
@@ -205,25 +205,25 @@ export default function BookOnBehalf() {
               <option key={t} value={t} />
             ))}
           </datalist>
-          <p className="mt-2.5 text-[10px] text-muted">الأماكن المحفوظة بتتسعّر بالمسافة الفعلية. أي مكان تاني بيتحدد على الخريطة من السيرفر.</p>
+          <p className="mt-2.5 text-[12px] text-muted">الأماكن المحفوظة بتتسعّر بالمسافة الفعلية. أي مكان تاني بيتحدد على الخريطة من السيرفر.</p>
         </Panel>
 
         <Panel title="٣. السعر والدفع">
-          <div className="flex items-center justify-between pb-3 text-[11px] text-muted">
+          <div className="flex items-center justify-between pb-3 text-[13px] text-muted">
             <span>السعر المحسوب تلقائيًا</span>
-            <span className="ltr text-[13px] font-bold text-cream">
+            <span className="ltr text-[15px] font-bold text-cream">
               {estimate.isFetching ? <Skeleton className="inline-block h-4 w-16" /> : estimate.data ? egp(estimate.data.totalPrice) : "—"}
             </span>
           </div>
           {estimate.data && (
-            <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted">
+            <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
               <span>أساسي {num(estimate.data.basePrice)}</span>
               <span>مسافة {num(estimate.data.distancePrice)}</span>
               {estimate.data.timePrice > 0 && <span>وقت {num(estimate.data.timePrice)}</span>}
               {estimate.data.referralDiscount > 0 && <span className="text-mint">خصم أول حجز (إحالة) −{num(estimate.data.referralDiscount)}</span>}
             </div>
           )}
-          {estimate.error && <p className="mb-3 text-[11px] text-rose">{estimate.error instanceof ApiError ? estimate.error.message : "مش قادر أحسب السعر دلوقتي."}</p>}
+          {estimate.error && <p className="mb-3 text-[13px] text-rose">{estimate.error instanceof ApiError ? estimate.error.message : "مش قادر أحسب السعر دلوقتي."}</p>}
           <Field label="تعديل يدوي للسعر (اختياري)" hint={isSuperAdmin ? "— بصلاحية Super Admin —" : "التعديل اليدوي متاح للـ Super Admin بس"}>
             <input
               className={`${fieldControl} ltr text-right`}
@@ -245,7 +245,7 @@ export default function BookOnBehalf() {
         {submit.error && <ErrorBox error={submitError(submit.error)} />}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="text-[12px] text-muted">{finalPrice != null && <>الإجمالي: <b className="text-cream">{egp(finalPrice)}</b></>}</span>
+          <span className="text-[14px] text-muted">{finalPrice != null && <>الإجمالي: <b className="text-cream">{egp(finalPrice)}</b></>}</span>
           <Button type="submit" variant="primary" size="lg" disabled={submit.isPending} className="min-w-[230px]">
             {submit.isPending ? "جاري الحجز…" : "تأكيد الحجز نيابة عن العميل"}
           </Button>
@@ -278,15 +278,15 @@ function CustomerStep({ customer, onChange }: { customer: CustomerHit | null; on
           <div className="flex items-center gap-3">
             <Avatar text={initials(customer.name)} tone="gold" />
             <div>
-              <div className="text-[13px] font-bold text-cream">{customer.name}</div>
-              <div className="text-[11px] text-muted">
+              <div className="text-[15px] font-bold text-cream">{customer.name}</div>
+              <div className="text-[13px] text-muted">
                 <span className="ltr">{maskPhone(customer.phoneNumber)}</span> · {customer.bookingsCount} حجوزات سابقة
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[16px] text-gold" aria-hidden>✓</span>
-            <button type="button" className="text-[11px] text-muted underline-offset-4 hover:text-cream hover:underline" onClick={() => onChange(null)}>
+            <span className="text-[18px] text-gold" aria-hidden>✓</span>
+            <button type="button" className="text-[13px] text-muted underline-offset-4 hover:text-cream hover:underline" onClick={() => onChange(null)}>
               تغيير
             </button>
           </div>
@@ -314,18 +314,18 @@ function CustomerStep({ customer, onChange }: { customer: CustomerHit | null; on
                   >
                     <Avatar text={initials(c.name)} size={32} tone="plain" />
                     <span>
-                      <span className="block text-[12px] font-bold text-cream">{c.name}</span>
-                      <span className="block text-[11px] text-muted">
+                      <span className="block text-[14px] font-bold text-cream">{c.name}</span>
+                      <span className="block text-[13px] text-muted">
                         <span className="ltr">{maskPhone(c.phoneNumber)}</span> · {c.bookingsCount} حجوزات سابقة
                       </span>
                     </span>
                   </button>
                 </li>
               ))}
-              {search.data && search.data.length === 0 && !search.isFetching && <li className="px-1 text-[11px] text-muted">مفيش عميل بالاسم أو الرقم ده.</li>}
+              {search.data && search.data.length === 0 && !search.isFetching && <li className="px-1 text-[13px] text-muted">مفيش عميل بالاسم أو الرقم ده.</li>}
             </ul>
           )}
-          <p className="mt-3 text-center text-[11px] text-muted">
+          <p className="mt-3 text-center text-[13px] text-muted">
             مش لاقي العميل؟{" "}
             <button type="button" className="text-gold hover:underline" onClick={() => setCreating(true)}>
               أنشئ حساب جديد بسرعة ←

@@ -49,7 +49,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between border-b border-line bg-surface/90 px-4 py-3 backdrop-blur lg:hidden">
         <span className="flex items-center gap-2">
           <BrandMark size={28} />
-          <span className="text-[15px] font-bold text-cream" dir="ltr">Mishwark</span>
+          <span className="text-[17px] font-bold text-cream" dir="ltr">Mishwark</span>
         </span>
         <button type="button" onClick={() => setOpen(true)} className="rounded-lg p-2 text-cream hover:bg-raised" aria-label="فتح القايمة">
           <Menu className="size-5" />
@@ -96,7 +96,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
       <div className="mb-8 flex items-center justify-between px-2">
         <span className="flex items-center gap-2.5">
           <BrandMark size={34} />
-          <span className="text-[18px] font-bold" dir="ltr">
+          <span className="text-[20px] font-bold" dir="ltr">
             Mishwark
           </span>
         </span>
@@ -124,7 +124,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         <button
           type="button"
           onClick={toggle}
-          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] text-white/75 transition hover:bg-white/8 hover:text-white [&_svg]:size-[18px]"
+          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] text-white/75 transition hover:bg-white/8 hover:text-white [&_svg]:size-[18px]"
           aria-label={theme === "dark" ? "الوضع الفاتح" : "الوضع الداكن"}
         >
           {theme === "dark" ? <Sun /> : <Moon />}
@@ -132,12 +132,12 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         </button>
 
         <div className="mt-3 flex items-center gap-3 rounded-2xl bg-white/8 p-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-linear-135 from-gold to-gold-deep text-[12px] font-bold text-on-accent">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-linear-135 from-gold to-gold-deep text-[14px] font-bold text-on-accent">
             {initials(me?.name ?? "")}
           </span>
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-[13px] font-bold">{me?.name}</span>
-            <span className="text-[10px] text-white/60" dir="ltr">
+            <span className="truncate text-[15px] font-bold">{me?.name}</span>
+            <span className="text-[12px] text-white/60" dir="ltr">
               {ROLE_LABEL[me?.role?.name ?? ""] ?? ""}
             </span>
           </span>
@@ -158,7 +158,7 @@ function NavItem({ item }: { item: Item }) {
         end={item.end}
         className={({ isActive }) =>
           cx(
-            "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition [&_svg]:size-[18px]",
+            "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] transition [&_svg]:size-[18px]",
             isActive
               ? "bg-linear-to-l from-gold to-gold-deep dark:to-gold font-bold text-on-accent shadow-[0_10px_22px_-12px_var(--color-gold)]"
               : "text-white/75 hover:bg-white/8 hover:text-white"
@@ -168,7 +168,7 @@ function NavItem({ item }: { item: Item }) {
         {item.icon}
         <span className="flex-1">{item.label}</span>
         {!!item.badge && (
-          <span className="flex min-w-5 items-center justify-center rounded-full bg-white/90 px-1.5 text-[10px] font-bold text-navy dark:bg-gold dark:text-on-accent">{item.badge}</span>
+          <span className="flex min-w-5 items-center justify-center rounded-full bg-white/90 px-1.5 text-[12px] font-bold text-navy dark:bg-gold dark:text-on-accent">{item.badge}</span>
         )}
       </NavLink>
     </li>

@@ -13,6 +13,8 @@ import SmsService from "../services/sms.service";
 import SettingsService from "../services/settings.service";
 import { ReferralStatus } from "../../../generated/prisma";
 import { authCookieOptions, clearAuthCookieOptions } from "../utils/authCookie";
+import fs from "fs";
+import { imageTypeOf } from "../middlewares/multer.middleware";
 
 const OTP_TTL_MINUTES = Number(process.env.OTP_TTL_MINUTES ?? 5);
 const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS ?? 5);
@@ -24,7 +26,15 @@ import { ForbiddenException } from "../utils/errors";
 import { z } from "zod";
 
 export const signup = async (req: Request, res: Response, next: NextFunction) => {
+    // Only the profile picture is used. Any other uploaded file used to stay on
+    // disk, publicly downloadable, without being linked anywhere: drop it now.
+    const uploaded = (req.files as Express.Multer.File[] | undefined) ?? [];
+    const picture = uploaded.find((f) => f.fieldname === "pic");
+    uploaded.filter((f) => f !== picture).forEach((f) => fs.rmSync(f.path, { force: true }));
     try {
+        if (picture && (!picture.mimetype.startsWith("image/") || imageTypeOf(picture.path) !== picture.mimetype)) {
+            throw new BadRequestsException("The profile picture must be a real JPG, PNG or WEBP image", ErrorCodes.UNPROCESSABLE_ENTITY);
+        }
         const safePayload = SignupSchema.safeParse(req.body);
 
         if (!safePayload.success) {
@@ -43,9 +53,7 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
             licenseExpiry,
         } = safePayload.data;
 
-        const files = req.files as Express.Multer.File[] | undefined;
-        const pictureFile = files?.find(f => f.fieldname === "pic");
-        const uploadedPicPath = pictureFile ? `/uploads/employees/${pictureFile.filename}` : pic;
+        const uploadedPicPath = picture ? `/uploads/employees/${picture.filename}` : pic;
 
         const normalizedEmail = email.toLowerCase().trim();
         const normalizedCode = code?.trim() || null;
@@ -153,6 +161,7 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
         });
 
     } catch (error) {
+        if (picture) fs.rmSync(picture.path, { force: true });
         next(error);
     }
 }
@@ -326,6 +335,23 @@ export const me = async (req: Request, res: Response) => {
 
 export const logout = async (req: Request, res: Response, next: NextFunction) => {
     try {
+        // Revoke the token too, not just the cookie, so a copied token stops
+        // working. One session per account (sign-in already rotates the
+        // version), so this logs out nothing else. A stale or bad token is
+        // ignored: logout always succeeds.
+        const header = req.headers.authorization;
+        const raw = req.cookies?.token || (header?.startsWith("Bearer ") ? header.slice(7) : undefined);
+        if (raw) {
+            try {
+                const t = jwt.verify(raw, process.env.JWT_SECRET as string) as any;
+                if (t?.user?.id && typeof t.user.tokenVersion === "number") {
+                    await prismaClient.users.updateMany({
+                        where: { id: t.user.id, tokenVersion: t.user.tokenVersion },
+                        data: { tokenVersion: { increment: 1 } },
+                    });
+                }
+            } catch { /* expired or invalid: nothing to revoke */ }
+        }
         res.clearCookie("token", clearAuthCookieOptions());
         res.status(200).json({ message: "Logout successful" });
     } catch (error) {

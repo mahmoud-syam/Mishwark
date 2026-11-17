@@ -103,7 +103,7 @@ export default function DriverAnalytics() {
                   format={compact}
                   data={d.chart.map((c) => ({ label: chartLabel(period, c.key), value: c.income, overlay: c.share, title: `الدخل ${egp(c.income)} · نسبتك ${egp(c.share)}` }))}
                 />
-                <div className="mt-3 flex gap-4 text-[10px] text-muted">
+                <div className="mt-3 flex gap-4 text-[12px] text-muted">
                   <span className="flex items-center gap-1.5">
                     <span className="size-2 rounded-[2px] bg-gold" />
                     دخل السائق
@@ -206,7 +206,7 @@ function CommissionControl({ driverId, rate }: { driverId: string; rate: number 
   if (!editing) {
     return (
       <>
-        <span className="rounded-full border border-gold bg-gold/15 px-3 py-1.5 text-[11px] text-gold">نسبتك {rate}%</span>
+        <span className="rounded-full border border-gold bg-gold/15 px-3 py-1.5 text-[13px] text-gold">نسبتك {rate}%</span>
         <Button size="sm" onClick={() => { setValue(String(rate)); setEditing(true); }}>
           تعديل النسبة
         </Button>
@@ -224,10 +224,10 @@ function CommissionControl({ driverId, rate }: { driverId: string; rate: number 
           step={0.5}
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          className="ltr w-14 bg-transparent text-center text-[12px] font-bold text-cream outline-none"
+          className="ltr w-14 bg-transparent text-center text-[14px] font-bold text-cream outline-none"
           aria-label="نسبة الشركة بالمية"
         />
-        <span className="text-[11px] text-muted">%</span>
+        <span className="text-[13px] text-muted">%</span>
       </label>
       <Button size="sm" variant="primary" type="submit" disabled={!valid || save.isPending}>
         {save.isPending ? "…" : "حفظ"}
@@ -235,7 +235,7 @@ function CommissionControl({ driverId, rate }: { driverId: string; rate: number 
       <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
         إلغاء
       </Button>
-      {save.error && <span className="text-[11px] text-rose">{errorMessage(save.error)}</span>}
+      {save.error && <span className="text-[13px] text-rose">{errorMessage(save.error)}</span>}
     </form>
   );
 }

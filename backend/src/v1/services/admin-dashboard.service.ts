@@ -189,7 +189,35 @@ export class AdminDashboardService {
       });
     }
 
+    // Drivers who are off or on leave but still hold upcoming trips: those
+    // trips need another driver (setting the status doesn't move them).
+    const stranded = await prismaClient.bookings.groupBy({
+      by: ["driverId"],
+      where: {
+        bookingDate: { gte: today },
+        status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+        driver: { status: { in: [DriverStatus.OFF, DriverStatus.ONLEAVE] } },
+      },
+      _count: { _all: true },
+      _min: { bookingDate: true },
+    });
+    const strandedDrivers = stranded.length
+      ? await prismaClient.drivers.findMany({ where: { id: { in: stranded.map((x) => x.driverId) } }, select: { id: true, fullName: true, status: true } })
+      : [];
+
     const alerts = [
+      ...stranded.map((x) => {
+        const d = strandedDrivers.find((v) => v.id === x.driverId);
+        return {
+          type: "driver_unavailable" as const,
+          severity: "danger" as const,
+          entityId: x.driverId,
+          driverName: d?.fullName ?? "",
+          driverStatus: d?.status ?? DriverStatus.OFF,
+          trips: x._count._all,
+          firstDate: x._min.bookingDate ?? today,
+        };
+      }),
       ...maintenance.map((m) => ({
         type: "maintenance" as const,
         severity: "warning" as const,

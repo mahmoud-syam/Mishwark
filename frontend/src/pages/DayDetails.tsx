@@ -5,7 +5,7 @@ import { api, errorMessage } from "../lib/api";
 import type { DayDetails as DayData } from "../lib/types";
 import { BOOKING_STATUS } from "../lib/labels";
 import { addDays, compact, fullDate, time12, todayKey, weekdayFull } from "../lib/format";
-import { Badge, Brand, cx, Empty, ErrorBox, Page, PageHeader, Panel, Skeleton, StatCard, StatGrid } from "../components/ui";
+import { Badge, cx, Empty, ErrorBox, Page, PageHeader, Panel, Skeleton, StatCard, StatGrid } from "../components/ui";
 import PaymentDialog from "../components/PaymentDialog";
 
 const PAY_BADGE = {
@@ -48,7 +48,6 @@ export default function DayDetails() {
           </span>
         }
         title={date === todayKey() ? "حجوزات اليوم" : "حجوزات اليوم ده"}
-        actions={<Brand />}
       />
 
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
@@ -76,20 +75,20 @@ export default function DayDetails() {
                   id={`b-${b.id}`}
                   className={cx("flex items-start gap-4 rounded-xl border-b border-line px-2 py-3 last:border-b-0", active && "border-transparent bg-gold/12")}
                 >
-                  <span className={cx("w-14 shrink-0 pt-0.5 text-[11px] font-bold", active ? "text-gold" : "text-gold/90")}>{time12(b.startTime)}</span>
+                  <span className={cx("w-14 shrink-0 pt-0.5 text-[13px] font-bold", active ? "text-gold" : "text-gold/90")}>{time12(b.startTime)}</span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[12px] font-bold text-cream">
+                    <div className="text-[14px] font-bold text-cream">
                       <Link to={`/customers/${b.customer.id}`} className="hover:text-gold">
                         {b.customer.name}
                       </Link>{" "}
                       — {b.vehicle.name}
                     </div>
-                    <div className="mt-0.5 text-[10px] text-muted">
+                    <div className="mt-0.5 text-[12px] text-muted">
                       {b.startPoint} ← {b.endPoint}
                       {b.eventType && <span> · {b.eventType}</span>}
                       {b.packageId && <span> · جزء من باقة</span>}
                     </div>
-                    <div className="mt-1 text-[10px] text-gold/90">
+                    <div className="mt-1 text-[12px] text-gold/90">
                       🚗 السائق:{" "}
                       <Link to={`/drivers/${b.driver.id}`} className="hover:text-gold">
                         {b.driver.fullName}
@@ -138,8 +137,8 @@ export default function DayDetails() {
                 return (
                   <li key={d.id} className="flex items-center justify-between gap-3 border-b border-line py-3 last:border-b-0">
                     <Link to={`/drivers/${d.id}`} className="min-w-0 hover:text-gold">
-                      <div className="text-[13px] font-bold text-cream">{d.name}</div>
-                      <div className="text-[11px] text-muted">
+                      <div className="text-[15px] font-bold text-cream">{d.name}</div>
+                      <div className="text-[13px] text-muted">
                         {assigned ? `${tripsLabel(d.trips.length)} · ${d.trips.map(time12).join(" و ")}` : unavailable ? "مش متاح اليوم" : "غير مكلّف اليوم"}
                       </div>
                     </Link>
