@@ -346,11 +346,18 @@ Rules:
 - `bookingDate` is `YYYY-MM-DD` and cannot be in the past.
 - **Both** `startPoint` and `endPoint` are required. A distance-less booking
   prices at base only, which would otherwise allow free rides.
-- Omitting `driverId` auto-assigns an `ACTIVE` driver. If none is available the
-  request is rejected.
-- A vehicle in `MAINTENANCE` cannot be booked.
+- Only the car's own drivers can drive it (the admin assigns them on the fleet
+  page). A `driverId` that isn't one of them returns **400** "This driver isn't
+  assigned to this car". Omitting `driverId` tries the car's main driver first,
+  then its other drivers, skipping anyone off, on leave or busy at that time.
+  If none of them is free: **409** "No driver of this car is free at this time".
+  A car with no driver: **400** "This car has no driver assigned yet" (such
+  cars are not listed by `GET /vehicles`, so this only happens with a stale list).
+- A retired car returns **400** "This car is no longer available", and a day
+  with scheduled maintenance returns **400** "This car is in maintenance on that
+  day". `GET /vehicles/:id/availability` shows those days as BLOCKED.
 - A vehicle can take several trips a day, but trips of the same vehicle or
-  driver must be at least 60 minutes apart (`BOOKING_BUFFER_MINUTES`);
+  driver must be at least the gap set in the dashboard Settings apart (60 minutes by default);
   otherwise **409**. Only a day marked BLOCKED (e.g. maintenance) is closed.
 - A new booking is `PENDING` with `depositRequired` (20% of the price) and
   `depositPaid: 0`. It becomes `CONFIRMED` automatically once confirmed payments
@@ -414,8 +421,6 @@ GET   /driver/profile
 PUT   /driver/profile        { fullName, licenseNumber, licenseExpiry, pic }
 PATCH /driver/status         { status: "ACTIVE" | "OFF" | "ONLEAVE" }
 GET   /driver/bookings?filter=today|upcoming|completed&page=1&limit=10
-POST  /driver/vehicles       { vehicleId, isPrimary }
-DELETE /driver/vehicles/:vehicleId
 GET   /driver/stats?startDate=2026-01-01&endDate=2026-09-30
 GET   /driver/:id            PUBLIC — id, fullName, pic, rating, status, vehicles only
 ```
@@ -428,7 +433,10 @@ driver set himself stays his to change.
 token. Do not call it unconditionally; check the role first, or treat 1001 as
 "no driver profile" rather than an error state.
 
-`POST /driver/vehicles` rejects a vehicle already assigned to another driver.
+**Changed:** `POST /driver/vehicles` and `DELETE /driver/vehicles/:vehicleId`
+now always return **403** "Cars are assigned to drivers by the administration".
+Remove the "pick my car" screen from the driver app; the driver's cars come
+from the admin.
 
 `GET /driver/stats` returns trip counts, `totalRevenue` (gross),
 `commissionRate`, `companyShare` and `netEarnings` (gross minus the company's
@@ -444,8 +452,17 @@ GET /vehicles/:id
 GET /vehicles/:id/availability?month=2026-09
 ```
 
-No auth required. `month` is `YYYY-MM`. `GET /vehicles/:id` for an unknown id
-returns **400**, not 404.
+No auth required. `month` is `YYYY-MM`.
+
+- Only cars customers can book are listed: retired cars and cars with no driver
+  are hidden. `GET /vehicles/:id` returns **404** for those and for unknown ids
+  (it used to return 400).
+- `status` is worked out for today: `AVAILABLE`, `BOOKED` (has a trip today) or
+  `MAINTENANCE` (maintenance scheduled today). It is no longer set by hand.
+- `images` come cover first: use `images[0]` as the car's main photo, and show a
+  placeholder when the list is empty.
+- New fields `luggage` (number of bags) and `features` (labels such as
+  "تكييف", "واي فاي") are for the car details screen.
 
 ```ts
 interface Vehicle {
@@ -455,8 +472,10 @@ interface Vehicle {
   category: VehicleCategory; status: VehicleStatus;
   basePrice: number; pricePerKm: number; pricePerHour: number;
   description: string;
+  luggage: number;          // new
+  features: string[];       // new, shown as chips
   createdAt: string; updatedAt: string;  // ISO 8601
-  images: VehicleImage[];
+  images: VehicleImage[];   // cover first; { id, imageUrl, isCover, sortOrder }
 }
 ```
 
@@ -607,6 +626,11 @@ on the server: `/admin/bookings/calendar` and `/admin/bookings/all` are
 registered before `/admin/bookings`, so both work — no action needed from you.
 
 `PATCH /admin/users/role` is the only way to grant an admin role.
+
+The web dashboard's fleet page uses `GET/POST /admin/vehicles`,
+`GET/PATCH /admin/vehicles/:id`, `.../retire`, `.../reactivate`,
+`PUT .../drivers`, photo upload/cover/delete and maintenance endpoints (all
+changes need `vehicle:manage`). The apps don't call these; see the API docs.
 
 ---
 

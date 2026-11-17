@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AuditAction, PaymentMethod, VehicleStatus } from "../../../generated/prisma";
+import { AuditAction, PaymentMethod } from "../../../generated/prisma";
 
 const latitude = z.number().min(-90).max(90);
 const longitude = z.number().min(-180).max(180);
@@ -44,15 +44,6 @@ export const bookOnBehalfSchema = z
     paymentMethod: z.nativeEnum(PaymentMethod).optional(),
   })
   .refine((v) => v.startTime < v.endTime, { path: ["endTime"], message: "endTime must be later than startTime" });
-
-export const vehiclePatchSchema = z
-  .object({
-    basePrice: z.number().min(0).optional(),
-    pricePerKm: z.number().min(0).optional(),
-    pricePerHour: z.number().min(0).optional(),
-    status: z.nativeEnum(VehicleStatus).optional(),
-  })
-  .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Nothing to update" });
 
 export const auditActionSchema = z
   .string()

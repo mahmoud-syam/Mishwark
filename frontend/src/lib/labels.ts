@@ -47,3 +47,19 @@ export const PACKAGE_STATUS: Record<string, { label: string; tone: Tone }> = {
   CANCELLED: { label: "ملغية", tone: "rose" },
   EXPIRED: { label: "منتهية", tone: "muted" },
 };
+
+export const FLEET_STATUS: Record<string, { label: string; tone: Tone }> = {
+  AVAILABLE: { label: "متاحة", tone: "mint" },
+  BOOKED: { label: "محجوزة النهارده", tone: "gold" },
+  MAINTENANCE: { label: "صيانة", tone: "rose" },
+  RETIRED: { label: "موقوفة", tone: "muted" },
+};
+
+export const MAINTENANCE_STATE: Record<string, { label: string; tone: Tone }> = {
+  SCHEDULED: { label: "مجدولة", tone: "gold" },
+  IN_PROGRESS: { label: "جارية", tone: "rose" },
+  OVERDUE: { label: "عدّت مواعيدها", tone: "muted" },
+  DONE: { label: "خلصت", tone: "mint" },
+};
+
+export const MAINTENANCE_TYPES = ["صيانة دورية", "تغيير زيت", "فرامل", "كاوتش", "كهرباء", "تكييف", "غسيل وتلميع", "سمكرة ودهان"];

@@ -25,7 +25,6 @@ import {
   searchCustomers,
   createCustomer,
   bookOnBehalf,
-  updateVehicle,
   getAssignableDrivers,
   listAuditLogs,
   exportAuditLogs,
@@ -35,6 +34,23 @@ import {
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { adminMiddleware } from "../middlewares/admin.middleware";
 import { requirePermission } from "../middlewares/permission.middleware";
+import { vehicleImageUpload } from "../middlewares/multer.middleware";
+import {
+  listFleet,
+  getFleetVehicle,
+  getFeatureSuggestions,
+  createVehicle,
+  updateFleetVehicle,
+  retireVehicle,
+  reactivateVehicle,
+  setVehicleDrivers,
+  uploadVehicleImages,
+  deleteVehicleImage,
+  setVehicleCover,
+  scheduleMaintenance,
+  completeMaintenance,
+  cancelMaintenance,
+} from "../controllers/fleet.controller";
 import { PERMISSIONS } from "../constants/roles";
 
 const adminRouter: Router = Router();
@@ -65,11 +81,27 @@ adminRouter.get("/customers/search", errorHandler(searchCustomers));
 adminRouter.post("/customers", errorHandler(createCustomer));
 adminRouter.get("/customers/:id/analytics", errorHandler(getCustomerAnalytics));
 adminRouter.post("/bookings", errorHandler(bookOnBehalf));
-adminRouter.patch("/vehicles/:id", errorHandler(updateVehicle));
 adminRouter.get("/audit-logs/export", errorHandler(exportAuditLogs));
 adminRouter.get("/audit-logs", errorHandler(listAuditLogs));
 adminRouter.get("/packages", errorHandler(listPackages));
 adminRouter.patch("/packages/:id/discount", requirePermission(PERMISSIONS.BOOKING_MANAGE), errorHandler(updatePackageDiscount));
+// Fleet (dashboard /fleet). Reading is open to admins; changes need vehicle:manage.
+const canManageFleet = requirePermission(PERMISSIONS.VEHICLE_MANAGE);
+adminRouter.get("/vehicles", errorHandler(listFleet));
+adminRouter.get("/vehicle-features", errorHandler(getFeatureSuggestions));
+adminRouter.get("/vehicles/:id", errorHandler(getFleetVehicle));
+adminRouter.post("/vehicles", canManageFleet, errorHandler(createVehicle));
+adminRouter.patch("/vehicles/:id", canManageFleet, errorHandler(updateFleetVehicle));
+adminRouter.post("/vehicles/:id/retire", canManageFleet, errorHandler(retireVehicle));
+adminRouter.post("/vehicles/:id/reactivate", canManageFleet, errorHandler(reactivateVehicle));
+adminRouter.put("/vehicles/:id/drivers", canManageFleet, errorHandler(setVehicleDrivers));
+adminRouter.post("/vehicles/:id/images", canManageFleet, vehicleImageUpload.array("images", 8), errorHandler(uploadVehicleImages));
+adminRouter.delete("/vehicles/:id/images/:imageId", canManageFleet, errorHandler(deleteVehicleImage));
+adminRouter.patch("/vehicles/:id/images/:imageId/cover", canManageFleet, errorHandler(setVehicleCover));
+adminRouter.post("/vehicles/:id/maintenance", canManageFleet, errorHandler(scheduleMaintenance));
+adminRouter.patch("/maintenance/:id/complete", canManageFleet, errorHandler(completeMaintenance));
+adminRouter.delete("/maintenance/:id", canManageFleet, errorHandler(cancelMaintenance));
+
 // Changing business settings needs settings:manage (Super Admin by default).
 adminRouter.put("/settings", requirePermission(PERMISSIONS.SETTINGS_MANAGE), errorHandler(updateSystemSettings));
 

@@ -26,6 +26,7 @@ import { dateKey, zonedToInstant } from "../utils/businessTime";
 import ReferralService from "./referral.service";
 import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
 import DiscountService from "./discount.service";
+import FleetService from "./fleet.service";
 import PackageService from "./package.service";
 
 export function checkSlotOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
@@ -226,35 +227,11 @@ export class BookingService {
       if (!vehicle) {
         throw new NotFoundException(`Vehicle with ID ${data.vehicleId} not found`);
       }
-      if (vehicle.status === VehicleStatus.MAINTENANCE) {
-        throw new BadRequestException("Vehicle is under maintenance and unavailable for booking");
+      if (vehicle.retiredAt) {
+        throw new BadRequestException("This car is no longer available");
       }
-
-      // 2. Driver check (if provided or auto-assign)
-      let driverId = data.driverId;
-      if (driverId) {
-        const driver = await tx.drivers.findUnique({
-          where: { id: driverId },
-        });
-        if (!driver) {
-          throw new NotFoundException(`Driver with ID ${driverId} not found`);
-        }
-        if (driver.status === DriverStatus.OFF || driver.status === DriverStatus.ONLEAVE) {
-          throw new BadRequestException("Assigned driver is currently OFF or ON LEAVE");
-        }
-      } else {
-        // Only genuinely available drivers may be auto-assigned. The previous
-        // "fall back to any driver record" branch happily assigned an OFF,
-        // ONLEAVE or ONTRIP driver - the exact drivers the explicit-assignment
-        // branch above rejects.
-        const activeDriver = await tx.drivers.findFirst({
-          where: { status: DriverStatus.ACTIVE },
-          orderBy: { createdAt: "asc" },
-        });
-        if (!activeDriver) {
-          throw new BadRequestException("No active driver available for assignment");
-        }
-        driverId = activeDriver.id;
+      if (await FleetService.maintenanceOn(tx, vehicle.id, data.bookingDate)) {
+        throw new BadRequestException("This car is in maintenance on that day");
       }
 
       const normalizedDate = new Date(`${data.bookingDate}T00:00:00.000Z`);
@@ -274,7 +251,31 @@ export class BookingService {
         throw new ConflictException("Vehicle is blocked for the specified date");
       }
 
-      // 4. Overlapping active bookings check for vehicle AND driver
+      // 3b. The car itself first, so the customer hears the clear reason
+      // ("too close to its previous trip") rather than "no driver is free".
+      const carTrips = await tx.bookings.findMany({
+        where: { bookingDate: data.bookingDate, vehicleId: data.vehicleId, status: { not: BookingStatus.CANCELLED } },
+        select: { startTime: true, endTime: true },
+      });
+      if (carTrips.some((t) => checkSlotOverlapWithBuffer(data.startTime, data.endTime, t.startTime, t.endTime, settings.bookingBufferMinutes))) {
+        throw new ConflictException(`Vehicle or driver has a booking within ${settings.bookingBufferMinutes} minutes of this time slot`);
+      }
+
+      // 3c. Driver: only the car's own drivers may drive it (assigned by an admin
+      // on the fleet page). An explicit driver must be one of them; otherwise
+      // the main driver is tried first, then the others, skipping anyone off,
+      // on leave or busy at that time. It used to take the first ACTIVE driver
+      // in the whole system, and failed with 409 when that one was busy.
+      const driverId = await FleetService.pickDriver(tx, {
+        vehicleId: vehicle.id,
+        driverId: data.driverId,
+        bookingDate: data.bookingDate,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        overlaps: (start, end) => checkSlotOverlapWithBuffer(data.startTime, data.endTime, start, end, settings.bookingBufferMinutes),
+      });
+
+      // 3d. Re-check the car AND the chosen driver together
       const existingBookings = await tx.bookings.findMany({
         where: {
           bookingDate: data.bookingDate,

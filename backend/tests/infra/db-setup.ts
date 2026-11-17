@@ -182,6 +182,11 @@ export async function seedDatabase(): Promise<TestSeedData> {
     },
   });
 
+  // Only a car's own drivers can drive it, so the test car gets the test driver.
+  if (driverUser.drivers) {
+    await prismaClient.vehicleDrivers.create({ data: { vehicleId: vehicle.id, driverId: driverUser.drivers.id, isPrimary: true } });
+  }
+
   return {
     adminRole,
     driverRole,

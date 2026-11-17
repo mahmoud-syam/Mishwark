@@ -222,7 +222,19 @@ const BODY_EXAMPLES = {
     eventType: "Wedding",
     markPaid: false,
   },
-  "/admin/vehicles/{id}": { basePrice: 1800, pricePerKm: 80 },
+  // fleet page (needs vehicle:manage)
+  "POST /admin/vehicles": {
+    make: "Mercedes", model: "S-Class", year: 2024, plateNumber: "أ ب ج 123", color: "Black", capacity: 4, category: "LUXURY",
+    basePrice: 0, pricePerKm: 0, pricePerHour: 0, luggage: 3, features: ["تكييف", "واي فاي"], description: "Luxury car for weddings",
+  },
+  "/admin/vehicles/{id}": { basePrice: 1800, luggage: 3, features: ["تكييف", "مقاعد جلد"] },
+  "/admin/vehicles/{id}/retire": { reason: "Sold" },
+  "/admin/vehicles/{id}/reactivate": {},
+  "/admin/vehicles/{id}/drivers": { driverIds: ["{{driverId}}"], primaryDriverId: "{{driverId}}" },
+  "/admin/vehicles/{id}/images": { images: "" },
+  "/admin/vehicles/{id}/images/{imageId}/cover": {},
+  "/admin/vehicles/{id}/maintenance": { maintenanceType: "صيانة دورية", startDate: "2026-12-01", endDate: "2026-12-02", cost: 1500, notes: "" },
+  "/admin/maintenance/{id}/complete": { cost: 1450, notes: "Done" },
 
   // change password: admin-permissioned, no oldPassword, optionally resets 2FA
   "/auth/change-password/{userId}": { newPassword: "newpass123", reset2FA: false },
@@ -282,7 +294,6 @@ const DESCRIPTIONS = {
   "/auth/reset-2fa/{userId}": "Admin (user_password:manage). Resets a user's 2FA.",
   "/bookings/estimate-price": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount.",
   "/bookings/estimate-distance": "PUBLIC. Resolves startPoint/endPoint (coordinates or a place name) into distanceKm and durationMinutes. Coordinates are passed through; free text is geocoded via OpenRouteService. Without ORS_API_KEY the server falls back to a straight-line estimate and says so in `source` and `warning`.",
-  "POST /bookings": "Creates a booking with status=PENDING. DB unique constraint blocks double-booking (409).",
   "/bookings/{id}/status": "Transitions booking status. PENDING→CONFIRMED/CANCELLED, CONFIRMED→COMPLETED/CANCELLED.",
   "/bookings/{id}/trip-status": "NOTSTARTED→INPROGRESS→ARRIVED→COMPLETED. Trip COMPLETED auto-completes the booking and releases the driver.",
   "/bookings/{id}": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1.",
@@ -308,7 +319,7 @@ const DESCRIPTIONS = {
   "/admin/days/{date}": "Everything booked on one day (YYYY-MM-DD) with stats and per-driver assignments.",
   "/admin/trips/live": "Trips in progress with elapsed/remaining minutes and delay detection.",
   "/admin/drivers-summary": "Drivers ranked by this month's revenue, with rating, reviews and complaints (rating <= 2). ?limit=",
-  "/admin/drivers-assignable": "Drivers that can be assigned to a new booking.",
+  "/admin/drivers-assignable": "Drivers that can be assigned to a new booking. With ?vehicleId= only that car's free drivers, main driver first (the only ones allowed to drive it).",
   "/admin/drivers/{id}/analytics": "Driver income vs company commission. ?period=day|month|year",
   "/admin/drivers/{id}/commission": "Sets the company commission percentage for a driver (0-100). Audit-logged.",
   "/admin/packages": "Customer packages for the dashboard, newest first, with customer, booking counts and the discount given so far. ?status=ACTIVE|COMPLETED|CANCELLED|EXPIRED&page=&limit=",
@@ -316,10 +327,28 @@ const DESCRIPTIONS = {
   "/admin/customers/search": "Customer search by name or phone. ?q=",
   "/admin/customers": "Quick-creates a customer account (name + phone). Audit-logged.",
   "/admin/customers/{id}/analytics": "Customer spend, bookings, wallet and referrals. ?period=day|month|year",
-  "/admin/vehicles/{id}": "Updates vehicle pricing/status. Audit-logged.",
+  "GET /admin/vehicles": "Fleet page list: every car with its derived status for today (AVAILABLE, BOOKED, MAINTENANCE, RETIRED), drivers (main first), cover photo, effective prices (0 = the category price from Settings), next maintenance and upcoming bookings, plus a summary (total, available, booked, maintenance, retired, withoutDriver). ?search=&category=&status=",
+  "POST /admin/vehicles": "Adds a car. Needs vehicle:manage. Prices of 0 use the category price from Settings. Plate numbers are unique (409). Unknown fields such as `status` return 422: status is derived, never stored by hand. A new car has no driver, so it stays hidden from the app until drivers are assigned. Audit-logged.",
+  "GET /admin/vehicles/{id}": "One car for the fleet page: details, category prices, photos (cover first), drivers, maintenance history with state (SCHEDULED, IN_PROGRESS, OVERDUE, DONE), the next 10 bookings and trip/revenue stats. 404 if not found.",
+  "PATCH /admin/vehicles/{id}": "Edits a car's details, prices, luggage, features or description. Needs vehicle:manage. Send only the fields to change (an empty body or `status` returns 422). Audit-logged.",
+  "/admin/vehicle-features": "Suggested feature labels for the fleet form (the defaults plus every feature already used on a car).",
+  "/admin/vehicles/{id}/retire": "Takes a car out of service instead of deleting it: hidden from the app and from new bookings, history kept. Needs vehicle:manage. 409 with `errors.bookings` (the upcoming bookings) while any are pending or confirmed. Audit-logged.",
+  "/admin/vehicles/{id}/reactivate": "Puts a retired car back in service. Needs vehicle:manage. Audit-logged.",
+  "/admin/vehicles/{id}/drivers": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged.",
+  "/admin/vehicles/{id}/images": "Uploads car photos as multipart/form-data, field `images` (up to 8 per request, 12 per car). JPG, PNG or WEBP only, checked by the file's content; 5 MB each (413 over). The first photo becomes the cover. Needs vehicle:manage.",
+  "/admin/vehicles/{id}/images/{imageId}": "Deletes a photo. If it was the cover, the next photo becomes the cover. Needs vehicle:manage.",
+  "/admin/vehicles/{id}/images/{imageId}/cover": "Makes this photo the cover (shown first in the app). Needs vehicle:manage.",
+  "/admin/vehicles/{id}/maintenance": "Schedules maintenance (startDate to endDate, at most 60 days, not in the past). Needs vehicle:manage. The days are blocked for bookings and the car shows as MAINTENANCE while it runs. 409 with `errors.bookings` if the car has pending or confirmed bookings on those days, or if another maintenance overlaps. Audit-logged.",
+  "/admin/maintenance/{id}/complete": "Marks maintenance done (optionally with the final cost and notes) and frees its remaining days from today. Needs vehicle:manage. Audit-logged.",
+  "DELETE /admin/maintenance/{id}": "Cancels maintenance that isn't done yet and frees its days. Needs vehicle:manage. Audit-logged.",
   "/admin/audit-logs": "Append-only audit trail. ?action=CREATE|UPDATE|DELETE&page=&limit=",
   "/admin/audit-logs/export": "Audit trail as an .xlsx download. ?action=",
   "/auth/me": "The signed-in user and role (role re-read from the database).",
+  "GET /vehicles": "Cars customers can book: in service and with at least one driver (retired or driverless cars are hidden). Each car has `luggage`, `features`, photos (cover first) and a status derived for today (AVAILABLE, BOOKED or MAINTENANCE). ?category=&status=",
+  "GET /vehicles/{id}": "One bookable car with photos (cover first), features and luggage. 404 if it doesn't exist, is retired or has no driver.",
+  "POST /driver/vehicles": "Retired: always 403. Cars are assigned to drivers by the administration (PUT /admin/vehicles/{id}/drivers).",
+  "DELETE /driver/vehicles/{vehicleId}": "Retired: always 403. Cars are assigned to drivers by the administration (PUT /admin/vehicles/{id}/drivers).",
+  "POST /bookings": "Creates a booking (PENDING). Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free.",
 };
 
 const SUCCESS_RESPONSES = {
@@ -368,9 +397,34 @@ const REQUEST_SCHEMAS = {
   "/admin/drivers/{id}/status": "DriverStatusBody",
   "/admin/users/role": "UpdateUserRoleBody",
   "/admin/settings": "SystemSettingsBody",
+  "POST /admin/vehicles": "VehicleCreateBody",
+  "PATCH /admin/vehicles/{id}": "VehicleUpdateBody",
+  "/admin/vehicles/{id}/retire": "RetireVehicleBody",
+  "/admin/vehicles/{id}/drivers": "VehicleDriversBody",
+  "/admin/vehicles/{id}/images": "VehicleImagesBody",
+  "/admin/vehicles/{id}/maintenance": "MaintenanceCreateBody",
+  "/admin/maintenance/{id}/complete": "MaintenanceCompleteBody",
 };
 
+const VEHICLE_FIELDS = {
+  make: { type: "string", maxLength: 60 }, model: { type: "string", maxLength: 60 }, year: { type: "integer", minimum: 1950, description: "Up to next year." },
+  plateNumber: { type: "string", maxLength: 20, description: "Unique across the fleet (409 if taken)." }, color: { type: "string", maxLength: 30 },
+  capacity: { type: "integer", minimum: 1, maximum: 60 }, category: { type: "string", enum: ["CAR", "VAN", "BUS", "TRUCK", "CLASSIC", "LUXURY"] },
+  basePrice: { type: "number", minimum: 0, description: "0 = the category price from Settings." },
+  pricePerKm: { type: "number", minimum: 0, description: "0 = the category price from Settings." },
+  pricePerHour: { type: "number", minimum: 0, description: "0 = the category price from Settings." },
+  luggage: { type: "integer", minimum: 0, maximum: 30 },
+  features: { type: "array", maxItems: 20, items: { type: "string", maxLength: 30 }, description: "Shown in the app. Duplicates are removed." },
+  description: { type: "string", maxLength: 1000 },
+};
 const openapiSchemas = {
+  VehicleCreateBody: { type: "object", additionalProperties: false, properties: VEHICLE_FIELDS, required: ["make", "model", "year", "plateNumber", "capacity", "category"] },
+  VehicleUpdateBody: { type: "object", additionalProperties: false, minProperties: 1, properties: VEHICLE_FIELDS, description: "Only the fields to change. `status` is not accepted: it is derived." },
+  RetireVehicleBody: { type: "object", properties: { reason: { type: "string", maxLength: 200 } } },
+  VehicleDriversBody: { type: "object", properties: { driverIds: { type: "array", maxItems: 10, items: { type: "string", format: "uuid" } }, primaryDriverId: { type: "string", format: "uuid", description: "Must be in driverIds; defaults to the first." } }, required: ["driverIds"] },
+  VehicleImagesBody: { type: "object", properties: { images: { type: "array", maxItems: 8, items: { type: "string", format: "binary" }, description: "JPG, PNG or WEBP, 5 MB each." } }, required: ["images"] },
+  MaintenanceCreateBody: { type: "object", properties: { maintenanceType: { type: "string", maxLength: 100 }, startDate: { type: "string", format: "date" }, endDate: { type: "string", format: "date", description: "Defaults to startDate; at most 60 days." }, cost: { type: "number", minimum: 0 }, notes: { type: "string", maxLength: 500 } }, required: ["maintenanceType", "startDate"] },
+  MaintenanceCompleteBody: { type: "object", properties: { cost: { type: "number", minimum: 0 }, notes: { type: "string", maxLength: 500 } } },
   SignupBody: { type: "object", properties: { name: { type: "string" }, email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 }, pic: { type: "string" }, role: { type: "string", enum: ["customer", "driver"], default: "customer", description: "Account type. Admin roles cannot be self-assigned." }, licenseNumber: { type: "string", description: "Required when role is 'driver'." }, licenseExpiry: { type: "string", description: "Required when role is 'driver'." }, referralCode: { type: "string" }, phoneNumbers: { type: "array", items: { type: "object", properties: { number: { type: "string" } } } } }, required: ["name", "email", "password", "phoneNumbers"] },
   LoginBody: { type: "object", properties: { email: { type: "string", format: "email" }, password: { type: "string", minLength: 6 } }, required: ["email", "password"] },
   OtpRequest: { type: "object", properties: { phoneNumber: { type: "string", minLength: 8 } }, required: ["phoneNumber"] },
@@ -537,6 +591,7 @@ function buildPostman(groups) {
       { key: "vehicleId", value: "" },
       { key: "bookingId", value: "" },
       { key: "driverUserId", value: "" },
+      { key: "driverId", value: "" },
       { key: "userId", value: "" },
       { key: "paymentId", value: "" },
       { key: "waitlistId", value: "" },
@@ -826,15 +881,15 @@ const LOGIN_STEP_ROUTES = new Set(["/auth/login"]);
 // /auth/signup is the only route mounted behind multer, so it is the only one
 // that must be described as multipart/form-data. Declaring it as JSON makes
 // multer skip req.body entirely, so every field arrives undefined.
-const MULTIPART_ROUTES = new Set(["/auth/signup"]);
+const MULTIPART_ROUTES = new Set(["/auth/signup", "/admin/vehicles/{id}/images"]);
 
 // File fields must be sent as multipart `file` parts, not text.
-const MULTIPART_FILE_FIELDS = { "/auth/signup": new Set(["pic"]) };
+const MULTIPART_FILE_FIELDS = { "/auth/signup": new Set(["pic"]), "/admin/vehicles/{id}/images": new Set(["images"]) };
 
 // Shown in the Apidog sidebar next to each folder.
 const TAG_DESCRIPTIONS = {
   Auth: "Registration, login, 2FA and OTP. Signup accepts a `role` flag of 'customer' (default) or 'driver'.",
-  Vehicles: "Fleet catalogue. Public - no token required.",
+  Vehicles: "Cars customers can book (in service, with a driver). Public - no token required.",
   Booking: "Trip booking lifecycle: create, cancel, trip status, pricing.",
   Driver: "Driver profile, availability, earnings and assigned bookings.",
   Review: "Two-way reviews between customers and drivers.",
@@ -942,6 +997,7 @@ const environment = {
     { key: "packageId", value: "", type: "default", enabled: true },
     { key: "referralCode", value: "", type: "default", enabled: true },
     { key: "driverUserId", value: "", type: "default", enabled: true },
+    { key: "driverId", value: "", type: "default", enabled: true },
     { key: "roleId", value: "", type: "default", enabled: true },
   ],
   _postman_variable_scope: "environment",
