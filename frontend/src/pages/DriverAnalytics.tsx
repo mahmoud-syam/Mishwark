@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Coins, Percent, Route, Wallet } from "lucide-react";
 import { Link, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
@@ -85,10 +86,10 @@ export default function DriverAnalytics() {
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
 
       <StatGrid>
-        <StatCard loading={q.isPending} label={`رحلات ${word}`} value={d ? num(d.periodStats.trips) : ""} />
-        <StatCard loading={q.isPending} label={`دخل السائق ${word}`} tone="cream" value={d ? num(d.periodStats.driverIncome) : ""} delta="ج.م" />
-        <StatCard loading={q.isPending} label={`نسبتك (${rate}%)`} value={d ? num(d.periodStats.companyShare) : ""} delta="ج.م" />
-        <StatCard loading={q.isPending} label="صافي السائق بعد النسبة" tone="rose" value={d ? num(d.periodStats.driverNet) : ""} delta={`ج.م ${word}`} />
+        <StatCard icon={<Route />} loading={q.isPending} label={`رحلات ${word}`} value={d ? num(d.periodStats.trips) : ""} />
+        <StatCard icon={<Wallet />} loading={q.isPending} label={`دخل السائق ${word}`} tone="cream" value={d ? num(d.periodStats.driverIncome) : ""} delta="ج.م" />
+        <StatCard icon={<Percent />} loading={q.isPending} label={`نسبتك (${rate}%)`} value={d ? num(d.periodStats.companyShare) : ""} delta="ج.م" />
+        <StatCard icon={<Coins />} loading={q.isPending} label="صافي السائق بعد النسبة" tone="rose" value={d ? num(d.periodStats.driverNet) : ""} delta={`ج.م ${word}`} />
       </StatGrid>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
@@ -164,7 +165,7 @@ export default function DriverAnalytics() {
               <>
                 <KeyValue
                   label="تقييم العملاء له"
-                  value={d.quality.rating != null ? `${d.quality.rating.toFixed(1)} ⭐ (${d.quality.reviewCount})` : "لسه مفيش تقييمات"}
+                  value={d.quality.rating != null ? `${d.quality.rating.toFixed(1)} ★ (${d.quality.reviewCount})` : "لسه مفيش تقييمات"}
                   tone={d.quality.rating != null && d.quality.rating < 4 ? "gold" : "mint"}
                 />
                 <KeyValue label="عدد الشكاوى" value={num(d.quality.complaints)} tone={d.quality.complaints > 0 ? "rose" : "mint"} />

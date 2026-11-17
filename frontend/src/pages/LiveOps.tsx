@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { MessageCircle, Phone, TriangleAlert } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
 import type { LiveTrip } from "../lib/types";
@@ -18,8 +19,7 @@ export default function LiveOps() {
   return (
     <Page>
       <PageHeader
-        back="/"
-        eyebrow="Super Admin"
+        eyebrow="متابعة لحظية"
         title="الرحلات الجارية الآن"
         actions={
           <span className="inline-flex items-center gap-2 rounded-full border border-mint bg-mint/15 px-3 py-1.5 text-[13px] text-mint">
@@ -62,7 +62,7 @@ function TripCard({ t, featured }: { t: LiveTrip; featured: boolean }) {
           {t.tripStatus === "ARRIVED" && <span className="text-[12px] font-normal text-gold">(وصل للوجهة)</span>}
         </h2>
         {t.isDelayed ? (
-          <span className="text-[13px] text-rose">⚠️ متأخرة {minutesLabel(t.delayMinutes)} عن الميعاد المتوقع</span>
+          <span className="flex items-center gap-1 text-[13px] text-rose"><TriangleAlert className="size-4" /> متأخرة {minutesLabel(t.delayMinutes)} عن الميعاد المتوقع</span>
         ) : (
           <span className="text-[13px] text-muted">
             بدأت من {minutesLabel(t.elapsedMinutes)}
@@ -100,7 +100,7 @@ function TripCard({ t, featured }: { t: LiveTrip; featured: boolean }) {
             href={telHref(t.driver.phone)}
             className={cx("rounded-xl border border-wine bg-wine/20 py-2.5 text-center text-[13px] font-bold text-blush transition hover:bg-wine/30", !t.driver.phone && "pointer-events-none opacity-50")}
           >
-            📞 اتصال فوري بالسائق
+            <Phone className="me-1 inline size-4 align-[-3px]" /> اتصال فوري بالسائق
           </a>
         ) : (
           <a
@@ -109,7 +109,7 @@ function TripCard({ t, featured }: { t: LiveTrip; featured: boolean }) {
             rel="noreferrer"
             className={cx("rounded-xl border border-line bg-raised py-2.5 text-center text-[13px] font-bold text-cream transition hover:border-gold/60", !t.driver.phone && "pointer-events-none opacity-50")}
           >
-            💬 تواصل مع السائق
+            <MessageCircle className="me-1 inline size-4 align-[-3px]" /> تواصل مع السائق
           </a>
         )}
         <Link

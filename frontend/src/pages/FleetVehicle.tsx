@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Camera, TriangleAlert, Wrench } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, clashBookings, errorMessage, type ClashBooking } from "../lib/api";
@@ -330,7 +331,7 @@ function Photos({ car, canEdit }: { car: FleetDetail; canEdit: boolean }) {
             onChange={(e) => e.target.files?.length && upload.mutate(e.target.files)}
           />
           <Button onClick={() => file.current?.click()} disabled={upload.isPending}>
-            {upload.isPending ? "بيرفع…" : "📷 رفع صور"}
+            <Camera className="size-4" /> {upload.isPending ? "بيرفع…" : "رفع صور"}
           </Button>
           <span className="text-[12px] text-muted">JPG أو PNG أو WEBP · لحد 5 ميجا للصورة</span>
         </div>
@@ -372,7 +373,7 @@ function Drivers({ car, canEdit }: { car: FleetDetail; canEdit: boolean }) {
   return (
     <Panel title="السواقين" tag="بس هما اللي يسوقوا العربية دي" bodyClassName="flex flex-col gap-3">
       {ids.length === 0 ? (
-        <div className="rounded-xl border border-gold/40 bg-gold/10 px-3 py-2.5 text-[13px] text-cream">⚠ من غير سواق العربية مش هتظهر للعملاء ولا تتحجز.</div>
+        <div className="flex items-center gap-2 rounded-xl border border-gold/40 bg-gold/10 px-3 py-2.5 text-[13px] text-cream"><TriangleAlert className="size-4 shrink-0 text-gold" /> من غير سواق العربية مش هتظهر للعملاء ولا تتحجز.</div>
       ) : (
         <ul className="flex flex-col gap-2">
           {ids.map((id) => {
@@ -487,7 +488,7 @@ function Maintenance({ car, canEdit }: { car: FleetDetail; canEdit: boolean }) {
           )}
           <div className="flex justify-end sm:col-span-2">
             <Button type="submit" variant="primary" disabled={!valid || schedule.isPending}>
-              {schedule.isPending ? "…" : "🔧 تسجيل الصيانة"}
+              <Wrench className="size-4" /> {schedule.isPending ? "…" : "تسجيل الصيانة"}
             </Button>
           </div>
         </form>

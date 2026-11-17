@@ -24,7 +24,7 @@ export default function Drivers() {
 
   return (
     <Page>
-      <PageHeader back="/" eyebrow="Super Admin" title="كل السائقين" actions={q.data && <span className="text-[13px] text-muted">{q.data.length} سائق · مرتبين بإيراد الشهر</span>} />
+      <PageHeader eyebrow="حالة وأداء كل سواق" title="السواقين" actions={q.data && <span className="text-[13px] text-muted">{q.data.length} سائق · مرتبين بإيراد الشهر</span>} />
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
       {setStatus.error && <ErrorBox error={errorMessage(setStatus.error)} />}
       {q.isPending ? (

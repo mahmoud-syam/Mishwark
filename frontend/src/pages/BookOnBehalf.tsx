@@ -135,7 +135,7 @@ export default function BookOnBehalf() {
 
   return (
     <Page width="medium">
-      <PageHeader back="/" eyebrow="Super Admin" title="احجز نيابة عن عميل" />
+      <PageHeader eyebrow="حجز بالتليفون أو في المكتب" title="احجز لعميل" />
       <form onSubmit={onSubmit} className="flex flex-col gap-[18px]" noValidate>
         <CustomerStep customer={customer} onChange={setCustomer} />
 
@@ -325,7 +325,7 @@ function CustomerStep({ customer, onChange }: { customer: CustomerHit | null; on
         />
       ) : (
         <>
-          <input className="field-input" value={term} onChange={(e) => setTerm(e.target.value)} placeholder="🔍 دور برقم موبايل أو اسم العميل…" aria-label="بحث عن عميل" />
+          <input className="field-input" value={term} onChange={(e) => setTerm(e.target.value)} placeholder="دور برقم موبايل أو اسم العميل…" aria-label="بحث عن عميل" />
           {debounced.length >= 2 && (
             <ul className="mt-2 flex flex-col gap-1.5">
               {search.isFetching && <Skeleton className="h-12 rounded-xl" />}

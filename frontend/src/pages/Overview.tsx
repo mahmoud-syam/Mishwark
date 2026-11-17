@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CalendarCheck, Car, ChevronLeft, Gauge, MessageSquareWarning, Plus, UserX, Wallet, Wrench } from "lucide-react";
+import { AlertTriangle, CalendarCheck, Car, ChevronLeft, Gauge, Lock, MessageSquareWarning, Plus, Star, UserX, Wallet, Wrench } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import type { BookingListItem, DayDetails, DriverSummary, Overview as OverviewData } from "../lib/types";
@@ -476,7 +476,7 @@ function DriversPanel() {
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-[15px] font-bold text-cream">{d.name}</span>
                   <span className="text-[13px] text-muted">
-                    ⭐ {d.rating.toFixed(1)} · {num(d.monthTrips)} رحلة الشهر ده
+                    <Star className="inline size-3.5 fill-amber text-amber align-[-2px]" /> {d.rating.toFixed(1)} · {num(d.monthTrips)} رحلة الشهر ده
                   </span>
                 </span>
                 <span className="text-[15px] font-bold text-cream ltr">{compact(d.monthRevenue)}</span>
@@ -498,8 +498,8 @@ export function DriverCard({ d, tone }: { d: DriverSummary; tone: (typeof avatar
         <div className="min-w-0">
           <div className="truncate text-[15px] font-bold text-cream">{d.name}</div>
           <div className="text-[13px] text-muted">
-            ⭐ {d.rating.toFixed(1)} · {st.label}
-            {d.statusLocked && <span title="الحالة متحددة من الإدارة"> 🔒</span>}
+            <Star className="inline size-3.5 fill-amber text-amber align-[-2px]" /> {d.rating.toFixed(1)} · {st.label}
+            {d.statusLocked && <span title="الحالة متحددة من الإدارة"> <Lock className="inline size-3.5 align-[-2px]" /></span>}
           </div>
         </div>
       </div>

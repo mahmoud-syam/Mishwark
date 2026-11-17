@@ -186,8 +186,8 @@ function BookingLine({ b, onOpen }: { b: BookingRow; onOpen: () => void }) {
   const today = b.bookingDate === todayKey();
   return (
     <li className="border-b border-line last:border-b-0">
-      <button type="button" onClick={onOpen} className="flex w-full items-center gap-4 rounded-xl px-2 py-3 text-right transition hover:bg-raised">
-        <div className={cx("flex w-[64px] shrink-0 flex-col items-center rounded-xl border py-1.5", today ? "border-gold/60 bg-gold/10" : "border-line bg-raised")}>
+      <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 rounded-xl px-1 py-3 text-right transition hover:bg-raised sm:gap-4 sm:px-2">
+        <div className={cx("flex w-[56px] shrink-0 sm:w-[64px] flex-col items-center rounded-xl border py-1.5", today ? "border-gold/60 bg-gold/10" : "border-line bg-raised")}>
           <span className="text-[11px] text-muted">{today ? "النهارده" : weekdayShort(b.bookingDate)}</span>
           <span className="text-[20px] font-bold leading-tight text-cream">{Number(b.bookingDate.slice(8, 10))}</span>
           <span className="text-[11px] text-muted">{monthName(b.bookingDate)}</span>
@@ -197,12 +197,12 @@ function BookingLine({ b, onOpen }: { b: BookingRow; onOpen: () => void }) {
             <span className="truncate">{b.customer.name}</span>
             <span className="ltr text-[12px] font-normal text-muted">#{b.ref}</span>
           </div>
-          <div className="mt-0.5 truncate text-[13px] text-muted">
+          <div className="mt-0.5 text-[13px] text-muted sm:truncate">
             {timeRange(b.startTime, b.endTime)} · {b.vehicle.name} · {b.driver.fullName}
           </div>
         </div>
         <div className="hidden w-[110px] shrink-0 text-left text-[15px] font-bold text-cream sm:block">{egp(b.totalPrice)}</div>
-        <div className="flex w-[118px] shrink-0 flex-col items-end gap-1.5">
+        <div className="flex shrink-0 flex-col items-end gap-1.5 sm:w-[118px]">
           <Badge tone={b.tripStatus === "INPROGRESS" || b.tripStatus === "ARRIVED" ? "gold" : st.tone}>
             {b.tripStatus === "INPROGRESS" ? "في الطريق" : b.tripStatus === "ARRIVED" ? "وصل" : st.label}
           </Badge>

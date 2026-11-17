@@ -184,7 +184,7 @@ export default function Settings() {
 
   return (
     <Page>
-      <PageHeader back="/" eyebrow="Super Admin" title="الإعدادات" actions={actions} />
+      <PageHeader eyebrow="قواعد الحجز والأسعار والتنبيهات" title="الإعدادات" actions={actions} />
 
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
       {save.error && <ErrorBox error={errorMessage(save.error)} />}

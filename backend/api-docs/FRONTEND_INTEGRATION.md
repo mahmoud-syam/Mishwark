@@ -233,6 +233,10 @@ POST /auth/2fa/disable  → { "token": "123456" }  // current code, required whi
 `/auth/2fa/verify` stores the secret and flips `twoFactorEnabled`. Missing
 `token` or `secret`, or a malformed secret, is a 400, not a 500.
 
+Temporary passwords for dashboard accounts (Team page) expire after
+`tempPasswordDays` (7 by default): signing in with one after that is **403**
+"This temporary password has expired"; a Super Admin issues a new one.
+
 ### Admin credential management
 
 ```http
@@ -376,8 +380,16 @@ POST /bookings
 Returns 201 with `{ success: true, data: Booking }`, status `PENDING`.
 
 Rules:
-- `startTime` must be earlier than `endTime`, both `HH:mm`.
-- `bookingDate` is `YYYY-MM-DD` and cannot be in the past.
+- Both times are `HH:mm` (00:00 to 23:59) and can't be equal. An `endTime`
+  **earlier** than `startTime` means the trip ends the next morning (a wedding
+  from `22:00` to `01:00`). It must end by the hour set in the dashboard
+  Settings (06:00 by default): otherwise **400** "A trip can run past midnight
+  but must end by 06:00". Show "ends the next day" in your UI when end < start.
+- `bookingDate` is `YYYY-MM-DD`, can't be in the past, and at most
+  `maxAdvanceBookingDays` ahead (365 by default): **400** "Trips can be booked
+  up to 365 days ahead".
+- A trip shorter than the minimum in Settings (30 minutes by default):
+  **400** "A trip must be at least 30 minutes long".
 - **Both** `startPoint` and `endPoint` are required. A distance-less booking
   prices at base only, which would otherwise allow free rides.
 - Only the car's own drivers can drive it (the admin assigns them on the fleet
@@ -396,9 +408,12 @@ Rules:
 - A new booking is `PENDING` with `depositRequired` (20% of the price) and
   `depositPaid: 0`. It becomes `CONFIRMED` automatically once confirmed payments
   cover the deposit, or when the driver/admin confirms it.
-- A unique DB constraint on `[vehicleId, bookingDate, startTime]` returns
-  **409** on a double-book. Surface it as "that slot was just taken", not a
-  generic error.
+- A unique DB constraint on `[vehicleId, bookingDate, startTime]` (active
+  bookings only, so a cancelled booking frees its slot) returns **409** on a
+  double-book. Surface it as "that slot was just taken", not a generic error.
+- Gaps and clashes are checked across midnight: a 22:00 to 01:00 trip blocks
+  the same car and driver until 02:00 the next day (with the default 60-minute
+  gap), and maintenance on the next day blocks it.
 
 ### Status transitions
 
@@ -421,6 +436,24 @@ auto-completes the booking and releases the driver.
 `DELETE /bookings/:id` cancels: it releases vehicle availability and the
 driver, and promotes waitlist position #1. Only `PENDING` and `CONFIRMED`
 bookings can be cancelled.
+
+**Cancellation and the deposit.** Before the customer confirms, show what
+happens to their money:
+
+```http
+GET /bookings/:id/cancellation
+→ { "paid": 1390, "refund": 0, "kept": 1390, "outcome": "KEPT",
+    "freeUntil": "2026-11-16T19:00:00.000Z", "freeCancellationHours": 48 }
+```
+
+Cancelled at least `freeCancellationHours` (48 by default) before the start:
+everything paid goes back to the customer's **wallet**. Later: the deposit is
+kept and anything paid above it goes back. Nothing paid: nothing to settle
+(`outcome: null`). The cancelled booking carries `cancelledAt`,
+`depositOutcome` (`REFUNDED` | `KEPT` | null) and `depositRefunded`; the
+DELETE response also has `cancellation` with the same numbers. An admin can
+send `{ "refundDeposit": true }` (or `false`) to decide either way; a customer
+sending it is ignored.
 
 ### Who can act on a booking
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { X } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, errorMessage } from "../lib/api";
 import type { DayDetails, PaymentMethod } from "../lib/types";
@@ -73,7 +74,7 @@ export default function PaymentDialog({ booking, onClose }: { booking: Booking; 
             الدفع · <span className="ltr text-muted">#{booking.ref}</span>
           </h2>
           <button type="button" onClick={() => dialog.current?.close()} className="text-muted hover:text-cream" aria-label="إغلاق">
-            ✕
+            <X className="size-5" />
           </button>
         </div>
 

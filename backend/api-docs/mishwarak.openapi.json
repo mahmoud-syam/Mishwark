@@ -1270,7 +1270,7 @@
         "tags": [
           "Bookings"
         ],
-        "summary": "Creates a booking (PENDING). Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free.",
+        "summary": "Creates a booking (PENDING). An endTime earlier than startTime means the trip ends the next morning (e.g. 22:00 to 01:00); it must end by Settings `overnightLatestEndHour` (default 06:00; 400 otherwise, and 0 turns trips past midnight off). Also 400 for a trip shorter than `minTripMinutes` (default 30), more than `maxAdvanceBookingDays` ahead (default 365), or a start more than 15 minutes in the past today. Clashes with the car, the driver or maintenance are checked across midnight. Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free.",
         "security": [
           {
             "bearerAuth": []
@@ -1343,7 +1343,7 @@
             }
           }
         },
-        "description": "Creates a booking (PENDING). Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free.",
+        "description": "Creates a booking (PENDING). An endTime earlier than startTime means the trip ends the next morning (e.g. 22:00 to 01:00); it must end by Settings `overnightLatestEndHour` (default 06:00; 400 otherwise, and 0 turns trips past midnight off). Also 400 for a trip shorter than `minTripMinutes` (default 30), more than `maxAdvanceBookingDays` ahead (default 365), or a start more than 15 minutes in the past today. Clashes with the car, the driver or maintenance are checked across midnight. Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free.",
         "operationId": "post_bookings"
       },
       "get": {
@@ -1424,7 +1424,7 @@
         "tags": [
           "Bookings"
         ],
-        "summary": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1.",
+        "summary": "Cancels a booking (DELETE). Settles the money paid by the cancellation policy (Settings `freeCancellationHours`, default 48): cancelled that long before the start, everything paid goes back to the customer's wallet; later, the deposit is kept and anything above it goes back. An admin may send `refundDeposit: true|false` to decide either way (ignored from a customer). The booking gets `cancelledAt`, `depositOutcome` (REFUNDED, KEPT or null when nothing was paid) and `depositRefunded`; the response also has `cancellation` (paid, refund, kept). Releases availability & driver and promotes waitlist position #1. Cancelling twice changes nothing.",
         "security": [
           {
             "bearerAuth": []
@@ -1473,14 +1473,14 @@
             "description": "Internal Server Error"
           }
         },
-        "description": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1.",
+        "description": "Cancels a booking (DELETE). Settles the money paid by the cancellation policy (Settings `freeCancellationHours`, default 48): cancelled that long before the start, everything paid goes back to the customer's wallet; later, the deposit is kept and anything above it goes back. An admin may send `refundDeposit: true|false` to decide either way (ignored from a customer). The booking gets `cancelledAt`, `depositOutcome` (REFUNDED, KEPT or null when nothing was paid) and `depositRefunded`; the response also has `cancellation` (paid, refund, kept). Releases availability & driver and promotes waitlist position #1. Cancelling twice changes nothing.",
         "operationId": "get_bookings_id"
       },
       "delete": {
         "tags": [
           "Bookings"
         ],
-        "summary": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1.",
+        "summary": "Cancels a booking (DELETE). Settles the money paid by the cancellation policy (Settings `freeCancellationHours`, default 48): cancelled that long before the start, everything paid goes back to the customer's wallet; later, the deposit is kept and anything above it goes back. An admin may send `refundDeposit: true|false` to decide either way (ignored from a customer). The booking gets `cancelledAt`, `depositOutcome` (REFUNDED, KEPT or null when nothing was paid) and `depositRefunded`; the response also has `cancellation` (paid, refund, kept). Releases availability & driver and promotes waitlist position #1. Cancelling twice changes nothing.",
         "security": [
           {
             "bearerAuth": []
@@ -1529,7 +1529,7 @@
             "description": "Internal Server Error"
           }
         },
-        "description": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1.",
+        "description": "Cancels a booking (DELETE). Settles the money paid by the cancellation policy (Settings `freeCancellationHours`, default 48): cancelled that long before the start, everything paid goes back to the customer's wallet; later, the deposit is kept and anything above it goes back. An admin may send `refundDeposit: true|false` to decide either way (ignored from a customer). The booking gets `cancelledAt`, `depositOutcome` (REFUNDED, KEPT or null when nothing was paid) and `depositRefunded`; the response also has `cancellation` (paid, refund, kept). Releases availability & driver and promotes waitlist position #1. Cancelling twice changes nothing.",
         "operationId": "delete_bookings_id"
       }
     },
@@ -1673,6 +1673,64 @@
         },
         "description": "NOTSTARTED→INPROGRESS→ARRIVED→COMPLETED. Trip COMPLETED auto-completes the booking and releases the driver.",
         "operationId": "patch_bookings_id_trip_status"
+      }
+    },
+    "/bookings/{id}/cancellation": {
+      "get": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "What cancelling now would do to the money paid: `paid`, `refund` (to the wallet), `kept`, `outcome`, `freeUntil` (last moment for a full refund) and `freeCancellationHours`. Show it before the customer confirms. The booking's customer or an admin (404 otherwise).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "What cancelling now would do to the money paid: `paid`, `refund` (to the wallet), `kept`, `outcome`, `freeUntil` (last moment for a full refund) and `freeCancellationHours`. Show it before the customer confirms. The booking's customer or an admin (404 otherwise).",
+        "operationId": "get_bookings_id_cancellation"
       }
     },
     "/driver/profile": {
@@ -4778,6 +4836,54 @@
         "operationId": "get_admin_bookings_all"
       }
     },
+    "/admin/bookings/search": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Dashboard bookings page. `q` matches a reference (MW-1A2B3C), the customer's name or phone (01…, +20… or 0020…). Filters: `status`, `paymentStatus`, `scope` (upcoming = today onwards, soonest first [default]; past = latest first; all), `from`/`to` (YYYY-MM-DD), `page`, `limit` (max 100). Returns `data` (same shape as a day's bookings, plus cancellation fields), `counts` per status for the same search, and `pagination`.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Dashboard bookings page. `q` matches a reference (MW-1A2B3C), the customer's name or phone (01…, +20… or 0020…). Filters: `status`, `paymentStatus`, `scope` (upcoming = today onwards, soonest first [default]; past = latest first; all), `from`/`to` (YYYY-MM-DD), `page`, `limit` (max 100). Returns `data` (same shape as a day's bookings, plus cancellation fields), `counts` per status for the same search, and `pagination`.",
+        "operationId": "get_admin_bookings_search"
+      }
+    },
     "/admin/vehicles/status": {
       "get": {
         "tags": [
@@ -6948,7 +7054,7 @@
         "tags": [
           "Admin"
         ],
-        "summary": "Creates a dashboard account (Super Admin only). Returns `member` and a `temporaryPassword`, shown this once (only its hash is stored). At first sign-in the member picks their own password, then sets up 2FA. 409 if the email is taken. Audit-logged.",
+        "summary": "The temporary password works for Settings `tempPasswordDays` (default 7; `member.tempPasswordExpiresAt`); after that sign-in gets 403 \"This temporary password has expired\". Creates a dashboard account (Super Admin only). Returns `member` and a `temporaryPassword`, shown this once (only its hash is stored). At first sign-in the member picks their own password, then sets up 2FA. 409 if the email is taken. Audit-logged.",
         "security": [
           {
             "bearerAuth": []
@@ -7002,7 +7108,7 @@
             }
           }
         },
-        "description": "Creates a dashboard account (Super Admin only). Returns `member` and a `temporaryPassword`, shown this once (only its hash is stored). At first sign-in the member picks their own password, then sets up 2FA. 409 if the email is taken. Audit-logged.",
+        "description": "The temporary password works for Settings `tempPasswordDays` (default 7; `member.tempPasswordExpiresAt`); after that sign-in gets 403 \"This temporary password has expired\". Creates a dashboard account (Super Admin only). Returns `member` and a `temporaryPassword`, shown this once (only its hash is stored). At first sign-in the member picks their own password, then sets up 2FA. 409 if the email is taken. Audit-logged.",
         "operationId": "post_admin_team"
       }
     },
@@ -7069,7 +7175,7 @@
         "tags": [
           "Admin"
         ],
-        "summary": "Forgotten password: returns a new `temporaryPassword` (shown once); the old password stops working and the member picks a new one at sign-in. Signs them out everywhere. Super Admin only. Audit-logged.",
+        "summary": "The temporary password works for Settings `tempPasswordDays` (default 7; `member.tempPasswordExpiresAt`); after that sign-in gets 403 \"This temporary password has expired\". Forgotten password: returns a new `temporaryPassword` (shown once); the old password stops working and the member picks a new one at sign-in. Signs them out everywhere. Super Admin only. Audit-logged.",
         "security": [
           {
             "bearerAuth": []
@@ -7118,7 +7224,7 @@
             "description": "Internal Server Error"
           }
         },
-        "description": "Forgotten password: returns a new `temporaryPassword` (shown once); the old password stops working and the member picks a new one at sign-in. Signs them out everywhere. Super Admin only. Audit-logged.",
+        "description": "The temporary password works for Settings `tempPasswordDays` (default 7; `member.tempPasswordExpiresAt`); after that sign-in gets 403 \"This temporary password has expired\". Forgotten password: returns a new `temporaryPassword` (shown once); the old password stops working and the member picks a new one at sign-in. Signs them out everywhere. Super Admin only. Audit-logged.",
         "operationId": "post_admin_team_id_reset_password"
       }
     },
@@ -8104,6 +8210,10 @@
         "properties": {
           "reason": {
             "type": "string"
+          },
+          "refundDeposit": {
+            "type": "boolean",
+            "description": "Admin only: refund everything paid (true) or keep the deposit (false), whatever the policy says"
           }
         }
       },
@@ -8552,6 +8662,32 @@
           },
           "selfAppraisalsVisible": {
             "type": "boolean"
+          },
+          "maxAdvanceBookingDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1095
+          },
+          "minTripMinutes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 720
+          },
+          "overnightLatestEndHour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12,
+            "description": "Latest hour a trip past midnight may end; 0 = no trips past midnight"
+          },
+          "freeCancellationHours": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 720
+          },
+          "tempPasswordDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90
           }
         }
       },

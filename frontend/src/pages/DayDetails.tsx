@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CalendarDays, Car, CreditCard, Hourglass, UserRound, Wallet } from "lucide-react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
@@ -53,10 +54,10 @@ export default function DayDetails() {
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
 
       <StatGrid>
-        <StatCard loading={q.isPending} label="إجمالي حجوزات اليوم" value={s?.total ?? ""} />
-        <StatCard loading={q.isPending} label="عربيات مستخدمة" tone="cream" value={s ? `${s.vehiclesUsed} / ${s.totalVehicles}` : ""} />
-        <StatCard loading={q.isPending} label="إيراد اليوم المتوقع" tone="rose" value={s ? compact(s.expectedRevenue) : ""} />
-        <StatCard loading={q.isPending} label="حجوزات معلّقة" value={s?.pending ?? ""} />
+        <StatCard icon={<CalendarDays />} loading={q.isPending} label="إجمالي حجوزات اليوم" value={s?.total ?? ""} />
+        <StatCard icon={<Car />} loading={q.isPending} label="عربيات مستخدمة" tone="cream" value={s ? `${s.vehiclesUsed} / ${s.totalVehicles}` : ""} />
+        <StatCard icon={<Wallet />} loading={q.isPending} label="إيراد اليوم المتوقع" tone="rose" value={s ? compact(s.expectedRevenue) : ""} />
+        <StatCard icon={<Hourglass />} loading={q.isPending} label="حجوزات معلّقة" value={s?.pending ?? ""} />
       </StatGrid>
 
       <Panel title="جدول اليوم بالتوقيت" tag={s ? `${s.total} حجوزات` : undefined}>
@@ -89,7 +90,7 @@ export default function DayDetails() {
                       {b.packageId && <span> · جزء من باقة</span>}
                     </div>
                     <div className="mt-1 text-[12px] text-gold/90">
-                      🚗 السائق:{" "}
+                      <UserRound className="inline size-3.5 align-[-2px]" /> السائق:{" "}
                       <Link to={`/drivers/${b.driver.id}`} className="hover:text-gold">
                         {b.driver.fullName}
                       </Link>
@@ -108,7 +109,7 @@ export default function DayDetails() {
                         title="الدفع"
                       >
                         <Badge tone={PAY_BADGE[b.paymentStatus].tone}>
-                          💳 {PAY_BADGE[b.paymentStatus].label}
+                          <CreditCard className="size-3" /> {PAY_BADGE[b.paymentStatus].label}
                           {b.payments.some((p) => p.status === "PENDING") && <span className="pulse-dot">•</span>}
                         </Badge>
                       </button>

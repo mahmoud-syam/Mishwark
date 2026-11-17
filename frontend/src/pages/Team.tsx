@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Ban, KeyRound, ShieldOff } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -86,7 +87,7 @@ function AddMember({ onCreated }: { onCreated: (name: string, password: string) 
 }
 
 /** Needs a second click to run, so a reset is never a misclick. */
-function ConfirmButton({ label, confirm, onConfirm, busy }: { label: string; confirm: string; onConfirm: () => void; busy: boolean }) {
+function ConfirmButton({ label, icon, confirm, onConfirm, busy }: { label: string; icon?: React.ReactNode; confirm: string; onConfirm: () => void; busy: boolean }) {
   const [armed, setArmed] = useState(false);
   return armed ? (
     <span className="flex items-center gap-1">
@@ -97,6 +98,7 @@ function ConfirmButton({ label, confirm, onConfirm, busy }: { label: string; con
     </span>
   ) : (
     <Button size="sm" onClick={() => setArmed(true)} disabled={busy}>
+      {icon}
       {label}
     </Button>
   );
@@ -164,8 +166,8 @@ function MemberRow({ m, self, onPassword }: { m: TeamMember; self: boolean; onPa
       )}
       {!self && !off && (
         <div className="flex flex-wrap items-center gap-2">
-          <ConfirmButton label="🔐 إعادة ضبط التحقق بخطوتين" confirm="أكيد؟ هيعيد الإعداد في الدخول الجاي" busy={busy} onConfirm={() => reset2fa.mutate()} />
-          <ConfirmButton label="🔑 باسورد مؤقت جديد" confirm="أكيد؟ الباسورد القديم هيتلغي" busy={busy} onConfirm={() => resetPw.mutate()} />
+          <ConfirmButton icon={<ShieldOff className="size-4" />} label="إعادة ضبط التحقق بخطوتين" confirm="أكيد؟ هيعيد الإعداد في الدخول الجاي" busy={busy} onConfirm={() => reset2fa.mutate()} />
+          <ConfirmButton icon={<KeyRound className="size-4" />} label="باسورد مؤقت جديد" confirm="أكيد؟ الباسورد القديم هيتلغي" busy={busy} onConfirm={() => resetPw.mutate()} />
           <select
             className="rounded-xl border border-line bg-raised px-3 py-1.5 text-[13px] text-cream outline-none focus:border-gold/60"
             value={m.role}
@@ -176,7 +178,7 @@ function MemberRow({ m, self, onPassword }: { m: TeamMember; self: boolean; onPa
             <option value="ADMIN">أدمن</option>
             <option value="SUPER_ADMIN">سوبر أدمن</option>
           </select>
-          <ConfirmButton label="⛔ إيقاف الحساب" confirm="أكيد؟ هيخرج فورًا ومش هيقدر يدخل" busy={busy} onConfirm={() => disable.mutate()} />
+          <ConfirmButton icon={<Ban className="size-4" />} label="إيقاف الحساب" confirm="أكيد؟ هيخرج فورًا ومش هيقدر يدخل" busy={busy} onConfirm={() => disable.mutate()} />
           {reset2fa.isSuccess && <span className="fade-in text-[13px] text-mint">اتعمل ✓ وخرج من كل الأجهزة</span>}
           {role.isSuccess && <span className="fade-in text-[13px] text-mint">الدور اتغيّر ✓</span>}
         </div>
@@ -194,7 +196,7 @@ export default function Team() {
   if (!isSuperAdmin) {
     return (
       <Page width="medium">
-        <PageHeader back="/" eyebrow="الإدارة" title="الفريق" />
+        <PageHeader eyebrow="حسابات الداشبورد" title="الفريق" />
         <ErrorBox error="الصفحة دي للسوبر أدمن بس." />
       </Page>
     );
@@ -207,7 +209,7 @@ export default function Team() {
 
   return (
     <Page>
-      <PageHeader back="/" eyebrow="الإدارة" title="الفريق" actions={q.data && <span className="text-[13px] text-muted">{active.length} حساب شغّال{pending ? ` · ${pending} لسه ما كمّلوش التفعيل` : ""}{disabledCount ? ` · ${disabledCount} موقوف` : ""}</span>} />
+      <PageHeader eyebrow="حسابات الداشبورد" title="الفريق" actions={q.data && <span className="text-[13px] text-muted">{active.length} حساب شغّال{pending ? ` · ${pending} لسه ما كمّلوش التفعيل` : ""}{disabledCount ? ` · ${disabledCount} موقوف` : ""}</span>} />
       <p className="text-[14px] leading-relaxed text-muted">
         كل واحد في الفريق له حساب باسمه، والتحقق بخطوتين إجباري للكل. لو حد ضيّع موبايله أو نسي الباسورد، اعمل له إعادة ضبط من هنا. ولو حد ساب الشغل، أوقف حسابه. أي إجراء بيخرّجه من كل الأجهزة، وبيتسجل في سجل التعديلات.
       </p>
