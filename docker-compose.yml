@@ -1,3 +1,5 @@
+# Local development database (and pgAdmin on :5435). Start with: docker compose up -d
+# Matching DATABASE_URL: postgresql://admin:pass@localhost:5433/mishwarak
 version: '3.8'
 
 services:
@@ -13,7 +15,6 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - mishwarak-network
 

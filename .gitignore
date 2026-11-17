@@ -1,20 +1,10 @@
-node_modules
-# Keep environment variables out of version control
+# Shared by backend/ and frontend/ (each also has its own .gitignore)
+node_modules/
 .env
-*.xlsx
+*.log
 
-/generated
-
-/uploads
-/dist
-
-/src/v1/schemas/zod
-/prisma/zod.prisma
-/src/v1/services/email.trial.ts
-
-/scripts
-data.xlsx
-# Local run artifacts
-tmp-*.log
-tmp-*.err
-tmp-*.pid
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

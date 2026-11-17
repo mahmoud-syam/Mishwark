@@ -1,9 +1,18 @@
-# name: Deploy Backend to VPS
+# Deploys the API (backend/) and the admin dashboard build (frontend/dist) to the VPS.
+# Still disabled: uncomment, check the branch name (the default branch is `main`),
+# and add the secrets HOST, USERNAME, SSH_KEY and DATABASE_URL.
+#
+# Layout on the server:
+#   ~/AcsWebsite/AcsWebsite-backend/            API (dist/, prisma/, package.json, .env)
+#   ~/AcsWebsite/AcsWebsite-backend/dashboard-dist/   dashboard build
+# Set DASHBOARD_DIST=./dashboard-dist in the server's .env.
+
+# name: Deploy to VPS
 
 # on:
 #   push:
 #     branches:
-#       - master
+#       - main
 
 # jobs:
 #   deploy:
@@ -11,25 +20,25 @@
 
 #     steps:
 #       - name: Checkout Code
-#         uses: actions/checkout@v3
+#         uses: actions/checkout@v4
 
 #       - name: Setup Node.js
-#         uses: actions/setup-node@v3
+#         uses: actions/setup-node@v4
 #         with:
 #           node-version: '24'
 
-#       - name: Install, Migrate, and Build
+#       - name: Build API and dashboard
+#         working-directory: backend
 #         env:
-#           DATABASE_URL: ${{ secrets.DATABASE_URL }}  # Ensure this is set in your
+#           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 #         run: |
 #           npm ci
-#           npx prisma generate  # Generates the client locally so TypeScript can compile successfully
+#           npx prisma generate      # so TypeScript can compile
 #           npm run build
-#           npm run dashboard:build   # admin web dashboard -> dashboard/dist (served at /dashboard)
-#           mkdir -p dist/templates
-#           cp -R src/templates/. dist/templates/
-#       # --- NEW STEP: Clean old build and schema files on the VPS ---
-#       - name: Clean up old files on VPS
+#           npm run dashboard:build  # -> ../frontend/dist (served at /dashboard)
+#           if [ -d src/templates ]; then mkdir -p dist/templates && cp -R src/templates/. dist/templates/; fi
+
+#       - name: Clean old build on VPS
 #         uses: appleboy/ssh-action@master
 #         with:
 #           host: ${{ secrets.HOST }}
@@ -37,23 +46,33 @@
 #           key: ${{ secrets.SSH_KEY }}
 #           port: 22
 #           script: |
-#             # Removes the old directories to prevent ghost-file duplicates
 #             rm -rf ~/AcsWebsite/AcsWebsite-backend/prisma
 #             rm -rf ~/AcsWebsite/AcsWebsite-backend/dist
-#             rm -rf ~/AcsWebsite/AcsWebsite-backend/dashboard/dist
+#             rm -rf ~/AcsWebsite/AcsWebsite-backend/dashboard-dist
 
-#       - name: Transfer to VPS
+#       - name: Upload API
 #         uses: appleboy/scp-action@master
 #         with:
 #           host: ${{ secrets.HOST }}
 #           username: ${{ secrets.USERNAME }}
 #           key: ${{ secrets.SSH_KEY }}
 #           port: 22
-#           # Sync a self-contained build artifact plus the deployment metadata the server still needs.
-#           source: "dist/,dashboard/dist/,package.json,package-lock.json,prisma/,prisma.config.ts,tsconfig.json"
+#           source: "backend/dist/,backend/package.json,backend/package-lock.json,backend/prisma/,backend/prisma.config.ts,backend/tsconfig.json"
 #           target: "~/AcsWebsite/AcsWebsite-backend"
+#           strip_components: 1    # backend/dist -> dist
 
-#       - name: Update Database & Start Application
+#       - name: Upload dashboard
+#         uses: appleboy/scp-action@master
+#         with:
+#           host: ${{ secrets.HOST }}
+#           username: ${{ secrets.USERNAME }}
+#           key: ${{ secrets.SSH_KEY }}
+#           port: 22
+#           source: "frontend/dist/"
+#           target: "~/AcsWebsite/AcsWebsite-backend/dashboard-dist"
+#           strip_components: 2    # frontend/dist/index.html -> dashboard-dist/index.html
+
+#       - name: Migrate and restart
 #         uses: appleboy/ssh-action@master
 #         with:
 #           host: ${{ secrets.HOST }}
@@ -62,12 +81,7 @@
 #           port: 22
 #           script: |
 #             cd ~/AcsWebsite/AcsWebsite-backend
-#             npm ci --omit=dev  
-            
-#             # Applies any pending migrations to the local database
-#             npx prisma migrate deploy  
-
-#             # Generate the Prisma Client for the production environment
+#             npm ci --omit=dev
+#             npx prisma migrate deploy
 #             npx prisma generate
-            
 #             pm2 restart backend || pm2 start npm --name "backend" -- start

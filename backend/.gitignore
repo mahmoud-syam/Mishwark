@@ -1,0 +1,15 @@
+# Build output and generated code
+/dist
+/generated
+/src/v1/schemas/zod
+/prisma/zod.prisma
+
+# Runtime files
+/uploads
+*.xlsx
+
+# Local experiments
+/src/v1/services/email.trial.ts
+tmp-*.log
+tmp-*.err
+tmp-*.pid
