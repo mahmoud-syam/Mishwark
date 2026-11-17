@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { disposableDatabaseProblem } from './db-guard';
 import {
   getRegisteredTests,
   clearRegisteredTests,
@@ -15,6 +16,11 @@ import {
 export { describe, test, it, expect, AssertionError };
 
 export async function runAllTests(): Promise<number> {
+  const unsafe = disposableDatabaseProblem();
+  if (unsafe) {
+    console.error(`\n❌ ${unsafe}\n`);
+    return 1;
+  }
   const testsDir = path.resolve(__dirname, '..');
   const tiers = ['tier1', 'tier2', 'tier3', 'tier4'];
   const testFiles: { tier: string; filePath: string }[] = [];

@@ -3,7 +3,7 @@
 > Describes the API in `backend/`. File paths and commands below are relative to that folder.
 
 ## Test Runner
-- Command: `npx tsx tests/infra/run-all.ts`
+- Command: `npx tsx tests/infra/run-all.ts` (or `npm test`), with `DATABASE_URL` pointing at a database whose name contains `test`: the suite wipes it and refuses any other.
 - Expected: all tests pass with exit code 0
 
 ## Coverage Summary

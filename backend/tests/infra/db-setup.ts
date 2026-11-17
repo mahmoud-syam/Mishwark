@@ -1,5 +1,6 @@
 import prismaClient from '../../src/v1/utils/prismaClientHelper';
 import SettingsService from '../../src/v1/services/settings.service';
+import { assertDisposableDatabase } from './db-guard';
 import {
   DriverStatus,
   VehicleCategory,
@@ -31,6 +32,7 @@ export async function isDatabaseConnected(): Promise<boolean> {
 }
 
 export async function resetDatabase(): Promise<void> {
+  assertDisposableDatabase(); // second line of defence: never wipe a non-test database
   const connected = await isDatabaseConnected();
   if (!connected) {
     return;

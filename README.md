@@ -50,7 +50,7 @@ The first admin login asks you to set up 2FA with an authenticator app.
 | Command | What it does |
 |---|---|
 | `npm run dev` | API with auto-reload |
-| `npm test` | Full test suite (needs a migrated test database in `DATABASE_URL`) |
+| `npm test` | Full test suite. It wipes its database, so it only runs against one whose name contains `test`: `DATABASE_URL=postgresql://…/mishwark_test npm test` |
 | `npm run verify` | Typecheck, API docs check and tests: run before every push |
 | `npm run api-docs` | Rebuild and check the OpenAPI spec after changing routes |
 | `npm run dashboard:build` | Build the dashboard into `frontend/dist` |
