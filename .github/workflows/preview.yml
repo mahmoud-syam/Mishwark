@@ -6,6 +6,11 @@
 # "Live preview" status on the pushed commit (and in the job log). It stays up
 # for PREVIEW_HOURS, then shuts down; push again (even an empty commit) for a
 # fresh one. Data is demo data and is thrown away when the run ends.
+#
+# Fixed address on your own domain: create a Cloudflare Tunnel whose public
+# hostname points to http://localhost:5000, then add the repo secret
+# CLOUDFLARE_TUNNEL_TOKEN (the tunnel's token) and the repo variable
+# PREVIEW_URL (e.g. https://test.example.com). Protect it with Cloudflare Access.
 name: Live preview
 
 on:
@@ -88,21 +93,36 @@ jobs:
 
       - name: Open the public link
         id: tunnel
+        env:
+          # Your own Cloudflare Tunnel (fixed address, can sit behind Cloudflare
+          # Access). Without these, a random trycloudflare.com link is used.
+          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          FIXED_URL: ${{ vars.PREVIEW_URL }}
         run: |
           curl -sSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x cloudflared
-          nohup ./cloudflared tunnel --no-autoupdate --url "http://localhost:$PORT" > tunnel.log 2>&1 &
-          for i in $(seq 1 60); do
-            URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' tunnel.log | head -1)
-            [ -n "$URL" ] && break
-            sleep 2
-          done
-          [ -n "$URL" ] || { cat tunnel.log; exit 1; }
-          # Wait until the link actually answers.
-          for i in $(seq 1 60); do
-            curl -sf "$URL/api/v1/vehicles" >/dev/null && break
-            sleep 3
-          done
+          if [ -n "$TUNNEL_TOKEN" ] && [ -n "$FIXED_URL" ]; then
+            URL="${FIXED_URL%/}"
+            nohup ./cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN" > tunnel.log 2>&1 &
+            for i in $(seq 1 60); do
+              grep -q "Registered tunnel connection" tunnel.log && break
+              sleep 2
+            done
+            grep -q "Registered tunnel connection" tunnel.log || { cat tunnel.log; exit 1; }
+          else
+            nohup ./cloudflared tunnel --no-autoupdate --url "http://localhost:$PORT" > tunnel.log 2>&1 &
+            for i in $(seq 1 60); do
+              URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' tunnel.log | head -1)
+              [ -n "$URL" ] && break
+              sleep 2
+            done
+            [ -n "$URL" ] || { cat tunnel.log; exit 1; }
+            # Wait until the link actually answers.
+            for i in $(seq 1 60); do
+              curl -sf "$URL/api/v1/vehicles" >/dev/null && break
+              sleep 3
+            done
+          fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "## Live preview: $URL/dashboard/" >> "$GITHUB_STEP_SUMMARY"
 
