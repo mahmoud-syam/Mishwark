@@ -77,8 +77,10 @@ export class ApiClient {
       : `/api/v1${path.startsWith('/') ? path : '/' + path}`;
     const url = `${this.baseUrl}${fullPath}`;
 
+    // FormData (file uploads) sets its own multipart Content-Type.
+    const isForm = typeof FormData !== 'undefined' && options.body instanceof FormData;
     const reqHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
+      ...(isForm ? {} : { 'Content-Type': 'application/json' }),
       ...options.headers,
     };
 
@@ -102,7 +104,7 @@ export class ApiClient {
     };
 
     if (options.body && method !== 'GET') {
-      init.body = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
+      init.body = isForm || typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
     }
 
     const res = await fetch(url, init);

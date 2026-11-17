@@ -94,3 +94,18 @@ then the server logs a production warning on every start.
 | F-26 | Low | The commission split was rounded to whole pounds, differently in the driver app and the dashboard (net 79.09 vs 79 for the same trips, and share + net didn't add up). Showed once discounts produced piaster prices. | Both round to the piaster: share = revenue x rate, net = revenue - share, in `GET /driver/stats` and the dashboard driver report. |
 | F-27 | Medium | When the database was unreachable, every endpoint answered 400 "Invalid request", which tells the apps the request was wrong. | Database errors (Prisma P1xxx, failed startup) return 503 "Service temporarily unavailable" and are logged. |
 | F-28 | High | The test suite deletes every row before it runs, with no check on which database: `npm test` / `npm run verify` with a normal `.env` would wipe the dev (or production) data. | The suite refuses to run unless the database name contains "test" (override: `ALLOW_TEST_DB_RESET=true`); `resetDatabase` checks again. |
+
+### Fleet management (2026-11-17)
+
+Found while building the fleet page and fixed on `feature/fleet-management`.
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-29 | High | Any driver could attach himself to any car (`POST /driver/vehicles`) and so take its bookings. | Cars are assigned by an admin from the fleet page (`vehicle:manage`); the driver endpoints return 403. |
+| F-30 | High | A booking without a driver took the first ACTIVE driver in the whole system, not one of the car's drivers, and failed with 409 if that one driver was busy even when others were free. | Only the car's drivers can drive it: main driver first, then the others, skipping off, on-leave and busy ones. A chosen driver must be one of them. |
+| F-31 | Medium | Putting a car in MAINTENANCE by hand ignored its bookings (they stayed on a car marked unavailable) and was never undone automatically. | Maintenance is scheduled with dates: refused (409, with the bookings listed) on booked days, blocks its days, and the status follows the dates. Existing manual MAINTENANCE cars were converted by the migration. |
+| F-32 | Medium | Car photos were only checked by the type the browser declares, so a renamed text file was accepted as an image. | The file's first bytes must be a real JPG, PNG or WEBP of the declared type; refused uploads leave nothing on disk. |
+| F-33 | Low | `GET /vehicles/:id` returned 400 for an unknown car. | 404, also for retired and driverless cars. |
+
+Still open: signup (`POST /auth/signup`, `pic` and documents) has the same
+declared-type-only check as F-32. Not changed here; worth the same fix.

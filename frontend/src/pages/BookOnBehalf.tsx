@@ -68,11 +68,15 @@ export default function BookOnBehalf() {
     queryKey: ["vehicles"],
     queryFn: () => api.raw<{ data: Vehicle[] }>("GET", "/vehicles").then((r) => r.data),
   });
+  // Only the chosen car's own drivers can drive it (main driver first).
   const drivers = useQuery({
-    queryKey: ["drivers-assignable"],
-    queryFn: () => api.get<{ id: string; fullName: string; status: string }[]>("/admin/drivers-assignable"),
+    queryKey: ["drivers-assignable", vehicleId],
+    queryFn: () => api.get<{ id: string; fullName: string; status: string; isPrimary?: boolean }[]>(`/admin/drivers-assignable?vehicleId=${vehicleId}`),
+    enabled: Boolean(vehicleId),
   });
-  const bookable = (vehicles.data ?? []).filter((v) => v.status !== "MAINTENANCE");
+  useEffect(() => setDriverId(""), [vehicleId]);
+  // The API lists only cars in service with a driver; maintenance is checked for the chosen date.
+  const bookable = vehicles.data ?? [];
 
   const fromValue = toPlaceValue(from);
   const toValue = toPlaceValue(to);
@@ -140,7 +144,7 @@ export default function BookOnBehalf() {
               {vehicles.isPending ? (
                 <Skeleton className="h-5" />
               ) : (
-                <select className={fieldControl} value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} required>
+                <select className={fieldControl} value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} required aria-label="العربية">
                   <option value="" className="bg-surface">اختار عربية…</option>
                   {bookable.map((v) => (
                     <option key={v.id} value={v.id} className="bg-surface">
@@ -177,11 +181,12 @@ export default function BookOnBehalf() {
               </div>
             </Field>
             <Field label="السائق">
-              <select className={fieldControl} value={driverId} onChange={(e) => setDriverId(e.target.value)}>
-                <option value="" className="bg-surface">تعيين تلقائي لأول سائق متاح</option>
+              <select className={fieldControl} value={driverId} onChange={(e) => setDriverId(e.target.value)} aria-label="السائق">
+                <option value="" className="bg-surface">{vehicleId ? "تلقائي: أول سواق فاضي من سواقين العربية" : "اختار العربية الأول"}</option>
                 {(drivers.data ?? []).map((d) => (
                   <option key={d.id} value={d.id} className="bg-surface">
                     {d.fullName}
+                    {d.isPrimary ? " (الأساسي)" : ""}
                   </option>
                 ))}
               </select>

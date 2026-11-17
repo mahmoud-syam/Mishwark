@@ -271,6 +271,20 @@ async function main() {
       });
     }
 
+    // Every car needs at least one driver: only a car's own drivers can drive it.
+    const existingVD3 = await prisma.vehicleDrivers.findFirst({
+      where: { vehicleId: vehicle3.id, driverId: driver2Profile.id },
+    });
+    if (!existingVD3) {
+      await prisma.vehicleDrivers.create({
+        data: {
+          vehicleId: vehicle3.id,
+          driverId: driver2Profile.id,
+          isPrimary: true,
+        },
+      });
+    }
+
     console.log("Database seeding completed successfully.");
   } catch (error) {
     console.error("Database seeding encountered an error or DB is offline:", error);

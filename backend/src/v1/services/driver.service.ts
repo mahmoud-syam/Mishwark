@@ -122,47 +122,6 @@ export class DriverService {
     };
   }
 
-  public static async assignVehicle(userId: string, vehicleId: string, isPrimary: boolean = false) {
-    const driver = await prismaClient.drivers.findUnique({ where: { userId } });
-    if (!driver) {
-      throw new NotFoundException(`Driver profile not found for user ${userId}`);
-    }
-
-    const vehicle = await prismaClient.vehicles.findUnique({ where: { id: vehicleId } });
-    if (!vehicle) {
-      throw new NotFoundException(`Vehicle with ID ${vehicleId} not found`);
-    }
-
-    const existing = await prismaClient.vehicleDrivers.findFirst({
-      where: { driverId: driver.id, vehicleId },
-    });
-
-    if (existing) {
-      throw new BadRequestException("Driver is already assigned to this vehicle");
-    }
-
-    return await prismaClient.vehicleDrivers.create({
-      data: {
-        driverId: driver.id,
-        vehicleId,
-        isPrimary,
-      },
-    });
-  }
-
-  public static async removeVehicleAssignment(userId: string, vehicleId: string) {
-    const driver = await prismaClient.drivers.findUnique({ where: { userId } });
-    if (!driver) {
-      throw new NotFoundException(`Driver profile not found for user ${userId}`);
-    }
-
-    await prismaClient.vehicleDrivers.deleteMany({
-      where: { driverId: driver.id, vehicleId },
-    });
-
-    return { message: "Vehicle assignment removed" };
-  }
-
   public static async getDriverStats(userId: string) {
     const driver = await prismaClient.drivers.findUnique({ where: { userId } });
     if (!driver) {

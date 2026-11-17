@@ -10,6 +10,7 @@ import {
 } from "../utils/errors";
 import { normalizeRoleName, USER_ROLES } from "../constants/roles";
 import SettingsService from "./settings.service";
+import FleetService from "./fleet.service";
 
 export class AdminService {
   public static async getDashboardStats() {
@@ -25,11 +26,11 @@ export class AdminService {
       todayBookings,
       totalRevenue,
       activeDrivers,
-      availableVehicles,
+      activeVehicles,
     ] = await Promise.all([
       prismaClient.users.count({ where: { isDeleted: false } }),
       prismaClient.drivers.count(),
-      prismaClient.vehicles.count(),
+      prismaClient.vehicles.count({ where: { retiredAt: null } }),
       prismaClient.bookings.count({ where: { status: { not: BookingStatus.CANCELLED } } }),
       prismaClient.bookings.count({ where: { status: BookingStatus.COMPLETED } }),
       prismaClient.bookings.count({ where: { status: BookingStatus.CANCELLED } }),
@@ -39,8 +40,10 @@ export class AdminService {
         _sum: { totalPrice: true },
       }),
       prismaClient.drivers.count({ where: { status: DriverStatus.ACTIVE } }),
-      prismaClient.vehicles.count({ where: { status: VehicleStatus.AVAILABLE } }),
+      prismaClient.vehicles.findMany({ where: { retiredAt: null }, select: { id: true } }),
     ]);
+    const statuses = await FleetService.statuses(activeVehicles.map((v) => v.id), today);
+    const availableVehicles = [...statuses.values()].filter((st) => st === "AVAILABLE").length;
 
     return {
       totalUsers,
@@ -121,6 +124,7 @@ export class AdminService {
     todayEnd.setDate(todayEnd.getDate() + 1);
 
     const vehicles = await prismaClient.vehicles.findMany({
+      where: { retiredAt: null },
       include: {
         vehicleDrivers: {
           include: {
@@ -140,12 +144,13 @@ export class AdminService {
       },
     });
 
+    const statuses = await FleetService.statuses(vehicles.map((v) => v.id));
     return vehicles.map((v) => ({
       id: v.id,
       make: v.make,
       model: v.model,
       category: v.category,
-      status: v.status,
+      status: statuses.get(v.id) ?? "AVAILABLE",
       plateNumber: v.plateNumber,
       assignedDrivers: v.vehicleDrivers.map((vd) => ({
         id: vd.driver.id,

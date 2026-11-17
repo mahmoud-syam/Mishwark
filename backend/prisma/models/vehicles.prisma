@@ -13,6 +13,14 @@ model Vehicles {
   pricePerHour          Float                 @default(0)
   images                VehicleImages[]
   description           String                @default("")
+  /// Bags the car takes (shown on the car screen in the customer app).
+  luggage               Int                   @default(0)
+  /// Feature tags for the app ("تكييف", "واي فاي"...).
+  features              String[]              @default([])
+  /// Set when the car is taken out of service. Retired cars are hidden from the
+  /// app and from new bookings; their history stays.
+  retiredAt             DateTime?
+  retiredReason         String?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @default(now()) @updatedAt
   vehicleDrivers        VehicleDrivers[]
@@ -27,6 +35,8 @@ model VehicleImages {
   vehicle   Vehicles @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   vehicleId String
   imageUrl  String   @default("")
+  isCover   Boolean  @default(false)
+  sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 }
@@ -63,9 +73,14 @@ model VehicleMaintenance {
   vehicleId       String
   maintenanceType String
   cost            Float     @default(0)
+  /// First and last day of the maintenance (both inclusive). The car can't be
+  /// booked on those days.
   scheduledDate   DateTime
+  endDate         DateTime?
   completedDate   DateTime?
   notes           String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @default(now()) @updatedAt
+
+  @@index([vehicleId, scheduledDate])
 }

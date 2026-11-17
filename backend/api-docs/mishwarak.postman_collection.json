@@ -27,6 +27,10 @@
       "value": ""
     },
     {
+      "key": "driverId",
+      "value": ""
+    },
+    {
       "key": "userId",
       "value": ""
     },
@@ -844,7 +848,8 @@
                   "disabled": false
                 }
               ]
-            }
+            },
+            "description": "Cars customers can book: in service and with at least one driver (retired or driverless cars are hidden). Each car has `luggage`, `features`, photos (cover first) and a status derived for today (AVAILABLE, BOOKED or MAINTENANCE). ?category=&status="
           },
           "response": [],
           "event": [
@@ -884,7 +889,8 @@
                 "vehicles",
                 ":id"
               ]
-            }
+            },
+            "description": "One bookable car with photos (cover first), features and luggage. 404 if it doesn't exist, is retired or has no driver."
           },
           "response": []
         },
@@ -1070,7 +1076,7 @@
                 }
               }
             },
-            "description": "Creates a booking with status=PENDING. DB unique constraint blocks double-booking (409)."
+            "description": "Creates a booking (PENDING). Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free."
           },
           "response": [
             {
@@ -1602,7 +1608,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "Retired: always 403. Cars are assigned to drivers by the administration (PUT /admin/vehicles/{id}/drivers)."
           },
           "response": [],
           "event": [
@@ -1642,7 +1649,8 @@
                 "vehicles",
                 ":vehicleId"
               ]
-            }
+            },
+            "description": "Retired: always 403. Cars are assigned to drivers by the administration (PUT /admin/vehicles/{id}/drivers)."
           },
           "response": [],
           "event": [
@@ -4344,7 +4352,7 @@
                 "drivers-assignable"
               ]
             },
-            "description": "Drivers that can be assigned to a new booking."
+            "description": "Drivers that can be assigned to a new booking. With ?vehicleId= only that car's free drivers, main driver first (the only ones allowed to drive it)."
           },
           "response": [],
           "event": [
@@ -4653,56 +4661,6 @@
           ]
         },
         {
-          "name": "PATCH /admin/vehicles/:id",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/vehicles/:id",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "vehicles",
-                ":id"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"basePrice\": 1800,\n  \"pricePerKm\": 80\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "description": "Updates vehicle pricing/status. Audit-logged."
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "if (!pm.environment.get('token')) {",
-                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
-                  "}"
-                ]
-              }
-            }
-          ]
-        },
-        {
           "name": "GET /admin/audit-logs/export",
           "request": {
             "method": "GET",
@@ -4858,6 +4816,652 @@
               }
             },
             "description": "Sets an active package's discount % (0-100). Needs booking:manage. Bookings in the package that nothing has been paid on yet (PENDING, depositPaid 0) are re-priced; paid ones keep their price. Returns the package plus `repriced` (count). Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/vehicles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "vehicles"
+              ]
+            },
+            "description": "Fleet page list: every car with its derived status for today (AVAILABLE, BOOKED, MAINTENANCE, RETIRED), drivers (main first), cover photo, effective prices (0 = the category price from Settings), next maintenance and upcoming bookings, plus a summary (total, available, booked, maintenance, retired, withoutDriver). ?search=&category=&status="
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/vehicle-features",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicle-features",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "vehicle-features"
+              ]
+            },
+            "description": "Suggested feature labels for the fleet form (the defaults plus every feature already used on a car)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/vehicles/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicles/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "vehicles",
+                ":id"
+              ]
+            },
+            "description": "One car for the fleet page: details, category prices, photos (cover first), drivers, maintenance history with state (SCHEDULED, IN_PROGRESS, OVERDUE, DONE), the next 10 bookings and trip/revenue stats. 404 if not found."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/vehicles",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "vehicles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"make\": \"Mercedes\",\n  \"model\": \"S-Class\",\n  \"year\": 2024,\n  \"plateNumber\": \"أ ب ج 123\",\n  \"color\": \"Black\",\n  \"capacity\": 4,\n  \"category\": \"LUXURY\",\n  \"basePrice\": 0,\n  \"pricePerKm\": 0,\n  \"pricePerHour\": 0,\n  \"luggage\": 3,\n  \"features\": [\n    \"تكييف\",\n    \"واي فاي\"\n  ],\n  \"description\": \"Luxury car for weddings\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Adds a car. Needs vehicle:manage. Prices of 0 use the category price from Settings. Plate numbers are unique (409). Unknown fields such as `status` return 422: status is derived, never stored by hand. A new car has no driver, so it stays hidden from the app until drivers are assigned. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /admin/vehicles/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicles/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "vehicles",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"basePrice\": 1800,\n  \"luggage\": 3,\n  \"features\": [\n    \"تكييف\",\n    \"مقاعد جلد\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Edits a car's details, prices, luggage, features or description. Needs vehicle:manage. Send only the fields to change (an empty body or `status` returns 422). Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/vehicles/:id/retire",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicles/:id/retire",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "vehicles",
+                ":id",
+                "retire"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Sold\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Takes a car out of service instead of deleting it: hidden from the app and from new bookings, history kept. Needs vehicle:manage. 409 with `errors.bookings` (the upcoming bookings) while any are pending or confirmed. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/vehicles/:id/reactivate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicles/:id/reactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "vehicles",
+                ":id",
+                "reactivate"
+              ]
+            },
+            "description": "Puts a retired car back in service. Needs vehicle:manage. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT /admin/vehicles/:id/drivers",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicles/:id/drivers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "vehicles",
+                ":id",
+                "drivers"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"driverIds\": [\n    \"{{driverId}}\"\n  ],\n  \"primaryDriverId\": \"{{driverId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/vehicles/:id/images",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicles/:id/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "vehicles",
+                ":id",
+                "images"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Uploads car photos as multipart/form-data, field `images` (up to 8 per request, 12 per car). JPG, PNG or WEBP only, checked by the file's content; 5 MB each (413 over). The first photo becomes the cover. Needs vehicle:manage."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE /admin/vehicles/:id/images/:imageId",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicles/:id/images/:imageId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "vehicles",
+                ":id",
+                "images",
+                ":imageId"
+              ]
+            },
+            "description": "Deletes a photo. If it was the cover, the next photo becomes the cover. Needs vehicle:manage."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /admin/vehicles/:id/images/:imageId/cover",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicles/:id/images/:imageId/cover",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "vehicles",
+                ":id",
+                "images",
+                ":imageId",
+                "cover"
+              ]
+            },
+            "description": "Makes this photo the cover (shown first in the app). Needs vehicle:manage."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/vehicles/:id/maintenance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicles/:id/maintenance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "vehicles",
+                ":id",
+                "maintenance"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"maintenanceType\": \"صيانة دورية\",\n  \"startDate\": \"2026-12-01\",\n  \"endDate\": \"2026-12-02\",\n  \"cost\": 1500,\n  \"notes\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Schedules maintenance (startDate to endDate, at most 60 days, not in the past). Needs vehicle:manage. The days are blocked for bookings and the car shows as MAINTENANCE while it runs. 409 with `errors.bookings` if the car has pending or confirmed bookings on those days, or if another maintenance overlaps. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /admin/maintenance/:id/complete",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/maintenance/:id/complete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "maintenance",
+                ":id",
+                "complete"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cost\": 1450,\n  \"notes\": \"Done\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Marks maintenance done (optionally with the final cost and notes) and frees its remaining days from today. Needs vehicle:manage. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE /admin/maintenance/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/maintenance/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "maintenance",
+                ":id"
+              ]
+            },
+            "description": "Cancels maintenance that isn't done yet and frees its days. Needs vehicle:manage. Audit-logged."
           },
           "response": [],
           "event": [

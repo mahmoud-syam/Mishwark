@@ -18,6 +18,7 @@ import BookingService from "./booking.service";
 import AuditService, { AuditActor } from "./audit.service";
 import PaymentService from "./payment.service";
 import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
+import FleetService from "./fleet.service";
 import {
   addDays,
   addMonths,
@@ -139,7 +140,8 @@ export class AdminDashboardService {
         where: { bookingDate: { gte: lmStart, lte: lmEnd }, status: { in: REVENUE_STATUSES } },
         _sum: { totalPrice: true },
       }),
-      prismaClient.vehicles.findMany({ select: { id: true, status: true } }),
+      // Retired cars are out of the fleet numbers.
+      prismaClient.vehicles.findMany({ where: { retiredAt: null }, select: { id: true, make: true, model: true, _count: { select: { vehicleDrivers: true } } } }),
       prismaClient.bookings.findMany({
         where: { bookingDate: today, status: { not: BookingStatus.CANCELLED } },
         select: { vehicleId: true },
@@ -150,7 +152,7 @@ export class AdminDashboardService {
         select: { vehicleId: true, bookingDate: true, status: true, totalPrice: true },
       }),
       prismaClient.vehicleMaintenance.findMany({
-        where: { completedDate: null, scheduledDate: { gte: new Date(now.getTime() - 86_400_000), lte: maintenanceHorizon } },
+        where: { completedDate: null, vehicle: { retiredAt: null }, scheduledDate: { gte: new Date(now.getTime() - 86_400_000), lte: maintenanceHorizon } },
         include: { vehicle: { select: { id: true, make: true, model: true } } },
         orderBy: { scheduledDate: "asc" },
       }),
@@ -169,7 +171,9 @@ export class AdminDashboardService {
     ]);
 
     const totalVehicles = vehicles.length;
-    const maintenanceVehicles = vehicles.filter((v) => v.status === VehicleStatus.MAINTENANCE).length;
+    // Status is derived from the maintenance schedule (FleetService), not set by hand.
+    const fleetStatus = await FleetService.statuses(vehicles.map((v) => v.id), today);
+    const maintenanceVehicles = vehicles.filter((v) => fleetStatus.get(v.id) === "MAINTENANCE").length;
     const operational = totalVehicles - maintenanceVehicles;
     const bookedToday = todayRows.length;
     const usedSlots = new Set(weekRows.map((r) => `${r.vehicleId}|${r.bookingDate}`)).size;
@@ -194,6 +198,15 @@ export class AdminDashboardService {
         maintenanceType: m.maintenanceType,
         daysUntil: Math.max(0, diffDays(today, dateKey(m.scheduledDate))),
       })),
+      // A car with no driver can't be booked and is hidden from the app.
+      ...vehicles
+        .filter((v) => v._count.vehicleDrivers === 0)
+        .map((v) => ({
+          type: "no_driver" as const,
+          severity: "warning" as const,
+          entityId: v.id,
+          vehicleName: vehicleName(v),
+        })),
       ...complaints.map((r) => ({
         type: "complaint" as const,
         severity: "danger" as const,
@@ -711,33 +724,16 @@ export class AdminDashboardService {
   }
 
   // ------------------------------------------------------- fleet pricing
-  public static async updateVehicle(
-    vehicleId: string,
-    patch: { basePrice?: number; pricePerKm?: number; pricePerHour?: number; status?: VehicleStatus },
-    actor: AuditActor
-  ) {
-    const before = await prismaClient.vehicles.findUnique({ where: { id: vehicleId } });
-    if (!before) throw new NotFoundException(`Vehicle with ID ${vehicleId} not found`);
-
-    const updated = await prismaClient.vehicles.update({ where: { id: vehicleId }, data: patch });
-    const details = AuditService.diff(
-      { base_price: before.basePrice, price_per_km: before.pricePerKm, price_per_hour: before.pricePerHour, status: before.status },
-      { base_price: patch.basePrice, price_per_km: patch.pricePerKm, price_per_hour: patch.pricePerHour, status: patch.status }
-    );
-    if (details) {
-      await AuditService.record(actor, {
-        action: AuditAction.UPDATE,
-        entityType: "vehicle",
-        entityId: vehicleId,
-        entityLabel: `عربية: ${vehicleName(before)}`,
-        details,
+  /** Drivers that can take a booking; with a car, only that car's drivers (main first). */
+  public static async assignableDrivers(vehicleId?: string) {
+    if (vehicleId) {
+      const rows = await prismaClient.vehicleDrivers.findMany({
+        where: { vehicleId, driver: { status: { in: [DriverStatus.ACTIVE, DriverStatus.ONTRIP] } } },
+        orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+        include: { driver: { select: { id: true, fullName: true, status: true } } },
       });
+      return rows.map((r) => ({ ...r.driver, isPrimary: r.isPrimary }));
     }
-    return updated;
-  }
-
-  /** Drivers that can be assigned to a new booking, for the booking form. */
-  public static async assignableDrivers() {
     return prismaClient.drivers.findMany({
       where: { status: { in: [DriverStatus.ACTIVE, DriverStatus.ONTRIP] } },
       select: { id: true, fullName: true, status: true },

@@ -3,8 +3,8 @@ import { Link, useNavigate } from "react-router";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import type { BookingListItem, DriverSummary, FleetVehicle, Overview as OverviewData } from "../lib/types";
-import { BOOKING_STATUS, DRIVER_STATUS, ROLE_LABEL } from "../lib/labels";
+import type { BookingListItem, DriverSummary, FleetItem, FleetSummary, Overview as OverviewData } from "../lib/types";
+import { BOOKING_STATUS, DRIVER_STATUS, FLEET_STATUS, ROLE_LABEL } from "../lib/labels";
 import {
   addDays,
   compact,
@@ -37,7 +37,6 @@ import {
   Table,
   Td,
 } from "../components/ui";
-import VehicleEditor from "../components/VehicleEditor";
 
 export default function Overview() {
   const overview = useQuery({ queryKey: ["overview"], queryFn: () => api.get<OverviewData>("/admin/overview"), refetchInterval: 60_000 });
@@ -99,6 +98,7 @@ function TopBar({ liveTrips }: { liveTrips: number }) {
           الرحلات الجارية{liveTrips > 0 && <span className="text-gold">({liveTrips})</span>}
         </LinkButton>
         <LinkButton to="/audit">📋 سجل التوثيق</LinkButton>
+        <LinkButton to="/fleet">🚗 الأسطول</LinkButton>
         <LinkButton to="/packages">🎁 الباكدجات</LinkButton>
         <LinkButton to="/settings">⚙️ الإعدادات</LinkButton>
         <span className="mx-1 hidden sm:block">
@@ -125,6 +125,15 @@ function AlertsStrip({ data }: { data?: OverviewData }) {
               {a.vehicleName} {a.daysUntil === 0 ? "داخلة صيانة مجدولة النهاردة" : a.daysUntil === 1 ? "هتدخل صيانة مجدولة بكرة" : `هتدخل صيانة مجدولة بعد ${a.daysUntil} أيام`}
             </span>
           </div>
+        ) : a.type === "no_driver" ? (
+          <Link
+            key={i}
+            to={`/fleet/${a.entityId}`}
+            className="flex items-center gap-2 rounded-xl border border-gold bg-gold/15 px-4 py-3 text-[11px] text-gold transition hover:bg-gold/20"
+          >
+            <span aria-hidden>🚗</span>
+            <span>{a.vehicleName} من غير سواق: مش ظاهرة للعملاء. حدد لها سواق</span>
+          </Link>
         ) : (
           <Link
             key={i}
@@ -297,20 +306,14 @@ function WeeklyRevenuePanel({ data, loading }: { data?: OverviewData["weeklyReve
 }
 
 // --------------------------------------------------------------- fleet
-function fleetBadge(v: FleetVehicle) {
-  if (v.status === "MAINTENANCE") return { tone: "gold" as const, label: "صيانة", rank: 0 };
-  if (v.todayAvailability === "BOOKED" || v.status === "BOOKED") return { tone: "muted" as const, label: "محجوزة", rank: 1 };
-  if (v.todayAvailability === "BLOCKED") return { tone: "muted" as const, label: "موقوفة", rank: 2 };
-  return { tone: "mint" as const, label: "متاحة", rank: 3 };
-}
+const FLEET_RANK: Record<string, number> = { MAINTENANCE: 0, BOOKED: 1, AVAILABLE: 2 };
 
 function FleetPanel() {
-  const q = useQuery({ queryKey: ["fleet"], queryFn: () => api.get<FleetVehicle[]>("/admin/vehicles/status") });
-  const [editing, setEditing] = useState<string | null>(null);
-  const list = (q.data ?? []).map((v) => ({ v, b: fleetBadge(v) })).sort((a, b) => a.b.rank - b.b.rank);
+  const q = useQuery({ queryKey: ["fleet-list", ""], queryFn: () => api.raw<{ data: FleetItem[]; summary: FleetSummary }>("GET", "/admin/vehicles") });
+  const list = (q.data?.data ?? []).filter((v) => v.status !== "RETIRED").sort((a, b) => (FLEET_RANK[a.status] ?? 3) - (FLEET_RANK[b.status] ?? 3));
 
   return (
-    <Panel title="حالة الأسطول" tag={q.data ? `${q.data.length} عربية` : undefined}>
+    <Panel title="حالة الأسطول" tag={q.data ? `${list.length} عربية` : undefined}>
       {q.error ? (
         <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />
       ) : q.isPending ? (
@@ -319,27 +322,30 @@ function FleetPanel() {
         <Empty>لسه مفيش عربيات مسجّلة.</Empty>
       ) : (
         <ul className="scroll-thin -mx-1 max-h-[300px] overflow-y-auto px-1">
-          {list.map(({ v, b }) => (
-            <li key={v.id}>
-              <button
-                type="button"
-                onClick={() => setEditing(v.id)}
-                className="flex w-full items-center justify-between gap-3 border-b border-line py-3 text-right last:border-b-0 hover:bg-raised/30"
-                title="تعديل السعر والحالة"
-              >
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-[13px] font-bold text-cream">{`${v.make} ${v.model}`}</span>
-                  <span className="text-[11px] text-muted">{v.plateNumber.replace(/·D$/, "")}</span>
-                </span>
-                <Badge tone={b.tone} dot>
-                  {b.label}
-                </Badge>
-              </button>
-            </li>
-          ))}
+          {list.map((v) => {
+            const b = FLEET_STATUS[v.status];
+            return (
+              <li key={v.id}>
+                <Link to={`/fleet/${v.id}`} className="flex w-full items-center justify-between gap-3 border-b border-line py-3 text-right last:border-b-0 hover:bg-raised/30">
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-[13px] font-bold text-cream">{v.name}</span>
+                    <span className="text-[11px] text-muted">
+                      {v.plateNumber.replace(/·D$/, "")}
+                      {v.drivers.length === 0 && <span className="text-rose"> · من غير سواق</span>}
+                    </span>
+                  </span>
+                  <Badge tone={b.tone} dot>
+                    {b.label}
+                  </Badge>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
-      {editing && <VehicleEditor vehicleId={editing} onClose={() => setEditing(null)} />}
+      <LinkButton to="/fleet" className="mt-3 w-full rounded-xl py-3 text-[12px]">
+        إدارة الأسطول
+      </LinkButton>
     </Panel>
   );
 }

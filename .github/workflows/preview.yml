@@ -1,0 +1,138 @@
+# Temporary live preview for testing a branch online.
+#
+# Push to any `preview/**` branch: GitHub starts Postgres, loads the migrations
+# and demo data, builds the dashboard, runs the API and opens a temporary
+# https link through a Cloudflare quick tunnel. The link appears as the
+# "Live preview" status on the pushed commit (and in the job log). It stays up
+# for PREVIEW_HOURS, then shuts down; push again (even an empty commit) for a
+# fresh one. Data is demo data and is thrown away when the run ends.
+name: Live preview
+
+on:
+  push:
+    branches: ["preview/**"]
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: live-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PREVIEW_HOURS: "4"
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mishwark
+  JWT_SECRET: preview-${{ github.run_id }}-${{ github.run_attempt }}
+  PORT: "5000"
+  BUSINESS_TZ: Africa/Cairo
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 280
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mishwark
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Mark preview as starting
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+            -f state=pending -f context="Live preview" -f description="Starting…" >/dev/null
+
+      - name: Backend - install, database, demo data
+        working-directory: backend
+        run: |
+          npm ci
+          npx prisma generate
+          for f in $(ls -d prisma/migrations/*/ | sort); do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f/migration.sql"
+          done
+          npm run seed
+          npm run seed:demo
+
+      - name: Dashboard - build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Start the API
+        working-directory: backend
+        run: |
+          nohup npx tsx src/index.ts > ../api.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf "http://localhost:$PORT/api/v1/vehicles" >/dev/null && break
+            sleep 2
+          done
+          curl -sf "http://localhost:$PORT/api/v1/vehicles" >/dev/null || { cat ../api.log; exit 1; }
+
+      - name: Open the public link
+        id: tunnel
+        run: |
+          curl -sSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x cloudflared
+          nohup ./cloudflared tunnel --no-autoupdate --url "http://localhost:$PORT" > tunnel.log 2>&1 &
+          for i in $(seq 1 60); do
+            URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' tunnel.log | head -1)
+            [ -n "$URL" ] && break
+            sleep 2
+          done
+          [ -n "$URL" ] || { cat tunnel.log; exit 1; }
+          # Wait until the link actually answers.
+          for i in $(seq 1 60); do
+            curl -sf "$URL/api/v1/vehicles" >/dev/null && break
+            sleep 3
+          done
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "## Live preview: $URL/dashboard/" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.tunnel.outputs.url }}
+        run: |
+          UNTIL=$(TZ=Africa/Cairo date -d "+${PREVIEW_HOURS} hours" '+%H:%M')
+          gh api "repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+            -f state=success -f context="Live preview" \
+            -f target_url="$URL/dashboard/" -f description="Live until $UNTIL Cairo time" >/dev/null
+          echo "Dashboard: $URL/dashboard/  (until $UNTIL Cairo time)"
+
+      - name: Keep running
+        env:
+          URL: ${{ steps.tunnel.outputs.url }}
+        run: |
+          END=$(( $(date +%s) + PREVIEW_HOURS * 3600 ))
+          while [ "$(date +%s)" -lt "$END" ]; do
+            sleep 300
+            curl -sf "http://localhost:$PORT/api/v1/vehicles" >/dev/null || { echo "API stopped"; tail -50 api.log; exit 1; }
+            echo "$(TZ=Africa/Cairo date '+%H:%M') still live: $URL/dashboard/"
+          done
+
+      - name: Mark preview as ended
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+            -f state=error -f context="Live preview" -f description="Ended. Push to the branch again for a new link." >/dev/null || true
+          tail -40 api.log || true
