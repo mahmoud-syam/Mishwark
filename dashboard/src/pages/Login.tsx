@@ -72,7 +72,7 @@ export default function Login() {
   };
 
   return (
-    <main className="flex min-h-dvh items-center justify-center px-4 py-10">
+    <main className="page-enter flex min-h-dvh items-center justify-center px-4 py-10">
       <div className="w-full max-w-[380px] rounded-[22px] border border-line bg-surface p-7 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)]">
         <div className="mb-7 flex flex-col items-center gap-2 text-center">
           <BrandMark size={56} />

@@ -32,7 +32,7 @@ export default function Drivers() {
       ) : (q.data ?? []).length === 0 ? (
         <Empty>لسه مفيش سائقين مسجّلين.</Empty>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="stagger grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {q.data!.map((d, i) => (
             <div key={d.id} className="flex flex-col gap-2 rounded-[18px] border border-line bg-surface p-3">
               <DriverCard d={d} tone={tones[i % 3]} />

@@ -45,8 +45,16 @@ export const errorMiddleware = (error: any, req: Request, res: Response, _next: 
         return res.status(400).json({ message: "Malformed JSON body", errorCode: ErrorCodes.UNPROCESSABLE_ENTITY, errors: null });
     }
 
-    // Known Prisma request errors (thrown as PrismaClientKnownRequestError)
+    // Prisma P1xxx = the database itself is unreachable or failing (P1001 "can't
+    // reach database server"). That is a temporary server problem, not a bad
+    // request: answer 503 so apps can retry, and log it.
     const code: string | undefined = error?.code;
+    if ((typeof code === "string" && /^P1\d{3}$/.test(code)) || error?.name === "PrismaClientInitializationError") {
+        console.error("[db] database unavailable:", code ?? error?.name, error?.meta?.driverAdapterError?.cause?.kind ?? "");
+        return res.status(503).json({ message: "Service temporarily unavailable. Please try again.", errorCode: ErrorCodes.INTERNAL_EXCEPTION, errors: null });
+    }
+
+    // Known Prisma request errors (thrown as PrismaClientKnownRequestError)
     if (typeof code === "string" && /^P\d{4}$/.test(code)) {
         const map: Record<string, [number, string]> = {
             P2002: [409, "A record with these values already exists"],

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import type { Tone } from "../lib/labels";
 
@@ -8,7 +8,60 @@ export { cx };
 // ------------------------------------------------------------------ layout
 export function Page({ children, width = "wide" }: { children: ReactNode; width?: "wide" | "narrow" | "medium" }) {
   const max = width === "narrow" ? "max-w-[680px]" : width === "medium" ? "max-w-[740px]" : "max-w-[1160px]";
-  return <main className={cx("mx-auto flex w-full flex-col gap-[22px] px-4 py-10", max)}>{children}</main>;
+  return <main className={cx("page-enter mx-auto flex w-full flex-col gap-[22px] px-4 py-10", max)}>{children}</main>;
+}
+
+// ------------------------------------------------------------------ motion
+const NUM = /\d[\d,]*(?:\.\d+)?/g;
+const prefersReducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+const decimalsOf = (tok: string) => (tok.split(".")[1] ?? "").length;
+const formatLike = (v: number, tok: string) => {
+  const d = decimalsOf(tok);
+  return tok.includes(",") ? v.toLocaleString("en", { minimumFractionDigits: d, maximumFractionDigits: d }) : v.toFixed(d);
+};
+/** Text whose numbers can be animated (not times like "10:30"). */
+const countable = (text: string) => /\d/.test(text) && !/\d:\d/.test(text);
+
+/**
+ * Counts the numbers inside a formatted value up to their target ("4,425 ج.م",
+ * "72%", "9 / 14", "35.0K"), keeping the formatting. On a later change it
+ * glides from the old numbers. Static when the user prefers reduced motion.
+ */
+export function CountUp({ text, duration = 750 }: { text: string; duration?: number }) {
+  const [shown, setShown] = useState(() => (countable(text) && !prefersReducedMotion() ? text.replace(NUM, (t) => formatLike(0, t)) : text));
+  const prev = useRef<string | null>(null);
+
+  useEffect(() => {
+    const from = prev.current;
+    prev.current = text;
+    if (from === text || !countable(text) || prefersReducedMotion()) {
+      setShown(text);
+      return;
+    }
+    const targets = text.match(NUM) ?? [];
+    const starts = from ? from.match(NUM) ?? [] : [];
+    const sameShape = starts.length === targets.length;
+    const parse = (t: string) => Number(t.replace(/,/g, ""));
+    let raf = 0;
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const p = Math.min(1, (now - t0) / duration);
+      const e = 1 - Math.pow(1 - p, 3);
+      let i = 0;
+      setShown(
+        text.replace(NUM, (tok) => {
+          const a = sameShape ? parse(starts[i]) : 0;
+          i++;
+          return formatLike(a + (parse(tok) - a) * e, tok);
+        })
+      );
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [text, duration]);
+
+  return <>{shown}</>;
 }
 
 export function BrandMark({ size = 30 }: { size?: number }) {
@@ -127,14 +180,16 @@ export function StatCard({
   loading?: boolean;
 }) {
   return (
-    <div className="relative flex min-w-0 flex-col gap-1.5 overflow-hidden rounded-2xl border border-line bg-surface p-5">
+    <div className="lift relative flex min-w-0 flex-col gap-1.5 overflow-hidden rounded-2xl border border-line bg-surface p-5 hover:border-gold/40">
       <div className="text-[12px] text-muted">{label}</div>
       {loading ? (
         <Skeleton className="my-2 h-9 w-24" />
       ) : (
         <div className={cx("font-display text-[30px] leading-[1.45]", valueTone[tone])}>
           {/* Numeric values ("9 / 14", "72%") must stay LTR inside RTL text; Arabic values flow naturally. */}
-          <span className={typeof value === "string" && /[\u0600-\u06FF]/.test(value) ? undefined : "ltr"}>{value}</span>
+          <span className={typeof value === "string" && /[\u0600-\u06FF]/.test(value) ? undefined : "ltr"}>
+            {typeof value === "string" || typeof value === "number" ? <CountUp text={String(value)} /> : value}
+          </span>
         </div>
       )}
       <div className={cx("min-h-[17px] text-[11px]", valueTone[deltaTone])}>{loading ? "" : delta}</div>
@@ -144,7 +199,7 @@ export function StatCard({
 }
 
 export function StatGrid({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 gap-[18px] lg:grid-cols-4">{children}</div>;
+  return <div className="stagger grid grid-cols-2 gap-[18px] lg:grid-cols-4">{children}</div>;
 }
 
 // ------------------------------------------------------------------ badges
@@ -271,8 +326,8 @@ export function BarChart({
                 {format ? format(d.value) : d.value}
               </span>
               <div
-                className={cx("relative w-full overflow-hidden rounded-t-md", d.value > 0 ? "bg-linear-to-b from-gold to-gold-deep" : "bg-raised")}
-                style={{ height: h }}
+                className={cx("bar relative w-full overflow-hidden rounded-t-md", d.value > 0 ? "bg-linear-to-b from-gold to-gold-deep" : "bg-raised")}
+                style={{ height: h, animationDelay: `${i * 45}ms` }}
                 title={d.title}
               >
                 {overlay && d.overlay != null && d.value > 0 && (
@@ -291,7 +346,7 @@ export function BarChart({
 export function ProgressBar({ value, tone = "gold" }: { value: number; tone?: "gold" | "rose" }) {
   return (
     <div className="h-1 w-full overflow-hidden rounded-full bg-line" role="progressbar" aria-valuenow={Math.round(value * 100)} aria-valuemin={0} aria-valuemax={100}>
-      <div className={cx("h-full rounded-full", tone === "rose" ? "bg-rose" : "bg-linear-to-l from-gold to-gold-deep")} style={{ width: `${Math.round(value * 100)}%` }} />
+      <div className={cx("progress-fill h-full rounded-full", tone === "rose" ? "bg-rose" : "bg-linear-to-l from-gold to-gold-deep")} style={{ width: `${Math.round(value * 100)}%` }} />
     </div>
   );
 }
@@ -331,7 +386,7 @@ export function KeyValue({ label, value, tone = "cream" }: { label: ReactNode; v
 
 // ------------------------------------------------------------------ states
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cx("animate-pulse rounded-md bg-raised", className)} />;
+  return <div className={cx("skeleton rounded-md bg-raised", className)} />;
 }
 
 export function Empty({ children }: { children: ReactNode }) {

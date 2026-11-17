@@ -49,7 +49,7 @@ function DiscountCell({ pkg, canEdit }: { pkg: AdminPackage; canEdit: boolean })
         )}
       </div>
       {save.data && !dirty && (
-        <span className="text-[10px] text-mint">
+        <span className="fade-in text-[10px] text-mint">
           اتحفظ{save.data.repriced > 0 ? ` · اتعدّل سعر ${save.data.repriced} حجز` : ""}
         </span>
       )}

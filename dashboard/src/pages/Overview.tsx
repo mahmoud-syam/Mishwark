@@ -370,7 +370,7 @@ function DriversPanel() {
 export function DriverCard({ d, tone }: { d: DriverSummary; tone: (typeof avatarTones)[number] }) {
   const st = DRIVER_STATUS[d.status];
   return (
-    <Link to={`/drivers/${d.id}`} className="flex flex-col gap-2.5 rounded-xl border border-line bg-raised px-3 pb-3 pt-4 transition hover:border-gold/50">
+    <Link to={`/drivers/${d.id}`} className="lift flex flex-col gap-2.5 rounded-xl border border-line bg-raised px-3 pb-3 pt-4 transition hover:border-gold/50">
       <div className="flex items-center gap-2.5">
         <Avatar text={initials(d.name)} tone={tone} />
         <div className="min-w-0">

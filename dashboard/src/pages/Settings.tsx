@@ -159,7 +159,7 @@ export default function Settings() {
 
   const actions = canEdit && (
     <>
-      {saved && changeCount === 0 && <span className="text-[11px] text-mint">اتحفظ ✓</span>}
+      {saved && changeCount === 0 && <span className="fade-in text-[11px] text-mint">اتحفظ ✓</span>}
       {changeCount > 0 && (
         <Button variant="ghost" size="sm" onClick={discard} disabled={save.isPending}>
           إلغاء التغييرات
@@ -187,7 +187,7 @@ export default function Settings() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-72 rounded-[18px]" />)}</div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="stagger grid grid-cols-1 gap-4 lg:grid-cols-3">
             {GROUPS.map((g) => (
               <Panel key={g.title} title={g.title} tag={g.tag} bodyClassName="flex flex-col gap-3">
                 {g.fields.map((f) => {
