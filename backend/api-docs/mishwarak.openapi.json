@@ -18,7 +18,7 @@
     },
     {
       "name": "Vehicles",
-      "description": "Fleet catalogue. Public - no token required."
+      "description": "Cars customers can book (in service, with a driver). Public - no token required."
     },
     {
       "name": "Bookings",
@@ -189,7 +189,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Email/password login (admin & internal staff). Returns JWT cookie + user.",
+        "summary": "Email/password sign-in, step 1. Never returns a session: it answers with the next step and a `loginToken` (signed, 5 minutes): `passwordChangeRequired` (temporary password: call /auth/set-password), `twoFactorSetupRequired` (with `secret` + `qrCodeDataURL`: call /auth/verify-2fa-setup) or `twoFactorRequired` (call /auth/verify-2fa). 400 on a wrong email or password.",
         "responses": {
           "200": {
             "description": "Success",
@@ -237,7 +237,7 @@
             }
           }
         },
-        "description": "Email/password login (admin & internal staff). Returns JWT cookie + user.",
+        "description": "Email/password sign-in, step 1. Never returns a session: it answers with the next step and a `loginToken` (signed, 5 minutes): `passwordChangeRequired` (temporary password: call /auth/set-password), `twoFactorSetupRequired` (with `secret` + `qrCodeDataURL`: call /auth/verify-2fa-setup) or `twoFactorRequired` (call /auth/verify-2fa). 400 on a wrong email or password.",
         "operationId": "post_auth_login"
       }
     },
@@ -361,7 +361,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Completes a 2FA challenge during login using a temporary token.",
+        "summary": "Last sign-in step when 2FA is on: `loginToken` from /auth/login plus the 6-digit code. Sets the session cookie and returns `user`. Each pass works once; a wrong code changes nothing. A bare `userId` is no longer accepted (400).",
         "responses": {
           "200": {
             "description": "Success",
@@ -403,13 +403,13 @@
                 "$ref": "#/components/schemas/Verify2faBody"
               },
               "example": {
-                "userId": "USER_ID",
+                "loginToken": "{{loginToken}}",
                 "token": "123456"
               }
             }
           }
         },
-        "description": "Completes a 2FA challenge during login using a temporary token.",
+        "description": "Last sign-in step when 2FA is on: `loginToken` from /auth/login plus the 6-digit code. Sets the session cookie and returns `user`. Each pass works once; a wrong code changes nothing. A bare `userId` is no longer accepted (400).",
         "operationId": "post_auth_verify_2fa"
       }
     },
@@ -418,7 +418,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Confirms and enables 2FA for a user.",
+        "summary": "Last sign-in step when 2FA isn't set up yet: `loginToken` plus the code from the authenticator app. The secret is the one inside the pass (the one shown in the QR); any `secret` in the body is ignored. Sets the session cookie and returns `user`. A bare `userId` is no longer accepted (400).",
         "responses": {
           "200": {
             "description": "Success",
@@ -460,15 +460,71 @@
                 "$ref": "#/components/schemas/Verify2faSetupBody"
               },
               "example": {
-                "userId": "USER_ID",
-                "token": "123456",
-                "secret": "TOTP_SECRET"
+                "loginToken": "{{loginToken}}",
+                "token": "123456"
               }
             }
           }
         },
-        "description": "Confirms and enables 2FA for a user.",
+        "description": "Last sign-in step when 2FA isn't set up yet: `loginToken` plus the code from the authenticator app. The secret is the one inside the pass (the one shown in the QR); any `secret` in the body is ignored. Sets the session cookie and returns `user`. A bare `userId` is no longer accepted (400).",
         "operationId": "post_auth_verify_2fa_setup"
+      }
+    },
+    "/auth/set-password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Sign-in step after a temporary password (accounts created or reset from the Team page): the user picks their own password (8+ characters, not the temporary one). Answers with the next step and a new `loginToken`. 400 if the pass is missing, expired or already used.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPasswordBody"
+              },
+              "example": {
+                "loginToken": "{{loginToken}}",
+                "newPassword": "MyOwnPass#2026"
+              }
+            }
+          }
+        },
+        "description": "Sign-in step after a temporary password (accounts created or reset from the Team page): the user picks their own password (8+ characters, not the temporary one). Answers with the next step and a new `loginToken`. 400 if the pass is missing, expired or already used.",
+        "operationId": "post_auth_set_password"
       }
     },
     "/auth/logout": {
@@ -615,7 +671,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Admin (user_password:manage). Resets a user's 2FA.",
+        "summary": "Needs user_password:manage. Resets a user's 2FA and signs them out everywhere. Dashboard accounts (Admin, Super Admin) only by a Super Admin (403).",
         "security": [
           {
             "bearerAuth": []
@@ -664,7 +720,7 @@
             "description": "Internal Server Error"
           }
         },
-        "description": "Admin (user_password:manage). Resets a user's 2FA.",
+        "description": "Needs user_password:manage. Resets a user's 2FA and signs them out everywhere. Dashboard accounts (Admin, Super Admin) only by a Super Admin (403).",
         "operationId": "post_auth_reset_2fa_userId"
       }
     },
@@ -673,7 +729,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Admin (user_password:manage). Changes a user's password and optionally resets 2FA. Protected by requirePermission.",
+        "summary": "Needs user_password:manage. Sets a user's password (8+ characters) and optionally resets 2FA; signs the user out everywhere. Dashboard accounts (Admin, Super Admin) only by a Super Admin (403); use the Team page for them.",
         "security": [
           {
             "bearerAuth": []
@@ -730,13 +786,13 @@
                 "$ref": "#/components/schemas/ChangePasswordBody"
               },
               "example": {
-                "newPassword": "newpass123",
+                "newPassword": "NewPass#2026",
                 "reset2FA": false
               }
             }
           }
         },
-        "description": "Admin (user_password:manage). Changes a user's password and optionally resets 2FA. Protected by requirePermission.",
+        "description": "Needs user_password:manage. Sets a user's password (8+ characters) and optionally resets 2FA; signs the user out everywhere. Dashboard accounts (Admin, Super Admin) only by a Super Admin (403); use the Team page for them.",
         "operationId": "put_auth_change_password_userId"
       }
     },
@@ -903,7 +959,7 @@
         "tags": [
           "Vehicles"
         ],
-        "summary": "GET /vehicles",
+        "summary": "Cars customers can book: in service and with at least one driver (retired or driverless cars are hidden). Each car has `luggage`, `features`, photos (cover first) and a status derived for today (AVAILABLE, BOOKED or MAINTENANCE). ?category=&status=",
         "parameters": [
           {
             "name": "category",
@@ -955,7 +1011,7 @@
             "description": "Internal Server Error"
           }
         },
-        "description": "GET /vehicles",
+        "description": "Cars customers can book: in service and with at least one driver (retired or driverless cars are hidden). Each car has `luggage`, `features`, photos (cover first) and a status derived for today (AVAILABLE, BOOKED or MAINTENANCE). ?category=&status=",
         "operationId": "get_vehicles"
       }
     },
@@ -964,7 +1020,7 @@
         "tags": [
           "Vehicles"
         ],
-        "summary": "GET /vehicles/{id}",
+        "summary": "One bookable car with photos (cover first), features and luggage. 404 if it doesn't exist, is retired or has no driver.",
         "parameters": [
           {
             "name": "id",
@@ -1008,7 +1064,7 @@
             "description": "Internal Server Error"
           }
         },
-        "description": "GET /vehicles/{id}",
+        "description": "One bookable car with photos (cover first), features and luggage. 404 if it doesn't exist, is retired or has no driver.",
         "operationId": "get_vehicles_id"
       }
     },
@@ -1214,7 +1270,7 @@
         "tags": [
           "Bookings"
         ],
-        "summary": "Creates a booking with status=PENDING. DB unique constraint blocks double-booking (409).",
+        "summary": "Creates a booking (PENDING). Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free.",
         "security": [
           {
             "bearerAuth": []
@@ -1287,7 +1343,7 @@
             }
           }
         },
-        "description": "Creates a booking with status=PENDING. DB unique constraint blocks double-booking (409).",
+        "description": "Creates a booking (PENDING). Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free.",
         "operationId": "post_bookings"
       },
       "get": {
@@ -1869,7 +1925,7 @@
         "tags": [
           "Drivers"
         ],
-        "summary": "POST /driver/vehicles",
+        "summary": "Retired: always 403. Cars are assigned to drivers by the administration (PUT /admin/vehicles/{id}/drivers).",
         "security": [
           {
             "bearerAuth": []
@@ -1922,7 +1978,7 @@
             }
           }
         },
-        "description": "POST /driver/vehicles",
+        "description": "Retired: always 403. Cars are assigned to drivers by the administration (PUT /admin/vehicles/{id}/drivers).",
         "operationId": "post_driver_vehicles"
       }
     },
@@ -1931,7 +1987,7 @@
         "tags": [
           "Drivers"
         ],
-        "summary": "DELETE /driver/vehicles/{vehicleId}",
+        "summary": "Retired: always 403. Cars are assigned to drivers by the administration (PUT /admin/vehicles/{id}/drivers).",
         "security": [
           {
             "bearerAuth": []
@@ -1980,7 +2036,7 @@
             "description": "Internal Server Error"
           }
         },
-        "description": "DELETE /driver/vehicles/{vehicleId}",
+        "description": "Retired: always 403. Cars are assigned to drivers by the administration (PUT /admin/vehicles/{id}/drivers).",
         "operationId": "delete_driver_vehicles_vehicleId"
       }
     },
@@ -5399,7 +5455,7 @@
         "tags": [
           "Admin"
         ],
-        "summary": "Drivers that can be assigned to a new booking.",
+        "summary": "Drivers that can be assigned to a new booking. With ?vehicleId= only that car's free drivers, main driver first (the only ones allowed to drive it).",
         "security": [
           {
             "bearerAuth": []
@@ -5438,7 +5494,7 @@
             "description": "Internal Server Error"
           }
         },
-        "description": "Drivers that can be assigned to a new booking.",
+        "description": "Drivers that can be assigned to a new booking. With ?vehicleId= only that car's free drivers, main driver first (the only ones allowed to drive it).",
         "operationId": "get_admin_drivers_assignable"
       }
     },
@@ -5712,64 +5768,6 @@
         "operationId": "get_admin_customers_id_analytics"
       }
     },
-    "/admin/vehicles/{id}": {
-      "patch": {
-        "tags": [
-          "Admin"
-        ],
-        "summary": "Updates vehicle pricing/status. Audit-logged.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DefaultSuccess"
-                }
-              }
-            }
-          },
-          "201": {
-            "description": "Created"
-          },
-          "400": {
-            "description": "Bad Request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not Found"
-          },
-          "409": {
-            "description": "Conflict"
-          },
-          "500": {
-            "description": "Internal Server Error"
-          }
-        },
-        "description": "Updates vehicle pricing/status. Audit-logged.",
-        "operationId": "patch_admin_vehicles_id"
-      }
-    },
     "/admin/audit-logs/export": {
       "get": {
         "tags": [
@@ -5971,6 +5969,1229 @@
         "description": "Sets an active package's discount % (0-100). Needs booking:manage. Bookings in the package that nothing has been paid on yet (PENDING, depositPaid 0) are re-priced; paid ones keep their price. Returns the package plus `repriced` (count). Audit-logged.",
         "operationId": "patch_admin_packages_id_discount"
       }
+    },
+    "/admin/vehicles": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Fleet page list: every car with its derived status for today (AVAILABLE, BOOKED, MAINTENANCE, RETIRED), drivers (main first), cover photo, effective prices (0 = the category price from Settings), next maintenance and upcoming bookings, plus a summary (total, available, booked, maintenance, retired, withoutDriver). ?search=&category=&status=",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Fleet page list: every car with its derived status for today (AVAILABLE, BOOKED, MAINTENANCE, RETIRED), drivers (main first), cover photo, effective prices (0 = the category price from Settings), next maintenance and upcoming bookings, plus a summary (total, available, booked, maintenance, retired, withoutDriver). ?search=&category=&status=",
+        "operationId": "get_admin_vehicles"
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Adds a car. Needs vehicle:manage. Prices of 0 use the category price from Settings. Plate numbers are unique (409). Unknown fields such as `status` return 422: status is derived, never stored by hand. A new car has no driver, so it stays hidden from the app until drivers are assigned. Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VehicleCreateBody"
+              },
+              "example": {
+                "make": "Mercedes",
+                "model": "S-Class",
+                "year": 2024,
+                "plateNumber": "أ ب ج 123",
+                "color": "Black",
+                "capacity": 4,
+                "category": "LUXURY",
+                "basePrice": 0,
+                "pricePerKm": 0,
+                "pricePerHour": 0,
+                "luggage": 3,
+                "features": [
+                  "تكييف",
+                  "واي فاي"
+                ],
+                "description": "Luxury car for weddings"
+              }
+            }
+          }
+        },
+        "description": "Adds a car. Needs vehicle:manage. Prices of 0 use the category price from Settings. Plate numbers are unique (409). Unknown fields such as `status` return 422: status is derived, never stored by hand. A new car has no driver, so it stays hidden from the app until drivers are assigned. Audit-logged.",
+        "operationId": "post_admin_vehicles"
+      }
+    },
+    "/admin/vehicle-features": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Suggested feature labels for the fleet form (the defaults plus every feature already used on a car).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Suggested feature labels for the fleet form (the defaults plus every feature already used on a car).",
+        "operationId": "get_admin_vehicle_features"
+      }
+    },
+    "/admin/vehicles/{id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "One car for the fleet page: details, category prices, photos (cover first), drivers, maintenance history with state (SCHEDULED, IN_PROGRESS, OVERDUE, DONE), the next 10 bookings and trip/revenue stats. 404 if not found.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "One car for the fleet page: details, category prices, photos (cover first), drivers, maintenance history with state (SCHEDULED, IN_PROGRESS, OVERDUE, DONE), the next 10 bookings and trip/revenue stats. 404 if not found.",
+        "operationId": "get_admin_vehicles_id"
+      },
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Edits a car's details, prices, luggage, features or description. Needs vehicle:manage. Send only the fields to change (an empty body or `status` returns 422). Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VehicleUpdateBody"
+              },
+              "example": {
+                "basePrice": 1800,
+                "luggage": 3,
+                "features": [
+                  "تكييف",
+                  "مقاعد جلد"
+                ]
+              }
+            }
+          }
+        },
+        "description": "Edits a car's details, prices, luggage, features or description. Needs vehicle:manage. Send only the fields to change (an empty body or `status` returns 422). Audit-logged.",
+        "operationId": "patch_admin_vehicles_id"
+      }
+    },
+    "/admin/vehicles/{id}/retire": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Takes a car out of service instead of deleting it: hidden from the app and from new bookings, history kept. Needs vehicle:manage. 409 with `errors.bookings` (the upcoming bookings) while any are pending or confirmed. Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetireVehicleBody"
+              },
+              "example": {
+                "reason": "Sold"
+              }
+            }
+          }
+        },
+        "description": "Takes a car out of service instead of deleting it: hidden from the app and from new bookings, history kept. Needs vehicle:manage. 409 with `errors.bookings` (the upcoming bookings) while any are pending or confirmed. Audit-logged.",
+        "operationId": "post_admin_vehicles_id_retire"
+      }
+    },
+    "/admin/vehicles/{id}/reactivate": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Puts a retired car back in service. Needs vehicle:manage. Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Puts a retired car back in service. Needs vehicle:manage. Audit-logged.",
+        "operationId": "post_admin_vehicles_id_reactivate"
+      }
+    },
+    "/admin/vehicles/{id}/drivers": {
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VehicleDriversBody"
+              },
+              "example": {
+                "driverIds": [
+                  "{{driverId}}"
+                ],
+                "primaryDriverId": "{{driverId}}"
+              }
+            }
+          }
+        },
+        "description": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged.",
+        "operationId": "put_admin_vehicles_id_drivers"
+      }
+    },
+    "/admin/vehicles/{id}/images": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Uploads car photos as multipart/form-data, field `images` (up to 8 per request, 12 per car). JPG, PNG or WEBP only, checked by the file's content; 5 MB each (413 over). The first photo becomes the cover. Needs vehicle:manage.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "images": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "JPG, PNG or WEBP, 5 MB each.",
+                    "example": ""
+                  }
+                }
+              },
+              "encoding": {
+                "pic": {
+                  "contentType": "image/*"
+                }
+              }
+            }
+          }
+        },
+        "description": "Uploads car photos as multipart/form-data, field `images` (up to 8 per request, 12 per car). JPG, PNG or WEBP only, checked by the file's content; 5 MB each (413 over). The first photo becomes the cover. Needs vehicle:manage.",
+        "operationId": "post_admin_vehicles_id_images"
+      }
+    },
+    "/admin/vehicles/{id}/images/{imageId}": {
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Deletes a photo. If it was the cover, the next photo becomes the cover. Needs vehicle:manage.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Deletes a photo. If it was the cover, the next photo becomes the cover. Needs vehicle:manage.",
+        "operationId": "delete_admin_vehicles_id_images_imageId"
+      }
+    },
+    "/admin/vehicles/{id}/images/{imageId}/cover": {
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Makes this photo the cover (shown first in the app). Needs vehicle:manage.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Makes this photo the cover (shown first in the app). Needs vehicle:manage.",
+        "operationId": "patch_admin_vehicles_id_images_imageId_cover"
+      }
+    },
+    "/admin/vehicles/{id}/maintenance": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Schedules maintenance (startDate to endDate, at most 60 days, not in the past). Needs vehicle:manage. The days are blocked for bookings and the car shows as MAINTENANCE while it runs. 409 with `errors.bookings` if the car has pending or confirmed bookings on those days, or if another maintenance overlaps. Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaintenanceCreateBody"
+              },
+              "example": {
+                "maintenanceType": "صيانة دورية",
+                "startDate": "2026-12-01",
+                "endDate": "2026-12-02",
+                "cost": 1500,
+                "notes": ""
+              }
+            }
+          }
+        },
+        "description": "Schedules maintenance (startDate to endDate, at most 60 days, not in the past). Needs vehicle:manage. The days are blocked for bookings and the car shows as MAINTENANCE while it runs. 409 with `errors.bookings` if the car has pending or confirmed bookings on those days, or if another maintenance overlaps. Audit-logged.",
+        "operationId": "post_admin_vehicles_id_maintenance"
+      }
+    },
+    "/admin/maintenance/{id}/complete": {
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Marks maintenance done (optionally with the final cost and notes) and frees its remaining days from today. Needs vehicle:manage. Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaintenanceCompleteBody"
+              },
+              "example": {
+                "cost": 1450,
+                "notes": "Done"
+              }
+            }
+          }
+        },
+        "description": "Marks maintenance done (optionally with the final cost and notes) and frees its remaining days from today. Needs vehicle:manage. Audit-logged.",
+        "operationId": "patch_admin_maintenance_id_complete"
+      }
+    },
+    "/admin/maintenance/{id}": {
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Cancels maintenance that isn't done yet and frees its days. Needs vehicle:manage. Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Cancels maintenance that isn't done yet and frees its days. Needs vehicle:manage. Audit-logged.",
+        "operationId": "delete_admin_maintenance_id"
+      }
+    },
+    "/admin/team": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Team page (Super Admin only, 403 otherwise): dashboard accounts (Admin and Super Admin) with role, `twoFactorEnabled`, `mustChangePassword` (hasn't replaced the temporary password yet) and `lastLoginAt`. Super Admins first.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Team page (Super Admin only, 403 otherwise): dashboard accounts (Admin and Super Admin) with role, `twoFactorEnabled`, `mustChangePassword` (hasn't replaced the temporary password yet) and `lastLoginAt`. Super Admins first.",
+        "operationId": "get_admin_team"
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Creates a dashboard account (Super Admin only). Returns `member` and a `temporaryPassword`, shown this once (only its hash is stored). At first sign-in the member picks their own password, then sets up 2FA. 409 if the email is taken. Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamCreateBody"
+              },
+              "example": {
+                "name": "Sara Ahmed",
+                "email": "sara@company.com",
+                "role": "ADMIN"
+              }
+            }
+          }
+        },
+        "description": "Creates a dashboard account (Super Admin only). Returns `member` and a `temporaryPassword`, shown this once (only its hash is stored). At first sign-in the member picks their own password, then sets up 2FA. 409 if the email is taken. Audit-logged.",
+        "operationId": "post_admin_team"
+      }
+    },
+    "/admin/team/{id}/reset-2fa": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Lost phone: the member sets up 2FA again at the next sign-in. Signs them out everywhere. Super Admin only; not on your own account (400) or on non-team accounts (404). Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Lost phone: the member sets up 2FA again at the next sign-in. Signs them out everywhere. Super Admin only; not on your own account (400) or on non-team accounts (404). Audit-logged.",
+        "operationId": "post_admin_team_id_reset_2fa"
+      }
+    },
+    "/admin/team/{id}/reset-password": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Forgotten password: returns a new `temporaryPassword` (shown once); the old password stops working and the member picks a new one at sign-in. Signs them out everywhere. Super Admin only. Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Forgotten password: returns a new `temporaryPassword` (shown once); the old password stops working and the member picks a new one at sign-in. Signs them out everywhere. Super Admin only. Audit-logged.",
+        "operationId": "post_admin_team_id_reset_password"
+      }
+    },
+    "/admin/team/{id}/role": {
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Changes a member's role (ADMIN or SUPER_ADMIN). Signs them out so the new permissions apply. Super Admin only; not on your own account. Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamRoleBody"
+              },
+              "example": {
+                "role": "SUPER_ADMIN"
+              }
+            }
+          }
+        },
+        "description": "Changes a member's role (ADMIN or SUPER_ADMIN). Signs them out so the new permissions apply. Super Admin only; not on your own account. Audit-logged.",
+        "operationId": "patch_admin_team_id_role"
+      }
     }
   },
   "components": {
@@ -5982,6 +7203,260 @@
       }
     },
     "schemas": {
+      "VehicleCreateBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "make": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "year": {
+            "type": "integer",
+            "minimum": 1950,
+            "description": "Up to next year."
+          },
+          "plateNumber": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "Unique across the fleet (409 if taken)."
+          },
+          "color": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "capacity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "CAR",
+              "VAN",
+              "BUS",
+              "TRUCK",
+              "CLASSIC",
+              "LUXURY"
+            ]
+          },
+          "basePrice": {
+            "type": "number",
+            "minimum": 0,
+            "description": "0 = the category price from Settings."
+          },
+          "pricePerKm": {
+            "type": "number",
+            "minimum": 0,
+            "description": "0 = the category price from Settings."
+          },
+          "pricePerHour": {
+            "type": "number",
+            "minimum": 0,
+            "description": "0 = the category price from Settings."
+          },
+          "luggage": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 30
+          },
+          "features": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "maxLength": 30
+            },
+            "description": "Shown in the app. Duplicates are removed."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "make",
+          "model",
+          "year",
+          "plateNumber",
+          "capacity",
+          "category"
+        ]
+      },
+      "VehicleUpdateBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "make": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "year": {
+            "type": "integer",
+            "minimum": 1950,
+            "description": "Up to next year."
+          },
+          "plateNumber": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "Unique across the fleet (409 if taken)."
+          },
+          "color": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "capacity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "CAR",
+              "VAN",
+              "BUS",
+              "TRUCK",
+              "CLASSIC",
+              "LUXURY"
+            ]
+          },
+          "basePrice": {
+            "type": "number",
+            "minimum": 0,
+            "description": "0 = the category price from Settings."
+          },
+          "pricePerKm": {
+            "type": "number",
+            "minimum": 0,
+            "description": "0 = the category price from Settings."
+          },
+          "pricePerHour": {
+            "type": "number",
+            "minimum": 0,
+            "description": "0 = the category price from Settings."
+          },
+          "luggage": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 30
+          },
+          "features": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "maxLength": 30
+            },
+            "description": "Shown in the app. Duplicates are removed."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "description": "Only the fields to change. `status` is not accepted: it is derived."
+      },
+      "RetireVehicleBody": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "VehicleDriversBody": {
+        "type": "object",
+        "properties": {
+          "driverIds": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "primaryDriverId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Must be in driverIds; defaults to the first."
+          }
+        },
+        "required": [
+          "driverIds"
+        ]
+      },
+      "VehicleImagesBody": {
+        "type": "object",
+        "properties": {
+          "images": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "description": "JPG, PNG or WEBP, 5 MB each."
+          }
+        },
+        "required": [
+          "images"
+        ]
+      },
+      "MaintenanceCreateBody": {
+        "type": "object",
+        "properties": {
+          "maintenanceType": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Defaults to startDate; at most 60 days."
+          },
+          "cost": {
+            "type": "number",
+            "minimum": 0
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "maintenanceType",
+          "startDate"
+        ]
+      },
+      "MaintenanceCompleteBody": {
+        "type": "object",
+        "properties": {
+          "cost": {
+            "type": "number",
+            "minimum": 0
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      },
       "SignupBody": {
         "type": "object",
         "properties": {
@@ -6087,37 +7562,95 @@
       "Verify2faBody": {
         "type": "object",
         "properties": {
-          "userId": {
+          "loginToken": {
             "type": "string",
-            "format": "uuid"
+            "description": "From POST /auth/login (twoFactorRequired)."
           },
           "token": {
-            "type": "string"
+            "type": "string",
+            "description": "6-digit code"
           }
         },
         "required": [
-          "userId",
+          "loginToken",
           "token"
+        ]
+      },
+      "SetPasswordBody": {
+        "type": "object",
+        "properties": {
+          "loginToken": {
+            "type": "string",
+            "description": "From POST /auth/login (passwordChangeRequired)."
+          },
+          "newPassword": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "loginToken",
+          "newPassword"
+        ]
+      },
+      "TeamCreateBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "SUPER_ADMIN"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "role"
+        ]
+      },
+      "TeamRoleBody": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "SUPER_ADMIN"
+            ]
+          }
+        },
+        "required": [
+          "role"
         ]
       },
       "Verify2faSetupBody": {
         "type": "object",
         "properties": {
-          "userId": {
+          "loginToken": {
             "type": "string",
-            "format": "uuid"
+            "description": "From POST /auth/login or /auth/set-password (twoFactorSetupRequired). It carries the secret."
           },
           "token": {
-            "type": "string"
-          },
-          "secret": {
-            "type": "string"
+            "type": "string",
+            "description": "6-digit code from the authenticator app"
           }
         },
         "required": [
-          "userId",
-          "token",
-          "secret"
+          "loginToken",
+          "token"
         ]
       },
       "Verify2faEnableBody": {
@@ -6140,7 +7673,8 @@
         "properties": {
           "newPassword": {
             "type": "string",
-            "minLength": 6
+            "minLength": 8,
+            "maxLength": 100
           },
           "reset2FA": {
             "type": "boolean"

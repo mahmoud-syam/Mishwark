@@ -21,11 +21,6 @@ export const updateDriverProfileSchema = z.object({
   pic: z.string().optional(),
 });
 
-export const assignVehicleSchema = z.object({
-  vehicleId: z.string().min(1),
-  isPrimary: z.boolean().optional(),
-});
-
 export const driverStatsQuerySchema = z.object({
   startDate: z.string().optional(),
   endDate: z.string().optional(),

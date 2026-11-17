@@ -146,6 +146,11 @@ async function main() {
           plateNumber: `${plates[i]} ${123 + i * 111}·D`,
           description: `${DEMO_TAG} عربية ${category === VehicleCategory.CLASSIC ? "كلاسيك" : "لوكس"} مجهزة للمناسبات`,
           status: VehicleStatus.AVAILABLE,
+          luggage: category === VehicleCategory.VAN ? 6 : capacity >= 6 ? 4 : 3,
+          features:
+            category === VehicleCategory.CLASSIC
+              ? ["زينة فرح", "مياه مجانية"]
+              : ["تكييف", "مقاعد جلد", "مياه مجانية", ...(basePrice >= 2000 ? ["واي فاي", "إضاءة أجواء"] : []), ...(capacity >= 6 ? ["شاشات خلفية"] : [])],
         },
       })
     );
@@ -337,11 +342,34 @@ async function main() {
     });
   }
 
-  // ---- maintenance: BMW 7 in 3 days
-  await prisma.vehicleMaintenance.create({
-    data: { vehicleId: vehicles[2].id, maintenanceType: "صيانة دورية", cost: 4500, scheduledDate: zonedToInstant(addDays(today, 3), "09:00") },
+  // ---- maintenance (blocks the car on its days, like the fleet page does):
+  // BMW 7 in 3 days for 2 days, Audi A8 today and tomorrow.
+  const maintain = async (vehicleId: string, type: string, cost: number, start: string, end: string) => {
+    // Demo only: free the days first by cancelling (the real flow refuses a clash instead).
+    await prisma.bookings.updateMany({ where: { vehicleId, bookingDate: { gte: start, lte: end } }, data: { status: BookingStatus.CANCELLED } });
+    const m = await prisma.vehicleMaintenance.create({
+      data: { vehicleId, maintenanceType: type, cost, scheduledDate: new Date(`${start}T00:00:00.000Z`), endDate: new Date(`${end}T00:00:00.000Z`) },
+    });
+    for (let d = start; d <= end; d = addDays(d, 1)) {
+      const date = new Date(`${d}T00:00:00.000Z`);
+      const reason = `صيانة (${type}) #${m.id}`;
+      await prisma.vehicleAvailability.upsert({
+        where: { vehicleId_date: { vehicleId, date } },
+        create: { vehicleId, date, status: AvailabilityStatus.BLOCKED, reason },
+        update: { status: AvailabilityStatus.BLOCKED, reason, bookingId: null },
+      });
+    }
+  };
+  await maintain(vehicles[2].id, "صيانة دورية", 4500, addDays(today, 3), addDays(today, 4));
+  await maintain(vehicles[9].id, "تغيير زيت وفرامل", 2200, today, addDays(today, 1));
+
+  // ---- a retired car (kept for its history, hidden from the app)
+  await prisma.vehicles.create({
+    data: {
+      make: "هيونداي", model: "إلنترا", category: VehicleCategory.CAR, year: 2016, capacity: 4, color: "فضي",
+      plateNumber: "و ي ر 999·D", description: `${DEMO_TAG} اتباعت`, retiredAt: new Date(`${addDays(today, -40)}T10:00:00Z`), retiredReason: "اتباعت",
+    },
   });
-  await prisma.vehicles.update({ where: { id: vehicles[9].id }, data: { status: VehicleStatus.MAINTENANCE } });
 
   // ---- referrals + wallet for the VIP customer
   for (let i = 0; i < 5; i++) {

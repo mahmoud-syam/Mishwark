@@ -11,6 +11,10 @@ model Users {
   twoFactorEnabled Boolean @default(false)
   twoFactorSecret  String? @default("")
   tokenVersion     Int     @default(0)
+  /// Set when a Super Admin creates the account or resets its password: the
+  /// temporary password must be replaced at the next sign-in.
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
 
   phoneNumber  String? @unique
   otpVerified  Boolean @default(false)

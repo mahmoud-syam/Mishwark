@@ -15,7 +15,8 @@ export interface Me {
 
 export type Alert =
   | { type: "maintenance"; severity: "warning"; entityId: string; vehicleName: string; maintenanceType: string; daysUntil: number }
-  | { type: "complaint"; severity: "danger"; entityId: string; driverName: string; rating: number; bookingId: string };
+  | { type: "complaint"; severity: "danger"; entityId: string; driverName: string; rating: number; bookingId: string }
+  | { type: "no_driver"; severity: "warning"; entityId: string; vehicleName: string };
 
 export interface Overview {
   today: string;
@@ -56,17 +57,6 @@ export interface DriverSummary {
   monthRevenue: number;
   monthTrips: number;
   totalTrips: number;
-}
-
-export interface FleetVehicle {
-  id: string;
-  make: string;
-  model: string;
-  category: string;
-  status: VehicleStatus;
-  plateNumber: string;
-  assignedDrivers: { id: string; name: string; status: DriverStatus; isPrimary: boolean }[];
-  todayAvailability: "AVAILABLE" | "BOOKED" | "BLOCKED";
 }
 
 export interface BookingListItem {
@@ -216,4 +206,81 @@ export interface AdminPackage {
   bookingsCount: number;
   unpaidBookings: number;
   discountGiven: number;
+}
+
+export type FleetStatus = "AVAILABLE" | "BOOKED" | "MAINTENANCE" | "RETIRED";
+export type VehicleCategory = "CAR" | "VAN" | "BUS" | "TRUCK" | "CLASSIC" | "LUXURY";
+
+export interface FleetItem {
+  id: string;
+  make: string;
+  model: string;
+  name: string;
+  year: number;
+  plateNumber: string;
+  color: string;
+  capacity: number;
+  luggage: number;
+  category: VehicleCategory;
+  status: FleetStatus;
+  retiredAt: string | null;
+  basePrice: number;
+  effectiveBasePrice: number;
+  usesTypePrices: boolean;
+  coverImage: string | null;
+  imagesCount: number;
+  features: string[];
+  drivers: { id: string; name: string; status: DriverStatus; isPrimary: boolean }[];
+  upcomingBookings: number;
+  nextMaintenance: { id: string; type: string; startDate: string; endDate: string } | null;
+}
+
+export interface FleetSummary {
+  total: number;
+  available: number;
+  booked: number;
+  maintenance: number;
+  retired: number;
+  withoutDriver: number;
+}
+
+export type MaintenanceState = "SCHEDULED" | "IN_PROGRESS" | "OVERDUE" | "DONE";
+
+export interface FleetDetail {
+  id: string;
+  make: string;
+  model: string;
+  name: string;
+  year: number;
+  plateNumber: string;
+  color: string;
+  capacity: number;
+  luggage: number;
+  category: VehicleCategory;
+  basePrice: number;
+  pricePerKm: number;
+  pricePerHour: number;
+  description: string;
+  features: string[];
+  status: FleetStatus;
+  retiredAt: string | null;
+  retiredReason: string | null;
+  typePrices: { basePrice: number; pricePerKm: number; pricePerHour: number };
+  images: { id: string; imageUrl: string; isCover: boolean }[];
+  drivers: { id: string; name: string; status: DriverStatus; rating: number; isPrimary: boolean }[];
+  maintenance: { id: string; type: string; startDate: string; endDate: string; cost: number; notes: string | null; completedAt: string | null; state: MaintenanceState }[];
+  upcomingBookings: { id: string; ref: string; bookingDate: string; startTime: string; endTime: string; status: BookingStatus; customer: { id: string; name: string } | null }[];
+  stats: { completedTrips: number; revenue: number };
+}
+
+export type TeamRole = "SUPER_ADMIN" | "ADMIN";
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string | null;
+  role: TeamRole;
+  twoFactorEnabled: boolean;
+  mustChangePassword: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
 }

@@ -64,6 +64,24 @@ export const api = {
   post: <T>(path: string, body?: unknown) => request<Envelope<T>>("POST", path, body ?? {}).then((r) => r.data),
   patch: <T>(path: string, body?: unknown) => request<Envelope<T>>("PATCH", path, body ?? {}).then((r) => r.data),
   put: <T>(path: string, body?: unknown) => request<Envelope<T>>("PUT", path, body ?? {}).then((r) => r.data),
+  del: <T>(path: string) => request<Envelope<T>>("DELETE", path).then((r) => r.data),
+  /** multipart/form-data (photos). The browser sets the boundary header itself. */
+  upload: async <T>(path: string, form: FormData): Promise<T> => {
+    const res = await fetch(API_BASE + path, { method: "POST", credentials: "include", body: form });
+    const json = safeJson(await res.text());
+    if (!res.ok) {
+      if (res.status === 401) onUnauthorized?.();
+      throw new ApiError(res.status, (json && json.message) || `HTTP ${res.status}`, json?.errorCode, json?.errors);
+    }
+    return json.data as T;
+  },
+};
+
+/** Bookings a 409 refused over (retire a car / schedule maintenance). */
+export type ClashBooking = { id: string; ref: string; date: string; startTime: string; endTime: string; customer: string };
+export const clashBookings = (e: unknown): ClashBooking[] => {
+  const errs = e instanceof ApiError ? (e.errors as unknown as { bookings?: ClashBooking[] } | null) : null;
+  return errs && !Array.isArray(errs) && Array.isArray(errs.bookings) ? errs.bookings : [];
 };
 
 /** Downloads a binary endpoint (e.g. an Excel export) with the session cookie. */

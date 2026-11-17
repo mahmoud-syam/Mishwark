@@ -13,7 +13,6 @@ import {
   dateParamSchema,
   periodSchema,
   quickCustomerSchema,
-  vehiclePatchSchema,
 } from "../schemas/admin-dashboard.schema";
 import { BUSINESS_TZ } from "../utils/businessTime";
 
@@ -68,13 +67,9 @@ export const bookOnBehalf = async (req: Request, res: Response) => {
   res.status(201).json({ success: true, data: await AdminDashboardService.bookOnBehalf(input, actorOf(req)) });
 };
 
-export const updateVehicle = async (req: Request, res: Response) => {
-  const patch = vehiclePatchSchema.parse(req.body);
-  res.json({ success: true, data: await AdminDashboardService.updateVehicle(paramStr(req.params.id), patch, actorOf(req)) });
-};
 
-export const getAssignableDrivers = async (_req: Request, res: Response) => {
-  res.json({ success: true, data: await AdminDashboardService.assignableDrivers() });
+export const getAssignableDrivers = async (req: Request, res: Response) => {
+  res.json({ success: true, data: await AdminDashboardService.assignableDrivers(queryStr(req.query.vehicleId)) });
 };
 
 export const listAuditLogs = async (req: Request, res: Response) => {

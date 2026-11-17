@@ -131,25 +131,40 @@ POST /auth/login
 { "email": "...", "password": "..." }
 ```
 
-`POST /auth/login` **never** returns a token. It always returns one of two
-payloads, both HTTP 200:
+`POST /auth/login` **never** returns a token. It answers with the next step
+and a **`loginToken`**: a signed pass for that step only, valid 5 minutes and
+usable once. All HTTP 200:
+
+```json
+// Temporary password (account created or reset by a Super Admin): pick a new one
+{ "message": "Choose a new password", "passwordChangeRequired": true, "userId": "UUID", "loginToken": "eyJ..." }
+```
 
 ```json
 // 2FA not set up yet — enable it before the user can log in
-{ "message": "2FA setup required", "twoFactorSetupRequired": true, "userId": "UUID", "secret": "BASE32", "qrCodeDataURL": "data:image/png;base64,..." }
+{ "message": "2FA setup required", "twoFactorSetupRequired": true, "userId": "UUID", "secret": "BASE32", "qrCodeDataURL": "data:image/png;base64,...", "loginToken": "eyJ..." }
 ```
 
 ```json
 // 2FA already enabled — answer the challenge
-{ "message": "2FA required", "twoFactorRequired": true, "userId": "UUID" }
+{ "message": "2FA required", "twoFactorRequired": true, "userId": "UUID", "loginToken": "eyJ..." }
 ```
 
 Then, depending on which you got:
 
 | Login said | Call | Body |
 |-----------|------|------|
-| `twoFactorSetupRequired` | `POST /auth/verify-2fa-setup` | `{ "userId", "token", "secret" }` — `secret` is the value login returned |
-| `twoFactorRequired` | `POST /auth/verify-2fa` | `{ "userId", "token" }` — code only, secret is already stored |
+| `passwordChangeRequired` | `POST /auth/set-password` | `{ "loginToken", "newPassword" }` (8+ characters, not the temporary one). Answers with the next step, like login |
+| `twoFactorSetupRequired` | `POST /auth/verify-2fa-setup` | `{ "loginToken", "token" }` — the 6-digit code; the secret travels inside the pass |
+| `twoFactorRequired` | `POST /auth/verify-2fa` | `{ "loginToken", "token" }` |
+
+> **Changed (17 Nov 2026):** these steps used to take `userId` (and, for
+> setup, a `secret` from the client). That let anyone who knew an account's
+> id attach their own authenticator and sign in without the password, so a
+> bare `userId` is now refused with 400. Send the `loginToken` from the
+> previous step instead. A 400 saying "Sign in again" or "expired" means the
+> pass expired or was used: start again from `POST /auth/login`. The success
+> reply now has the user under `user` (`optimizedUser` is still sent).
 
 Both 2FA verification routes set the JWT as a **`token` cookie only**, with
 nothing in the body. With `credentials: 'include'` the cookie arrives
@@ -205,12 +220,15 @@ POST /auth/2fa/disable  → no body
 ### Admin credential management
 
 ```http
-PUT  /auth/change-password/:userId   { "newPassword": "min6chars", "reset2FA": false }
+PUT  /auth/change-password/:userId   { "newPassword": "min8chars", "reset2FA": false }
 POST /auth/reset-2fa/:userId         no body
 ```
 
 Both require the `user_password:manage` permission. There is no `oldPassword`
 field — the caller holds the permission. Every call bumps `tokenVersion`.
+Dashboard accounts (Admin, Super Admin) can only be reset by a Super Admin
+(403 otherwise); the dashboard's Team page does that. Passwords are 8+
+characters (422 otherwise).
 
 ---
 
@@ -346,11 +364,18 @@ Rules:
 - `bookingDate` is `YYYY-MM-DD` and cannot be in the past.
 - **Both** `startPoint` and `endPoint` are required. A distance-less booking
   prices at base only, which would otherwise allow free rides.
-- Omitting `driverId` auto-assigns an `ACTIVE` driver. If none is available the
-  request is rejected.
-- A vehicle in `MAINTENANCE` cannot be booked.
+- Only the car's own drivers can drive it (the admin assigns them on the fleet
+  page). A `driverId` that isn't one of them returns **400** "This driver isn't
+  assigned to this car". Omitting `driverId` tries the car's main driver first,
+  then its other drivers, skipping anyone off, on leave or busy at that time.
+  If none of them is free: **409** "No driver of this car is free at this time".
+  A car with no driver: **400** "This car has no driver assigned yet" (such
+  cars are not listed by `GET /vehicles`, so this only happens with a stale list).
+- A retired car returns **400** "This car is no longer available", and a day
+  with scheduled maintenance returns **400** "This car is in maintenance on that
+  day". `GET /vehicles/:id/availability` shows those days as BLOCKED.
 - A vehicle can take several trips a day, but trips of the same vehicle or
-  driver must be at least 60 minutes apart (`BOOKING_BUFFER_MINUTES`);
+  driver must be at least the gap set in the dashboard Settings apart (60 minutes by default);
   otherwise **409**. Only a day marked BLOCKED (e.g. maintenance) is closed.
 - A new booking is `PENDING` with `depositRequired` (20% of the price) and
   `depositPaid: 0`. It becomes `CONFIRMED` automatically once confirmed payments
@@ -414,8 +439,6 @@ GET   /driver/profile
 PUT   /driver/profile        { fullName, licenseNumber, licenseExpiry, pic }
 PATCH /driver/status         { status: "ACTIVE" | "OFF" | "ONLEAVE" }
 GET   /driver/bookings?filter=today|upcoming|completed&page=1&limit=10
-POST  /driver/vehicles       { vehicleId, isPrimary }
-DELETE /driver/vehicles/:vehicleId
 GET   /driver/stats?startDate=2026-01-01&endDate=2026-09-30
 GET   /driver/:id            PUBLIC — id, fullName, pic, rating, status, vehicles only
 ```
@@ -428,7 +451,10 @@ driver set himself stays his to change.
 token. Do not call it unconditionally; check the role first, or treat 1001 as
 "no driver profile" rather than an error state.
 
-`POST /driver/vehicles` rejects a vehicle already assigned to another driver.
+**Changed:** `POST /driver/vehicles` and `DELETE /driver/vehicles/:vehicleId`
+now always return **403** "Cars are assigned to drivers by the administration".
+Remove the "pick my car" screen from the driver app; the driver's cars come
+from the admin.
 
 `GET /driver/stats` returns trip counts, `totalRevenue` (gross),
 `commissionRate`, `companyShare` and `netEarnings` (gross minus the company's
@@ -444,8 +470,17 @@ GET /vehicles/:id
 GET /vehicles/:id/availability?month=2026-09
 ```
 
-No auth required. `month` is `YYYY-MM`. `GET /vehicles/:id` for an unknown id
-returns **400**, not 404.
+No auth required. `month` is `YYYY-MM`.
+
+- Only cars customers can book are listed: retired cars and cars with no driver
+  are hidden. `GET /vehicles/:id` returns **404** for those and for unknown ids
+  (it used to return 400).
+- `status` is worked out for today: `AVAILABLE`, `BOOKED` (has a trip today) or
+  `MAINTENANCE` (maintenance scheduled today). It is no longer set by hand.
+- `images` come cover first: use `images[0]` as the car's main photo, and show a
+  placeholder when the list is empty.
+- New fields `luggage` (number of bags) and `features` (labels such as
+  "تكييف", "واي فاي") are for the car details screen.
 
 ```ts
 interface Vehicle {
@@ -455,8 +490,10 @@ interface Vehicle {
   category: VehicleCategory; status: VehicleStatus;
   basePrice: number; pricePerKm: number; pricePerHour: number;
   description: string;
+  luggage: number;          // new
+  features: string[];       // new, shown as chips
   createdAt: string; updatedAt: string;  // ISO 8601
-  images: VehicleImage[];
+  images: VehicleImage[];   // cover first; { id, imageUrl, isCover, sortOrder }
 }
 ```
 
@@ -608,6 +645,11 @@ registered before `/admin/bookings`, so both work — no action needed from you.
 
 `PATCH /admin/users/role` is the only way to grant an admin role.
 
+The web dashboard's fleet page uses `GET/POST /admin/vehicles`,
+`GET/PATCH /admin/vehicles/:id`, `.../retire`, `.../reactivate`,
+`PUT .../drivers`, photo upload/cover/delete and maintenance endpoints (all
+changes need `vehicle:manage`). The apps don't call these; see the API docs.
+
 ---
 
 ## Integration notes
@@ -639,12 +681,12 @@ use, so drive the full setup flow at least once.
 1. **OTP happy path** — `otp/request` then `otp/verify` with the returned
    `dev_otp`; expect a `token` in the body and subsequent authenticated calls to
    succeed.
-2. **Login with no 2FA** — expect `twoFactorSetupRequired: true` with a `secret`
-   and QR data URL, and **no** token.
-3. **Login setup completion** — `verify-2fa-setup` with that `secret` plus a
-   fresh TOTP code; expect a cookie and no body token.
+2. **Login with no 2FA** — expect `twoFactorSetupRequired: true` with a `secret`,
+   QR data URL and `loginToken`, and **no** session token.
+3. **Login setup completion** — `verify-2fa-setup` with that `loginToken` plus a
+   fresh TOTP code; expect a cookie. The same `loginToken` a second time: 400.
 4. **Login challenge** — second login returns `twoFactorRequired: true`; then
-   `verify-2fa` with `userId` + code only; expect a cookie.
+   `verify-2fa` with its `loginToken` + code; expect a cookie.
 5. **Validation error** — `POST /bookings` without `endPoint`; expect 422 with
    `errors` naming `endPoint`.
 6. **Double booking** — book the same `[vehicleId, bookingDate, startTime]`
