@@ -27,6 +27,17 @@ const GROUPS: { title: string; tag: string; fields: FieldDef[] }[] = [
       { key: "depositRate", label: "نسبة العربون", unit: "%", min: 0, max: 100, help: "من إجمالي سعر الرحلة. الحجز بيتأكد لوحده لما العربون يتدفع." },
       { key: "bookingBufferMinutes", label: "الفاصل بين رحلتين", unit: "دقيقة", min: 0, max: 720, int: true, help: "أقل وقت فاضي لازم يكون بين رحلتين لنفس العربية أو السائق." },
       { key: "tripEarlyStartMinutes", label: "السائق يبدأ الرحلة قبل ميعادها بـ", unit: "دقيقة", min: 0, max: 1440, int: true, help: "أقصى وقت يقدر السائق يبدأ فيه الرحلة قبل ميعادها." },
+      { key: "minTripMinutes", label: "أقل مدة للرحلة", unit: "دقيقة", min: 0, max: 720, int: true, help: "الحجز اللي أقصر من كده بيترفض. 0 = مفيش حد أدنى." },
+      { key: "maxAdvanceBookingDays", label: "أقصى مدة للحجز مقدمًا", unit: "يوم", min: 1, max: 1095, int: true, help: "العميل يقدر يحجز لحد المدة دي من النهارده." },
+      { key: "overnightLatestEndHour", label: "الرحلة بعد نص الليل تخلص بحد أقصى الساعة", unit: "صباحًا", min: 0, max: 12, int: true, help: "رحلة زي 10 بالليل لـ 1 الصبح. 6 يعني لازم تخلص قبل 6 الصبح. 0 = ممنوع الرحلات بعد نص الليل." },
+    ],
+  },
+  {
+    title: "الإلغاء والفريق",
+    tag: "العربون والباسوورد المؤقت",
+    fields: [
+      { key: "freeCancellationHours", label: "الإلغاء المجاني قبل الرحلة بـ", unit: "ساعة", min: 0, max: 720, int: true, help: "العميل اللي يلغي قبل الرحلة بالمدة دي أو أكتر بياخد العربون في محفظته. بعدها العربون بيتحجز (والزيادة فوقه بترجع). الأدمن يقدر يقرر غير كده وقت الإلغاء." },
+      { key: "tempPasswordDays", label: "صلاحية الباسوورد المؤقت لعضو الفريق", unit: "يوم", min: 1, max: 90, int: true, help: "بعدها الباسوورد المؤقت مايشتغلش والـ Super Admin يعمل واحد جديد." },
     ],
   },
   {

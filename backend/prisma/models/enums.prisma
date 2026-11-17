@@ -155,3 +155,9 @@ enum AuditAction {
   UPDATE
   DELETE
 }
+
+/// What happened to the paid deposit when a booking was cancelled.
+enum DepositOutcome {
+  REFUNDED
+  KEPT
+}

@@ -14,6 +14,8 @@ model Users {
   /// Set when a Super Admin creates the account or resets its password: the
   /// temporary password must be replaced at the next sign-in.
   mustChangePassword Boolean   @default(false)
+  /// When a temporary password (mustChangePassword) stops working.
+  tempPasswordExpiresAt DateTime?
   lastLoginAt        DateTime?
   /// Set by a Super Admin (Team page): can't sign in, history kept.
   disabledAt         DateTime?

@@ -245,6 +245,10 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         if (user.disabledAt) {
             throw new ForbiddenException("This account is disabled. Contact your Super Admin");
         }
+        // A temporary password only works for a few days (Settings).
+        if (user.mustChangePassword && user.tempPasswordExpiresAt && user.tempPasswordExpiresAt.getTime() < Date.now()) {
+            throw new ForbiddenException("This temporary password has expired. Ask your Super Admin for a new one");
+        }
         SignInGuard.succeed(req, email);
 
         // Mandatory: a temporary password is replaced, then 2FA is set up or checked.
@@ -265,7 +269,7 @@ export const setPasswordLogin = async (req: Request, res: Response, next: NextFu
         }
         const updated = await prismaClient.users.update({
             where: { id: user.id },
-            data: { password: hashSync(newPassword, 10), mustChangePassword: false, tokenVersion: { increment: 1 } },
+            data: { password: hashSync(newPassword, 10), mustChangePassword: false, tempPasswordExpiresAt: null, tokenVersion: { increment: 1 } },
         });
         return res.status(200).json(await nextSignInStep(updated));
     } catch (error) {

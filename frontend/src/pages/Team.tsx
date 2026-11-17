@@ -35,7 +35,7 @@ function TempPassword({ who, password, onDone }: { who: string; password: string
         <Button size="sm" onClick={copy}>{copied ? "اتنسخ ✓" : "نسخ"}</Button>
       </div>
       <p className="mt-3 text-[13px] leading-relaxed text-muted">
-        ابعته له بنفسك. مش هيظهر تاني بعد ما تقفل الرسالة دي. أول ما يدخل بيه هيختار باسورد خاص بيه، وبعدين يفعّل التحقق بخطوتين.
+        ابعته له بنفسك. مش هيظهر تاني بعد ما تقفل الرسالة دي. أول ما يدخل بيه هيختار باسورد خاص بيه، وبعدين يفعّل التحقق بخطوتين. الباسورد ده بينتهي بعد مدة (من الإعدادات)، وبعدها تعمل له واحد جديد.
       </p>
       <Button size="sm" variant="ghost" className="mt-2" onClick={onDone}>
         تمام، بعتّه
@@ -139,8 +139,13 @@ function MemberRow({ m, self, onPassword }: { m: TeamMember; self: boolean; onPa
           <Badge tone={m.role === "SUPER_ADMIN" ? "gold" : "muted"}>{ROLE[m.role]}</Badge>
           {off ? (
             <Badge tone="rose">موقوف من {relativeStamp(m.disabledAt!)}</Badge>
+          ) : m.mustChangePassword && m.tempPasswordExpiresAt && new Date(m.tempPasswordExpiresAt).getTime() < Date.now() ? (
+            <Badge tone="rose">الباسورد المؤقت انتهى، اعمل له واحد جديد</Badge>
           ) : m.mustChangePassword ? (
-            <Badge tone="gold">لسه ما دخلش بالباسورد المؤقت</Badge>
+            <Badge tone="gold">
+              لسه ما دخلش بالباسورد المؤقت
+              {m.tempPasswordExpiresAt && ` · بينتهي ${new Date(m.tempPasswordExpiresAt).toLocaleDateString("ar-EG", { day: "numeric", month: "long" })}`}
+            </Badge>
           ) : m.twoFactorEnabled ? (
             <Badge tone="mint">التحقق بخطوتين مفعّل</Badge>
           ) : (

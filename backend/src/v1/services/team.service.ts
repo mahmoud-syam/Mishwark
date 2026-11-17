@@ -1,3 +1,4 @@
+import SettingsService from "./settings.service";
 import { randomInt } from "crypto";
 import { hashSync } from "bcrypt";
 import { z } from "zod";
@@ -32,12 +33,16 @@ export const temporaryPassword = () => {
   return `${part()}-${part()}-${part()}`;
 };
 
+/** A temporary password works for `tempPasswordDays` (Settings). */
+const tempPasswordExpiry = async () => new Date(Date.now() + (await SettingsService.get()).tempPasswordDays * 86_400_000);
+
 const memberSelect = {
   id: true,
   name: true,
   email: true,
   twoFactorEnabled: true,
   mustChangePassword: true,
+  tempPasswordExpiresAt: true,
   lastLoginAt: true,
   disabledAt: true,
   createdAt: true,
@@ -50,6 +55,7 @@ type MemberRow = {
   email: string | null;
   twoFactorEnabled: boolean;
   mustChangePassword: boolean;
+  tempPasswordExpiresAt: Date | null;
   lastLoginAt: Date | null;
   disabledAt: Date | null;
   createdAt: Date;
@@ -63,6 +69,8 @@ const shape = (m: MemberRow) => ({
   role: m.role.name as TeamRole,
   twoFactorEnabled: m.twoFactorEnabled,
   mustChangePassword: m.mustChangePassword,
+  // Set while a temporary password is waiting to be replaced.
+  tempPasswordExpiresAt: m.mustChangePassword ? m.tempPasswordExpiresAt : null,
   lastLoginAt: m.lastLoginAt,
   disabledAt: m.disabledAt,
   createdAt: m.createdAt,
@@ -104,6 +112,7 @@ export default class TeamService {
         email: input.email,
         password: hashSync(password, 10),
         mustChangePassword: true,
+        tempPasswordExpiresAt: await tempPasswordExpiry(),
         roleId: role.id,
       },
       select: memberSelect,
@@ -125,11 +134,12 @@ export default class TeamService {
   public static async resetPassword(id: string, actorId: string) {
     const m = await this.member(id, actorId);
     const password = temporaryPassword();
+    const tempPasswordExpiresAt = await tempPasswordExpiry();
     await prismaClient.users.update({
       where: { id },
-      data: { password: hashSync(password, 10), mustChangePassword: true, tokenVersion: { increment: 1 } },
+      data: { password: hashSync(password, 10), mustChangePassword: true, tempPasswordExpiresAt, tokenVersion: { increment: 1 } },
     });
-    return { member: shape({ ...m, mustChangePassword: true }), temporaryPassword: password };
+    return { member: shape({ ...m, mustChangePassword: true, tempPasswordExpiresAt }), temporaryPassword: password };
   }
 
   /**

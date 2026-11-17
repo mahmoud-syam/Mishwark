@@ -34,7 +34,7 @@ export default function PaymentDialog({ booking, onClose }: { booking: Booking; 
   }, []);
 
   const refresh = () => {
-    ["day", "overview", "customer-analytics", "driver-analytics", "audit", "recent-bookings"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+    ["day", "bookings", "overview", "customer-analytics", "driver-analytics", "audit", "recent-bookings"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   };
 
   const settle = useMutation({

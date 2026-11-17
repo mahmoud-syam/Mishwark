@@ -16,9 +16,10 @@ interface Estimate {
   referralDiscount: number;
 }
 
+/** Wraps past midnight: 22:00 + 3h = 01:00 (the trip ends the next morning). */
 const addHours = (hhmm: string, h: number) => {
   const [hh, mm] = hhmm.split(":").map(Number);
-  const t = Math.min(23 * 60 + 59, hh * 60 + mm + h * 60);
+  const t = (hh * 60 + mm + h * 60) % 1440;
   return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
 };
 
@@ -119,7 +120,7 @@ export default function BookOnBehalf() {
     if (!vehicleId) p.push("اختار العربية");
     if (!fromValue || !toValue) p.push("حدد نقطة الانطلاق والوجهة");
     if (date < todayKey()) p.push("التاريخ لازم يكون النهاردة أو بعد كده");
-    if (endTime <= startTime) p.push("ميعاد النهاية لازم يكون بعد البداية");
+    if (endTime === startTime) p.push("ميعاد النهاية لازم يكون غير البداية");
     if (override !== "" && !(Number(override) > 0)) p.push("السعر اليدوي لازم يكون رقم أكبر من صفر");
     return p;
   }, [customer, vehicleId, fromValue, toValue, date, startTime, endTime, override]);
@@ -179,6 +180,7 @@ export default function BookOnBehalf() {
                 <span className="text-[13px] text-muted">لحد</span>
                 <input className={`${fieldControl} ltr text-right`} type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required aria-label="ميعاد النهاية" />
               </div>
+              {endTime < startTime && <p className="mt-1.5 text-[13px] text-gold">الرحلة بتخلص تاني يوم الصبح</p>}
             </Field>
             <Field label="السائق">
               <select className={fieldControl} value={driverId} onChange={(e) => setDriverId(e.target.value)} aria-label="السائق">
@@ -255,8 +257,30 @@ export default function BookOnBehalf() {
   );
 }
 
+/** The API's booking refusals, in Arabic. */
+const BOOKING_ERRORS: [RegExp, (m: RegExpMatchArray) => string][] = [
+  [/already passed/i, () => "الميعاد ده عدّى خلاص. اختار وقت بعد دلوقتي."],
+  [/past date/i, () => "التاريخ ده عدّى."],
+  [/up to (\d+) days ahead/i, (m) => `الحجز متاح لحد ${m[1]} يوم من النهارده بس.`],
+  [/at least (\d+) minutes/i, (m) => `الرحلة لازم تكون ${m[1]} دقيقة على الأقل.`],
+  [/must end by (\d\d:\d\d)/i, (m) => `الرحلة اللي بتعدّي نص الليل لازم تخلص قبل ${m[1]} الصبح.`],
+  [/endTime must be later/i, () => "الرحلات بعد نص الليل مقفولة من الإعدادات. ميعاد النهاية لازم يكون بعد البداية."],
+  [/maintenance/i, () => "العربية دي في الصيانة في اليوم ده."],
+  [/no longer available/i, () => "العربية دي اتشالت من الأسطول."],
+  [/licence has expired/i, () => "رخصة السائق ده منتهية. اختار سائق تاني أو سيبها تلقائي."],
+  [/no driver of this car is free/i, () => "مفيش سواق من سواقين العربية فاضي في الميعاد ده."],
+  [/no driver assigned/i, () => "العربية دي لسه ما اتحددلهاش سواقين. حددهم من صفحة الأسطول."],
+  [/OFF or ON LEAVE/i, () => "السائق ده في إجازة أو مش شغال النهارده."],
+];
+
 function submitError(e: unknown) {
   if (e instanceof ApiError && e.status === 409) return "العربية أو السائق محجوزين في نفس الميعاد ده. اختار وقت أو عربية تانية.";
+  if (e instanceof ApiError && e.status === 400) {
+    for (const [re, say] of BOOKING_ERRORS) {
+      const m = e.message.match(re);
+      if (m) return say(m);
+    }
+  }
   return errorMessage(e);
 }
 

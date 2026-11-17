@@ -33,6 +33,20 @@ export const getDay = async (req: Request, res: Response) => {
   res.json({ success: true, data: await AdminDashboardService.day(date) });
 };
 
+export const searchBookings = async (req: Request, res: Response) => {
+  const result = await AdminDashboardService.bookings({
+    q: queryStr(req.query.q),
+    status: queryStr(req.query.status),
+    paymentStatus: queryStr(req.query.paymentStatus),
+    scope: queryStr(req.query.scope),
+    from: queryStr(req.query.from),
+    to: queryStr(req.query.to),
+    page: queryNum(req.query.page, 1),
+    limit: queryLimit(req.query.limit, 25),
+  });
+  res.json({ success: true, data: result.items, counts: result.counts, pagination: result.pagination });
+};
+
 export const getLiveTrips = async (_req: Request, res: Response) => {
   res.json({ success: true, data: await AdminDashboardService.liveTrips() });
 };

@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Sun,
   CalendarPlus,
+  CalendarDays,
   Users,
   X,
 } from "lucide-react";
@@ -79,6 +80,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
 
   const main: Item[] = [
     { to: "/", label: "الرئيسية", icon: <LayoutDashboard />, end: true, badge: alerts },
+    { to: "/bookings", label: "الحجوزات", icon: <CalendarDays /> },
     { to: "/book", label: "احجز لعميل", icon: <CalendarPlus /> },
     { to: "/live", label: "الرحلات الجارية", icon: <Radio />, badge: live },
     { to: "/drivers", label: "السواقين", icon: <Users /> },
