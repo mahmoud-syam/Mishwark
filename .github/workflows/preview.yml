@@ -101,9 +101,16 @@ jobs:
         run: |
           curl -sSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x cloudflared
-          if [ -n "$TUNNEL_TOKEN" ] && [ -n "$FIXED_URL" ]; then
+          # Accept the secret even if it was pasted with the install command
+          # around it ("cloudflared.exe service install eyJ..."): keep the token.
+          TOKEN=$(printf '%s' "$TUNNEL_TOKEN" | grep -oE 'eyJ[A-Za-z0-9_=+/-]+' | head -1)
+          if [ -n "$TUNNEL_TOKEN" ] && [ -z "$TOKEN" ]; then
+            echo "::error::CLOUDFLARE_TUNNEL_TOKEN doesn't contain a tunnel token (it starts with eyJ)."; exit 1
+          fi
+          if [ -n "$TOKEN" ] && [ -n "$FIXED_URL" ]; then
             URL="${FIXED_URL%/}"
-            nohup ./cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN" > tunnel.log 2>&1 &
+            echo "::add-mask::$TOKEN"
+            nohup ./cloudflared tunnel --no-autoupdate run --token "$TOKEN" > tunnel.log 2>&1 &
             for i in $(seq 1 60); do
               grep -q "Registered tunnel connection" tunnel.log && break
               sleep 2
