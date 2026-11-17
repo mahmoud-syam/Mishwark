@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { AlertTriangle, CalendarCheck, Car, ChevronLeft, Gauge, MessageSquareWarning, Plus, Wallet, Wrench } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import type { BookingListItem, DriverSummary, FleetItem, FleetSummary, Overview as OverviewData } from "../lib/types";
-import { BOOKING_STATUS, DRIVER_STATUS, FLEET_STATUS, ROLE_LABEL } from "../lib/labels";
+import type { BookingListItem, DayDetails, DriverSummary, Overview as OverviewData } from "../lib/types";
+import { BOOKING_STATUS, DRIVER_STATUS } from "../lib/labels";
 import {
   addDays,
   compact,
@@ -17,14 +18,13 @@ import {
   percentDelta,
   time12,
   todayKey,
+  weekdayFull,
   weekdayShort,
 } from "../lib/format";
 import {
   Avatar,
   Badge,
   BarChart,
-  Brand,
-  Button,
   cx,
   Empty,
   ErrorBox,
@@ -44,34 +44,34 @@ export default function Overview() {
 
   return (
     <Page>
-      <TopBar liveTrips={k?.liveTrips ?? 0} />
-
+      <Greeting />
       {overview.error && <ErrorBox error={errorMessage(overview.error)} onRetry={() => overview.refetch()} />}
       <AlertsStrip data={overview.data} />
 
       <StatGrid>
-        <Link to={`/day/${todayKey()}`} className="block rounded-2xl transition hover:brightness-110" aria-label="تفاصيل حجوزات النهاردة">
+        <Link to={`/day/${todayKey()}`} className="block rounded-[18px] transition hover:brightness-[1.02]" aria-label="تفاصيل حجوزات النهاردة">
           <TodayCard loading={overview.isPending} today={k?.todayBookings} yesterday={k?.yesterdayBookings} />
         </Link>
+        <RevenueCard loading={overview.isPending} current={k?.monthRevenue} previous={k?.lastMonthRevenue} />
         <StatCard
           loading={overview.isPending}
+          icon={<Car />}
           label="السيارات المتاحة"
-          tone="cream"
           value={k ? `${k.availableVehicles} / ${k.totalVehicles}` : ""}
-          delta={k ? `${k.bookedVehicles} محجوزة حاليًا${k.maintenanceVehicles ? ` · ${k.maintenanceVehicles} صيانة` : ""}` : ""}
+          delta={k ? `${k.bookedVehicles} محجوزة${k.maintenanceVehicles ? ` · ${k.maintenanceVehicles} صيانة` : ""}` : ""}
         />
-        <RevenueCard loading={overview.isPending} current={k?.monthRevenue} previous={k?.lastMonthRevenue} />
-        <StatCard loading={overview.isPending} label="معدل الإشغال" value={k ? `${k.occupancyRate}%` : ""} delta="متوسط آخر 7 أيام" />
+        <StatCard loading={overview.isPending} icon={<Gauge />} label="معدل الإشغال" value={k ? `${k.occupancyRate}%` : ""} delta="متوسط آخر 7 أيام" />
       </StatGrid>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-6">
+          <RevenuePanel data={overview.data?.weeklyRevenue} loading={overview.isPending} />
           <CalendarPanel />
           <RecentBookingsPanel />
-          <WeeklyRevenuePanel data={overview.data?.weeklyRevenue} loading={overview.isPending} />
         </div>
         <div className="flex min-w-0 flex-col gap-6">
-          <FleetPanel />
+          <FleetDonut data={overview.data} loading={overview.isPending} />
+          <TodayPanel />
           <DriversPanel />
         </div>
       </div>
@@ -79,36 +79,29 @@ export default function Overview() {
   );
 }
 
-// ----------------------------------------------------------------- top bar
-function TopBar({ liveTrips }: { liveTrips: number }) {
-  const { me, logout, isSuperAdmin } = useAuth();
+// ----------------------------------------------------------------- greeting
+function Greeting() {
+  const { me } = useAuth();
+  const first = (me?.name ?? "").split(/\s+/)[0];
+  const today = todayKey();
   return (
     <header className="flex flex-wrap items-center justify-between gap-4">
-      <div className="flex flex-col gap-1.5">
-        <div className="text-[12px] uppercase tracking-[2px] text-gold">
-          <span dir="ltr">{ROLE_LABEL[me?.role?.name ?? ""] ?? "Admin"}</span>
-          {me?.name && <span className="normal-case tracking-normal text-muted"> · {me.name}</span>}
-        </div>
-        <h1 className="font-display text-[30px] leading-tight text-cream">لوحة التحكم</h1>
-      </div>
-      <nav className="flex flex-wrap items-center gap-2" aria-label="التنقل الرئيسي">
-        <LinkButton to="/book" variant="primary">+ احجز لعميل</LinkButton>
-        <LinkButton to="/live">
-          <span className={cx("inline-block size-2 rounded-full bg-[#e2453c]", liveTrips > 0 && "pulse-dot")} />
-          الرحلات الجارية{liveTrips > 0 && <span className="text-gold">({liveTrips})</span>}
-        </LinkButton>
-        <LinkButton to="/audit">📋 سجل التوثيق</LinkButton>
-        <LinkButton to="/fleet">🚗 الأسطول</LinkButton>
-        <LinkButton to="/packages">🎁 الباكدجات</LinkButton>
-        <LinkButton to="/settings">⚙️ الإعدادات</LinkButton>
-        {isSuperAdmin && <LinkButton to="/team">👥 الفريق</LinkButton>}
-        <span className="mx-1 hidden sm:block">
-          <Brand />
+      <div className="flex items-center gap-4">
+        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-linear-135 from-navy to-navy-soft text-[17px] font-bold text-white shadow-[var(--shadow-card)] dark:text-ink">
+          {initials(me?.name ?? "")}
         </span>
-        <Button variant="ghost" size="sm" onClick={logout} title="تسجيل الخروج">
-          خروج
-        </Button>
-      </nav>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-[24px] leading-tight text-cream">
+            أهلًا، <span className="font-bold text-gold">{first}</span>
+          </h1>
+          <p className="text-[12px] text-muted">
+            {weekdayFull(today)}، {dayMonth(today)} · تابع شغل النهاردة من هنا
+          </p>
+        </div>
+      </div>
+      <LinkButton to="/book" variant="primary" className="rounded-xl px-5 py-3 text-[12px]">
+        <Plus className="size-4" /> احجز لعميل
+      </LinkButton>
     </header>
   );
 }
@@ -116,32 +109,26 @@ function TopBar({ liveTrips }: { liveTrips: number }) {
 // ------------------------------------------------------------------ alerts
 function AlertsStrip({ data }: { data?: OverviewData }) {
   if (!data || data.alerts.length === 0) return null;
+  const row = "card flex items-center gap-3 px-4 py-3 text-[12px] text-cream transition hover:border-gold/50";
+  const icon = (tone: string, node: ReactNode) => <span className={cx("flex size-8 shrink-0 items-center justify-center rounded-full [&_svg]:size-4", tone)}>{node}</span>;
   return (
-    <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
       {data.alerts.map((a, i) =>
         a.type === "maintenance" ? (
-          <div key={i} className="flex items-center gap-2 rounded-xl border border-gold bg-gold/15 px-4 py-3 text-[11px] text-gold">
-            <span aria-hidden>🔧</span>
+          <Link key={i} to={`/fleet/${a.entityId}`} className={row}>
+            {icon("bg-amber/15 text-amber", <Wrench />)}
             <span>
               {a.vehicleName} {a.daysUntil === 0 ? "داخلة صيانة مجدولة النهاردة" : a.daysUntil === 1 ? "هتدخل صيانة مجدولة بكرة" : `هتدخل صيانة مجدولة بعد ${a.daysUntil} أيام`}
             </span>
-          </div>
+          </Link>
         ) : a.type === "no_driver" ? (
-          <Link
-            key={i}
-            to={`/fleet/${a.entityId}`}
-            className="flex items-center gap-2 rounded-xl border border-gold bg-gold/15 px-4 py-3 text-[11px] text-gold transition hover:bg-gold/20"
-          >
-            <span aria-hidden>🚗</span>
+          <Link key={i} to={`/fleet/${a.entityId}`} className={row}>
+            {icon("bg-gold/15 text-gold", <AlertTriangle />)}
             <span>{a.vehicleName} من غير سواق: مش ظاهرة للعملاء. حدد لها سواق</span>
           </Link>
         ) : (
-          <Link
-            key={i}
-            to={`/drivers/${a.entityId}`}
-            className="flex items-center gap-2 rounded-xl border border-wine bg-wine/18 px-4 py-3 text-[11px] text-blush transition hover:bg-wine/25"
-          >
-            <span aria-hidden>⚠️</span>
+          <Link key={i} to={`/drivers/${a.entityId}`} className={row}>
+            {icon("bg-wine/12 text-rose", <MessageSquareWarning />)}
             <span>
               {a.driverName} عنده شكوى جديدة محتاجة مراجعة <span className="text-rose">({a.rating}★)</span>
             </span>
@@ -166,12 +153,180 @@ function TodayCard({ loading, today, yesterday }: { loading: boolean; today?: nu
   if (today != null && yesterday != null) {
     d = yesterday === 0 ? { delta: today > 0 ? "أمس مكانش فيه حجوزات" : "", deltaTone: "muted" } : deltaProps(percentDelta(today, yesterday), "أمس");
   }
-  return <StatCard loading={loading} label="حجوزات اليوم" value={today ?? ""} {...d} />;
+  return <StatCard loading={loading} icon={<CalendarCheck />} label="حجوزات اليوم" value={today ?? ""} {...d} />;
 }
 
 function RevenueCard({ loading, current, previous }: { loading: boolean; current?: number; previous?: number }) {
   const d = current != null && previous != null ? deltaProps(percentDelta(current, previous), "الشهر اللي فات") : { delta: "", deltaTone: "muted" as const };
-  return <StatCard loading={loading} label="إيرادات الشهر" tone="rose" value={current != null ? compact(current) : ""} {...d} />;
+  return <StatCard loading={loading} icon={<Wallet />} label="إيرادات الشهر" value={current != null ? compact(current) : ""} {...d} />;
+}
+
+// ------------------------------------------------------------- revenue chart
+function RevenuePanel({ data, loading }: { data?: OverviewData["weeklyRevenue"]; loading: boolean }) {
+  const total = data?.reduce((s, d) => s + d.revenue, 0) ?? 0;
+  const today = todayKey();
+  const hot = data ? Math.max(0, data.findIndex((d) => d.date === today)) : undefined;
+  return (
+    <Panel
+      title={
+        <span className="flex flex-col gap-0.5">
+          <span>الإيرادات</span>
+          <span className="text-[11px] font-normal text-muted">آخر 7 أيام</span>
+        </span>
+      }
+      tag={data ? <span className="text-[12px]">الإجمالي: <b className="text-cream">{egp(total)}</b></span> : undefined}
+    >
+      {loading || !data ? (
+        <Skeleton className="h-[190px]" />
+      ) : (
+        <BarChart
+          height={170}
+          format={(n) => compact(n)}
+          highlight={hot}
+          data={data.map((d) => ({ label: weekdayShort(d.date), value: d.revenue, caption: dayMonth(d.date), title: `${dayMonth(d.date)}: ${egp(d.revenue)}` }))}
+        />
+      )}
+    </Panel>
+  );
+}
+
+// ------------------------------------------------------------- fleet donut
+function FleetDonut({ data, loading }: { data?: OverviewData; loading: boolean }) {
+  const k = data?.kpis;
+  const parts = k
+    ? [
+        { label: "متاحة", value: k.availableVehicles, color: "var(--color-gold)" },
+        { label: "محجوزة", value: k.bookedVehicles, color: "var(--color-navy)" },
+        { label: "صيانة", value: k.maintenanceVehicles, color: "var(--color-amber)" },
+      ]
+    : [];
+  const total = parts.reduce((s, p) => s + p.value, 0);
+  const pct = k && k.totalVehicles ? Math.round((k.availableVehicles / k.totalVehicles) * 100) : 0;
+  const R = 52;
+  const C = 2 * Math.PI * R;
+  let offset = 0;
+  return (
+    <Panel title="حالة الأسطول" tag={<Link to="/fleet" className="hover:text-gold">إدارة الأسطول</Link>}>
+      {loading || !k ? (
+        <Skeleton className="h-40" />
+      ) : (
+        <div className="flex items-center justify-between gap-4">
+          <ul className="flex flex-col gap-3 text-[12px]">
+            {parts.map((p) => (
+              <li key={p.label} className="flex items-center gap-2">
+                <span className="size-2.5 rounded-full" style={{ background: p.color }} />
+                <span className="text-muted">{p.label}</span>
+                <b className="text-cream">{p.value}</b>
+              </li>
+            ))}
+          </ul>
+          <svg viewBox="0 0 140 140" className="size-36 shrink-0 -rotate-90" role="img" aria-label={`${pct}% من العربيات متاحة`}>
+            <circle cx="70" cy="70" r={R} fill="none" stroke="var(--color-raised-2)" strokeWidth="14" />
+            {total > 0 &&
+              parts.map((p) => {
+                const len = (p.value / total) * C;
+                const el = (
+                  <circle
+                    key={p.label}
+                    cx="70"
+                    cy="70"
+                    r={R}
+                    fill="none"
+                    stroke={p.color}
+                    strokeWidth="14"
+                    strokeDasharray={`${Math.max(0, len - 2)} ${C}`}
+                    strokeDashoffset={-offset}
+                    strokeLinecap="round"
+                  />
+                );
+                offset += len;
+                return el;
+              })}
+            <g className="rotate-90" style={{ transformOrigin: "70px 70px" }}>
+              <circle cx="70" cy="70" r="36" fill="var(--color-surface)" />
+              <text x="70" y="76" textAnchor="middle" className="fill-cream text-[20px] font-bold">
+                {pct}%
+              </text>
+            </g>
+          </svg>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+// ---------------------------------------------------------------- today
+const SLOT_TONES = [
+  "bg-linear-to-l from-gold to-gold-deep text-white",
+  "bg-navy text-white dark:text-ink",
+  "bg-linear-to-l from-amber to-amber/80 text-white",
+];
+
+function TodayPanel() {
+  const nav = useNavigate();
+  const today = todayKey();
+  const [day, setDay] = useState(today);
+  const strip = useMemo(() => Array.from({ length: 5 }, (_, i) => addDays(today, i - 1)), [today]);
+  const months = Array.from(new Set(strip.map((d) => d.slice(0, 7))));
+  const counts: Record<string, number> = Object.assign(
+    {},
+    ...useQueries({ queries: months.map((m) => ({ queryKey: ["calendar", m], queryFn: () => api.get<Record<string, number>>(`/admin/bookings/calendar?month=${m}`) })) }).map((r) => r.data ?? {})
+  );
+  const q = useQuery({ queryKey: ["day", day], queryFn: () => api.get<DayDetails>(`/admin/days/${day}`) });
+  const trips = (q.data?.bookings ?? []).filter((b) => b.status !== "CANCELLED").sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  return (
+    <Panel title={`${day === today ? "النهاردة" : weekdayFull(day)}، ${dayMonth(day)}`}>
+      <div className="grid grid-cols-5 gap-1.5 border-b border-line pb-4">
+        {strip.map((d) => {
+          const c = counts[d] ?? 0;
+          const on = d === day;
+          return (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDay(d)}
+              className={cx("flex flex-col items-center gap-1 rounded-xl py-2 text-[12px] transition", on ? "bg-navy text-white shadow-[0_8px_18px_-10px_var(--color-navy)] dark:text-ink" : "bg-raised text-cream hover:bg-raised-2")}
+              aria-pressed={on}
+              aria-label={`${weekdayFull(d)} ${dayMonth(d)}: ${c} حجز`}
+            >
+              <span className="font-bold ltr">{d.slice(8)}</span>
+              <span className={cx("text-[10px]", on ? "opacity-80" : "text-muted")}>{weekdayShort(d)}</span>
+              <span className="flex h-1.5 gap-0.5">
+                {Array.from({ length: Math.min(3, c) }, (_, i) => (
+                  <span key={i} className={cx("size-1.5 rounded-full", on ? "bg-white/90 dark:bg-ink/70" : ["bg-gold", "bg-navy-soft", "bg-mint"][i])} />
+                ))}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="pt-4">
+        {q.isPending ? (
+          <div className="flex flex-col gap-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>
+        ) : trips.length === 0 ? (
+          <p className="py-6 text-center text-[12px] text-muted">مفيش رحلات في اليوم ده.</p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {trips.slice(0, 4).map((b, i) => (
+              <li key={b.id} className="flex items-center gap-3">
+                <span className="w-14 shrink-0 text-[11px] text-muted">{time12(b.startTime)}</span>
+                <Link to={`/day/${day}?booking=${b.id}`} className={cx("lift flex min-w-0 flex-1 flex-col rounded-xl px-3 py-2.5", SLOT_TONES[i % SLOT_TONES.length])}>
+                  <span className="truncate text-[12px] font-bold">{b.customer.name}</span>
+                  <span className="truncate text-[10px] opacity-85">
+                    {b.vehicle.name} · {b.driver.fullName}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        <button type="button" onClick={() => nav(`/day/${day}`)} className="mt-4 flex w-full items-center justify-center gap-1 text-[12px] font-bold text-gold hover:underline">
+          {trips.length > 4 ? `كل الـ ${trips.length} رحلات` : "تفاصيل اليوم"} <ChevronLeft className="size-4" />
+        </button>
+      </div>
+    </Panel>
+  );
 }
 
 // ---------------------------------------------------------------- calendar
@@ -200,11 +355,11 @@ function CalendarPanel() {
       title="الحجوزات القادمة"
       tag={
         <span className="flex items-center gap-2">
-          <button type="button" className="rounded px-1 text-cream hover:text-gold" onClick={() => setPage((p) => p - 1)} aria-label="الأسبوعين اللي فاتوا">
+          <button type="button" className="flex size-7 items-center justify-center rounded-full border border-line text-cream hover:border-gold hover:text-gold" onClick={() => setPage((p) => p - 1)} aria-label="الأسبوعين اللي فاتوا">
             ›
           </button>
           <span>{monthYear(days[0])}</span>
-          <button type="button" className="rounded px-1 text-cream hover:text-gold" onClick={() => setPage((p) => p + 1)} aria-label="الأسبوعين الجايين">
+          <button type="button" className="flex size-7 items-center justify-center rounded-full border border-line text-cream hover:border-gold hover:text-gold" onClick={() => setPage((p) => p + 1)} aria-label="الأسبوعين الجايين">
             ‹
           </button>
         </span>
@@ -226,10 +381,10 @@ function CalendarPanel() {
               type="button"
               onClick={() => nav(`/day/${d}`)}
               className={cx(
-                "relative flex aspect-square flex-col items-center justify-center rounded-lg text-[11px] transition hover:brightness-125",
-                busy ? "border-2 border-wine bg-wine/18 font-bold text-blush shadow-[0_0_0_3px_rgba(139,46,58,0.15)]" : c > 0 ? "border border-gold bg-gold/15 font-bold text-gold" : "bg-raised text-muted",
+                "relative flex aspect-square flex-col items-center justify-center rounded-xl text-[11px] transition hover:brightness-110",
+                busy ? "bg-navy font-bold text-white shadow-[0_8px_18px_-10px_var(--color-navy)] dark:text-ink" : c > 0 ? "border border-gold/50 bg-gold/12 font-bold text-gold" : "bg-raised text-muted",
                 past && "opacity-55",
-                d === today && "outline outline-1 outline-offset-2 outline-cream/40"
+                d === today && "outline-2 outline-offset-2 outline-gold"
               )}
               aria-label={`${dayMonth(d)}: ${c} حجز`}
             >
@@ -241,11 +396,11 @@ function CalendarPanel() {
       </div>
       <div className="mt-3.5 flex items-center gap-4 text-[10px] text-muted">
         <span className="flex items-center gap-1.5">
-          <span className="size-2 rounded-[2px] border border-gold bg-gold/15" />
+          <span className="size-2 rounded-[2px] border border-gold/50 bg-gold/12" />
           حجوزات متوسطة
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="size-2 rounded-[2px] border border-wine bg-wine/18" />
+          <span className="size-2 rounded-[2px] bg-navy" />
           يوم مزدحم
         </span>
       </div>
@@ -292,84 +447,37 @@ function RecentBookingsPanel() {
   );
 }
 
-// --------------------------------------------------------- weekly revenue
-function WeeklyRevenuePanel({ data, loading }: { data?: OverviewData["weeklyRevenue"]; loading: boolean }) {
-  const total = data?.reduce((s, d) => s + d.revenue, 0) ?? 0;
-  return (
-    <Panel title="الإيرادات الأسبوعية" tag={data ? `إجمالي ${egp(total)}` : undefined}>
-      {loading || !data ? (
-        <Skeleton className="h-[140px]" />
-      ) : (
-        <BarChart format={(n) => compact(n)} data={data.map((d) => ({ label: weekdayShort(d.date), value: d.revenue, title: `${dayMonth(d.date)}: ${egp(d.revenue)}` }))} />
-      )}
-    </Panel>
-  );
-}
-
-// --------------------------------------------------------------- fleet
-const FLEET_RANK: Record<string, number> = { MAINTENANCE: 0, BOOKED: 1, AVAILABLE: 2 };
-
-function FleetPanel() {
-  const q = useQuery({ queryKey: ["fleet-list", ""], queryFn: () => api.raw<{ data: FleetItem[]; summary: FleetSummary }>("GET", "/admin/vehicles") });
-  const list = (q.data?.data ?? []).filter((v) => v.status !== "RETIRED").sort((a, b) => (FLEET_RANK[a.status] ?? 3) - (FLEET_RANK[b.status] ?? 3));
-
-  return (
-    <Panel title="حالة الأسطول" tag={q.data ? `${list.length} عربية` : undefined}>
-      {q.error ? (
-        <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />
-      ) : q.isPending ? (
-        <div className="flex flex-col gap-3">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-10" />)}</div>
-      ) : list.length === 0 ? (
-        <Empty>لسه مفيش عربيات مسجّلة.</Empty>
-      ) : (
-        <ul className="scroll-thin -mx-1 max-h-[300px] overflow-y-auto px-1">
-          {list.map((v) => {
-            const b = FLEET_STATUS[v.status];
-            return (
-              <li key={v.id}>
-                <Link to={`/fleet/${v.id}`} className="flex w-full items-center justify-between gap-3 border-b border-line py-3 text-right last:border-b-0 hover:bg-raised/30">
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-[13px] font-bold text-cream">{v.name}</span>
-                    <span className="text-[11px] text-muted">
-                      {v.plateNumber.replace(/·D$/, "")}
-                      {v.drivers.length === 0 && <span className="text-rose"> · من غير سواق</span>}
-                    </span>
-                  </span>
-                  <Badge tone={b.tone} dot>
-                    {b.label}
-                  </Badge>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <LinkButton to="/fleet" className="mt-3 w-full rounded-xl py-3 text-[12px]">
-        إدارة الأسطول
-      </LinkButton>
-    </Panel>
-  );
-}
-
 // ------------------------------------------------------------- drivers
 const avatarTones = ["wine", "gold", "plain"] as const;
 
 function DriversPanel() {
   const q = useQuery({ queryKey: ["drivers-summary", 3], queryFn: () => api.get<DriverSummary[]>("/admin/drivers-summary?limit=3") });
   return (
-    <Panel title="تفاصيل السائقين" tag="هذا الشهر" bodyClassName="flex flex-col gap-2.5">
+    <Panel title="أفضل السواقين" tag={<Link to="/drivers" className="hover:text-gold">الكل</Link>}>
       {q.error ? (
         <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />
       ) : q.isPending ? (
-        [0, 1, 2].map((i) => <Skeleton key={i} className="h-32 rounded-xl" />)
+        <div className="flex flex-col gap-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12 rounded-xl" />)}</div>
       ) : (q.data ?? []).length === 0 ? (
         <Empty>لسه مفيش سائقين.</Empty>
       ) : (
-        q.data!.map((d, i) => <DriverCard key={d.id} d={d} tone={avatarTones[i % 3]} />)
+        <ul className="flex flex-col">
+          {q.data!.map((d, i) => (
+            <li key={d.id}>
+              <Link to={`/drivers/${d.id}`} className="flex items-center gap-3 border-b border-line py-3 last:border-b-0 hover:text-gold">
+                <Avatar text={initials(d.name)} tone={avatarTones[i % 3]} />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-[13px] font-bold text-cream">{d.name}</span>
+                  <span className="text-[11px] text-muted">
+                    ⭐ {d.rating.toFixed(1)} · {num(d.monthTrips)} رحلة الشهر ده
+                  </span>
+                </span>
+                <span className="text-[13px] font-bold text-cream ltr">{compact(d.monthRevenue)}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       )}
-      <LinkButton to="/drivers" className="mt-1 w-full rounded-xl py-3 text-[12px]">
-        عرض كل السائقين
-      </LinkButton>
     </Panel>
   );
 }
