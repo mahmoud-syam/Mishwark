@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
-import { LoginSchema, SignupSchema, OtpRequestSchema, OtpVerifySchema } from "../schemas/auth.schema";
+import { LoginSchema, SignupSchema, OtpRequestSchema, OtpVerifySchema, NewPasswordSchema, PasswordRule } from "../schemas/auth.schema";
+import { issueLoginTicket, readLoginTicket } from "../services/login-ticket.service";
 import prismaClient from "../utils/prismaClientHelper";
 import { compareSync, hashSync } from "bcrypt";
 import { BadRequestsException } from "../exceptions/bad-requests";
@@ -17,7 +18,9 @@ const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS ?? 5);
 const OTP_RESEND_SECONDS = Number(process.env.OTP_RESEND_SECONDS ?? 60);
 import { generate2FASecret, verify2FAToken } from "../services/two-factor.service";
 import { buildTokenUser, findOrCreateRole } from "../services/role.service";
-import { normalizeRoleName, USER_ROLES } from "../constants/roles";
+import { isAdminRole, isSuperAdminRole, normalizeRoleName, USER_ROLES } from "../constants/roles";
+import { ForbiddenException } from "../utils/errors";
+import { z } from "zod";
 
 export const signup = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -153,6 +156,66 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
     }
 }
 
+const withRole = { role: { include: { permissions: true } }, phoneNumbers: true } as const;
+
+/**
+ * What comes after the password: changing a temporary password, setting up
+ * 2FA (mandatory), or entering the 2FA code. Every step carries a signed,
+ * short-lived `loginToken` (see login-ticket.service).
+ */
+const nextSignInStep = async (user: { id: string; email: string | null; name: string; tokenVersion: number; twoFactorEnabled: boolean; mustChangePassword: boolean }) => {
+    if (user.mustChangePassword) {
+        return {
+            message: "Choose a new password",
+            passwordChangeRequired: true,
+            userId: user.id,
+            loginToken: issueLoginTicket(user.id, "set-password", user.tokenVersion),
+        };
+    }
+    if (!user.twoFactorEnabled) {
+        const { secret, qrCodeDataURL } = await generate2FASecret(user.email || user.name);
+        return {
+            message: "2FA setup required",
+            twoFactorSetupRequired: true,
+            userId: user.id,
+            secret,
+            qrCodeDataURL,
+            loginToken: issueLoginTicket(user.id, "2fa-setup", user.tokenVersion, secret),
+        };
+    }
+    return {
+        message: "2FA required",
+        twoFactorRequired: true,
+        userId: user.id,
+        loginToken: issueLoginTicket(user.id, "2fa", user.tokenVersion),
+    };
+};
+
+/** Finds the account a pass belongs to; the pass is void once the account changed. */
+const ticketUser = async (userId: string, tokenVersion: number) => {
+    const user = await prismaClient.users.findUnique({ where: { id: userId }, include: withRole });
+    if (!user || user.isDeleted || user.tokenVersion !== tokenVersion) {
+        throw new BadRequestsException("Your sign-in expired. Sign in again", ErrorCodes.INVALID_CREDENTIALS);
+    }
+    return user;
+};
+
+/** Ends a successful sign-in: new session cookie, previous sessions signed out. */
+const completeSignIn = async (res: Response, userId: string, data: { twoFactorSecret?: string; twoFactorEnabled?: boolean } = {}) => {
+    const updatedUser = await prismaClient.users.update({
+        where: { id: userId },
+        data: { ...data, tokenVersion: { increment: 1 }, lastLoginAt: new Date() },
+        include: withRole,
+    });
+    delete (updatedUser as any).password;
+    delete (updatedUser as any).twoFactorSecret;
+    const optimizedUser = buildTokenUser(updatedUser);
+    const token = jwt.sign({ user: optimizedUser }, process.env.JWT_SECRET as string, { expiresIn: "24h" });
+    res.cookie("token", token, authCookieOptions());
+    // `optimizedUser` kept for clients written against the old verify-2fa reply.
+    res.status(200).json({ message: "Login successful", user: optimizedUser, optimizedUser });
+};
+
 export const login = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { email, password } = LoginSchema.parse(req.body);
@@ -161,14 +224,6 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
             where: {
                 email: email.toLowerCase().trim(),
                 isDeleted: false
-            },
-            include: {
-                role: {
-                    include: {
-                        permissions: true
-                    }
-                },
-                phoneNumbers: true
             }
         });
 
@@ -176,83 +231,47 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
             throw new BadRequestsException("Invalid email or password", ErrorCodes.INVALID_CREDENTIALS);
         }
 
-        // --- MANDATORY 2FA ENFORCEMENT ---
-        // If 2FA is NOT enabled, force setup before allowing login.
-        if (!user.twoFactorEnabled) {
-            const { secret, qrCodeDataURL } = await generate2FASecret(user.email || user.name);
-            return res.status(200).json({
-                message: "2FA setup required",
-                twoFactorSetupRequired: true,
-                userId: user.id,
-                secret,
-                qrCodeDataURL
-            });
-        }
-
-        // If 2FA is enabled, force verification before allowing login.
-        return res.status(200).json({
-            message: "2FA required",
-            twoFactorRequired: true,
-            userId: user.id
-        });
+        // Mandatory: a temporary password is replaced, then 2FA is set up or checked.
+        return res.status(200).json(await nextSignInStep(user));
     } catch (error) {
         next(error);
     }
 }
 
+/** Step after a temporary password: the user picks their own. */
+export const setPasswordLogin = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { loginToken, newPassword } = NewPasswordSchema.parse(req.body ?? {});
+        const ticket = readLoginTicket(loginToken, "set-password");
+        const user = await ticketUser(ticket.sub, ticket.tv);
+        if (compareSync(newPassword, user.password)) {
+            throw new BadRequestsException("Choose a password different from the temporary one", ErrorCodes.UNPROCESSABLE_ENTITY);
+        }
+        const updated = await prismaClient.users.update({
+            where: { id: user.id },
+            data: { password: hashSync(newPassword, 10), mustChangePassword: false, tokenVersion: { increment: 1 } },
+        });
+        return res.status(200).json(await nextSignInStep(updated));
+    } catch (error) {
+        next(error);
+    }
+};
+
+/** First 2FA setup during sign-in. The secret comes from the signed pass, never from the caller. */
 export const verifyAndEnable2FALogin = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { userId, token: totpToken, secret } = req.body;
+        const { loginToken, token: totpToken } = req.body ?? {};
+        const ticket = readLoginTicket(loginToken, "2fa-setup");
+        const user = await ticketUser(ticket.sub, ticket.tv);
 
-        const user = await prismaClient.users.findUnique({
-            where: { id: userId },
-            include: {
-                role: {
-                    include: {
-                        permissions: true
-                    }
-                },
-                phoneNumbers: true
-            }
-        });
-
-        if (!user) {
-            throw new BadRequestsException("User not found", ErrorCodes.USER_NOT_FOUND);
+        if (user.twoFactorEnabled || !ticket.secret) {
+            throw new BadRequestsException("Your sign-in expired. Sign in again", ErrorCodes.INVALID_CREDENTIALS);
         }
-
-        const isValid = await verify2FAToken(totpToken, secret);
-
-        if (!isValid) {
+        if (typeof totpToken !== "string" || !(await verify2FAToken(totpToken, ticket.secret))) {
             throw new BadRequestsException("Invalid 2FA token", ErrorCodes.INVALID_CREDENTIALS);
         }
 
-        const updatedUser = await prismaClient.users.update({
-            where: { id: userId },
-            data: {
-                twoFactorSecret: secret,
-                twoFactorEnabled: true,
-                tokenVersion: { increment: 1 }
-            },
-            include: {
-                role: {
-                    include: {
-                        permissions: true
-                    }
-                },
-                phoneNumbers: true
-            }
-        });
-
-        delete (updatedUser as any).password;
-        delete (updatedUser as any).twoFactorSecret;
-
-        const optimizedUser = buildTokenUser(updatedUser);
-
-        const token = jwt.sign({ user: optimizedUser }, process.env.JWT_SECRET as string, { expiresIn: "24h" });
-
-        res.cookie("token", token, authCookieOptions());
-
-        res.status(200).json({ message: "Login successful", user: optimizedUser });
+        await completeSignIn(res, user.id, { twoFactorSecret: ticket.secret, twoFactorEnabled: true });
     } catch (error) {
         next(error);
     }
@@ -260,58 +279,19 @@ export const verifyAndEnable2FALogin = async (req: Request, res: Response, next:
 
 export const verify2FALogin = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { userId, token: totpToken } = req.body;
+        const { loginToken, token: totpToken } = req.body ?? {};
+        const ticket = readLoginTicket(loginToken, "2fa");
+        const user = await ticketUser(ticket.sub, ticket.tv);
 
-        // Look the user up before updating. Updating first meant a bad
-        // userId surfaced a raw Prisma error (500) and a wrong TOTP code
-        // still bumped tokenVersion, killing the user's live sessions.
-        const existingUser = await prismaClient.users.findUnique({
-            where: { id: userId },
-            include: {
-                role: {
-                    include: {
-                        permissions: true
-                    }
-                },
-                phoneNumbers: true
-            }
-        });
-
-        if (!existingUser || !existingUser.twoFactorSecret) {
-            throw new BadRequestsException("User not found or 2FA not enabled", ErrorCodes.USER_NOT_FOUND);
+        if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+            throw new BadRequestsException("Your sign-in expired. Sign in again", ErrorCodes.INVALID_CREDENTIALS);
         }
-
-        const isValid = await verify2FAToken(totpToken, existingUser.twoFactorSecret);
-
-        if (!isValid) {
+        // A wrong code changes nothing (live sessions stay signed in).
+        if (typeof totpToken !== "string" || !(await verify2FAToken(totpToken, user.twoFactorSecret))) {
             throw new BadRequestsException("Invalid 2FA token", ErrorCodes.INVALID_CREDENTIALS);
         }
 
-        const updatedUser = await prismaClient.users.update({
-            where: { id: userId },
-            data: {
-                tokenVersion: { increment: 1 }
-            },
-            include: {
-                role: {
-                    include: {
-                        permissions: true
-                    }
-                },
-                phoneNumbers: true
-            }
-        });
-
-        delete (updatedUser as any).password;
-        delete (updatedUser as any).twoFactorSecret;
-
-        const optimizedUser = buildTokenUser(updatedUser);
-
-        const token = jwt.sign({ user: optimizedUser }, process.env.JWT_SECRET as string, { expiresIn: "24h" });
-
-        res.cookie("token", token, authCookieOptions());
-
-        res.status(200).json({ message: "Login successful", optimizedUser });
+        await completeSignIn(res, user.id);
     } catch (error) {
         next(error);
     }
@@ -356,6 +336,19 @@ export const logoutAllDevices = async (req: Request, res: Response, next: NextFu
     }
 }
 
+const AdminPasswordSchema = z.object({ newPassword: PasswordRule, reset2FA: z.boolean().optional() });
+
+/**
+ * Dashboard accounts (Admin, Super Admin) are reset by a Super Admin only, from
+ * the Team page. These older endpoints let anyone holding user_password:manage
+ * reset any account, the Super Admin's included.
+ */
+const guardTeamAccount = (req: Request, targetRole: string | undefined) => {
+    if (isAdminRole(targetRole) && !isSuperAdminRole(req.user?.role?.name)) {
+        throw new ForbiddenException("Only a Super Admin can reset a dashboard account");
+    }
+};
+
 export const reset2FAOnly = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { userId } = req.params as { userId: string };
@@ -363,12 +356,13 @@ export const reset2FAOnly = async (req: Request, res: Response, next: NextFuncti
         // Check first: updating a missing id raised a raw Prisma error (500).
         const user = await prismaClient.users.findUnique({
             where: { id: userId },
-            select: { id: true }
+            select: { id: true, role: { select: { name: true } } }
         });
 
         if (!user) {
             throw new BadRequestsException("User not found", ErrorCodes.USER_NOT_FOUND);
         }
+        guardTeamAccount(req, user.role?.name);
 
         await prismaClient.users.update({
             where: { id: userId },
@@ -387,16 +381,18 @@ export const reset2FAOnly = async (req: Request, res: Response, next: NextFuncti
 export const changePassword = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { userId } = req.params as { userId: string };
-        const { newPassword, reset2FA } = req.body as { newPassword: string, reset2FA?: boolean };
+        const { newPassword, reset2FA } = AdminPasswordSchema.parse(req.body ?? {});
         const user = await prismaClient.users.findUnique({
             where: {
                 id: userId
-            }
+            },
+            include: { role: { select: { name: true } } }
         });
 
         if (!user) {
             throw new BadRequestsException("User not found", ErrorCodes.USER_NOT_FOUND);
         }
+        guardTeamAccount(req, user.role?.name);
 
         await prismaClient.users.update({
             where: {

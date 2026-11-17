@@ -151,6 +151,17 @@ export const LoginSchema = z.object({
 
 export type LoginSchema = z.infer<typeof LoginSchema>;
 
+/** A password a person chooses (first sign-in, or set by an admin). */
+export const PasswordRule = z
+    .string()
+    .min(8, "Password must be at least 8 characters long")
+    .max(100, "Password is too long");
+
+export const NewPasswordSchema = z.object({
+    loginToken: z.string().min(1, "Sign in again: loginToken is required"),
+    newPassword: PasswordRule,
+});
+
 
 export const DocumentsTypesSchema = z.enum(['ID', 'BIRTHCERTIFICATE', 'EDUCATIONALCERTIFICATE', 'SOCIALINSURANCEPRINTOUT', 'MILITARYSERVICECERTIFICATE', 'CRIMINALRECORD', 'FORM111', 'FORM6', 'PERSONALPHOTOS', 'LABOR', 'DRIVINGLICENSE', 'CV']);
 

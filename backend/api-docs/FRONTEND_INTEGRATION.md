@@ -131,25 +131,40 @@ POST /auth/login
 { "email": "...", "password": "..." }
 ```
 
-`POST /auth/login` **never** returns a token. It always returns one of two
-payloads, both HTTP 200:
+`POST /auth/login` **never** returns a token. It answers with the next step
+and a **`loginToken`**: a signed pass for that step only, valid 5 minutes and
+usable once. All HTTP 200:
+
+```json
+// Temporary password (account created or reset by a Super Admin): pick a new one
+{ "message": "Choose a new password", "passwordChangeRequired": true, "userId": "UUID", "loginToken": "eyJ..." }
+```
 
 ```json
 // 2FA not set up yet — enable it before the user can log in
-{ "message": "2FA setup required", "twoFactorSetupRequired": true, "userId": "UUID", "secret": "BASE32", "qrCodeDataURL": "data:image/png;base64,..." }
+{ "message": "2FA setup required", "twoFactorSetupRequired": true, "userId": "UUID", "secret": "BASE32", "qrCodeDataURL": "data:image/png;base64,...", "loginToken": "eyJ..." }
 ```
 
 ```json
 // 2FA already enabled — answer the challenge
-{ "message": "2FA required", "twoFactorRequired": true, "userId": "UUID" }
+{ "message": "2FA required", "twoFactorRequired": true, "userId": "UUID", "loginToken": "eyJ..." }
 ```
 
 Then, depending on which you got:
 
 | Login said | Call | Body |
 |-----------|------|------|
-| `twoFactorSetupRequired` | `POST /auth/verify-2fa-setup` | `{ "userId", "token", "secret" }` — `secret` is the value login returned |
-| `twoFactorRequired` | `POST /auth/verify-2fa` | `{ "userId", "token" }` — code only, secret is already stored |
+| `passwordChangeRequired` | `POST /auth/set-password` | `{ "loginToken", "newPassword" }` (8+ characters, not the temporary one). Answers with the next step, like login |
+| `twoFactorSetupRequired` | `POST /auth/verify-2fa-setup` | `{ "loginToken", "token" }` — the 6-digit code; the secret travels inside the pass |
+| `twoFactorRequired` | `POST /auth/verify-2fa` | `{ "loginToken", "token" }` |
+
+> **Changed (17 Nov 2026):** these steps used to take `userId` (and, for
+> setup, a `secret` from the client). That let anyone who knew an account's
+> id attach their own authenticator and sign in without the password, so a
+> bare `userId` is now refused with 400. Send the `loginToken` from the
+> previous step instead. A 400 saying "Sign in again" or "expired" means the
+> pass expired or was used: start again from `POST /auth/login`. The success
+> reply now has the user under `user` (`optimizedUser` is still sent).
 
 Both 2FA verification routes set the JWT as a **`token` cookie only**, with
 nothing in the body. With `credentials: 'include'` the cookie arrives
@@ -205,12 +220,15 @@ POST /auth/2fa/disable  → no body
 ### Admin credential management
 
 ```http
-PUT  /auth/change-password/:userId   { "newPassword": "min6chars", "reset2FA": false }
+PUT  /auth/change-password/:userId   { "newPassword": "min8chars", "reset2FA": false }
 POST /auth/reset-2fa/:userId         no body
 ```
 
 Both require the `user_password:manage` permission. There is no `oldPassword`
 field — the caller holds the permission. Every call bumps `tokenVersion`.
+Dashboard accounts (Admin, Super Admin) can only be reset by a Super Admin
+(403 otherwise); the dashboard's Team page does that. Passwords are 8+
+characters (422 otherwise).
 
 ---
 
@@ -663,12 +681,12 @@ use, so drive the full setup flow at least once.
 1. **OTP happy path** — `otp/request` then `otp/verify` with the returned
    `dev_otp`; expect a `token` in the body and subsequent authenticated calls to
    succeed.
-2. **Login with no 2FA** — expect `twoFactorSetupRequired: true` with a `secret`
-   and QR data URL, and **no** token.
-3. **Login setup completion** — `verify-2fa-setup` with that `secret` plus a
-   fresh TOTP code; expect a cookie and no body token.
+2. **Login with no 2FA** — expect `twoFactorSetupRequired: true` with a `secret`,
+   QR data URL and `loginToken`, and **no** session token.
+3. **Login setup completion** — `verify-2fa-setup` with that `loginToken` plus a
+   fresh TOTP code; expect a cookie. The same `loginToken` a second time: 400.
 4. **Login challenge** — second login returns `twoFactorRequired: true`; then
-   `verify-2fa` with `userId` + code only; expect a cookie.
+   `verify-2fa` with its `loginToken` + code; expect a cookie.
 5. **Validation error** — `POST /bookings` without `endPoint`; expect 422 with
    `errors` naming `endPoint`.
 6. **Double booking** — book the same `[vehicleId, bookingDate, startTime]`

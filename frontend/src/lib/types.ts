@@ -272,3 +272,15 @@ export interface FleetDetail {
   upcomingBookings: { id: string; ref: string; bookingDate: string; startTime: string; endTime: string; status: BookingStatus; customer: { id: string; name: string } | null }[];
   stats: { completedTrips: number; revenue: number };
 }
+
+export type TeamRole = "SUPER_ADMIN" | "ADMIN";
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string | null;
+  role: TeamRole;
+  twoFactorEnabled: boolean;
+  mustChangePassword: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+}
