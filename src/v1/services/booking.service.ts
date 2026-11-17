@@ -22,6 +22,8 @@ import { PricingService, calculateEstimatedPrice } from "./pricing.service";
 import MapsService, { LocationInput, RouteResult, toCoordinates } from "./maps.service";
 import { getDriverIdForUser } from "./role.service";
 import { isAdminRole, normalizeRoleName, USER_ROLES } from "../constants/roles";
+import { dateKey, zonedToInstant } from "../utils/businessTime";
+import ReferralService from "./referral.service";
 
 export function checkSlotOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
   const toMins = (t: string) => {
@@ -36,6 +38,22 @@ export function checkSlotOverlap(startA: string, endA: string, startB: string, e
   const sB = toMins(startB);
   const eB = toMins(endB);
   return sA < eB && sB < eA;
+}
+
+/** Turnaround between two trips of the same vehicle or driver (cleaning, travel). */
+export const BOOKING_BUFFER_MINUTES = Number(process.env.BOOKING_BUFFER_MINUTES ?? 60);
+/** How early (before the slot) a driver may start a trip. Admins are exempt. */
+export const TRIP_EARLY_START_MINUTES = Number(process.env.TRIP_EARLY_START_MINUTES ?? 120);
+
+const shiftTime = (t: string, minutes: number) => {
+  const [h, m] = (t || "00:00").split(":").map((x) => parseInt(x || "0", 10));
+  const total = Math.min(24 * 60, Math.max(0, h * 60 + m + minutes));
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+};
+
+/** Overlap check that also keeps BOOKING_BUFFER_MINUTES free between trips. */
+export function checkSlotOverlapWithBuffer(startA: string, endA: string, startB: string, endB: string, buffer = BOOKING_BUFFER_MINUTES): boolean {
+  return checkSlotOverlap(startA, endA, shiftTime(startB, -buffer), shiftTime(endB, buffer));
 }
 
 export function isValidBookingTransition(from: BookingStatus, to: BookingStatus): boolean {
@@ -86,6 +104,9 @@ export interface CreateBookingDTO {
 export const describePoint = (point: LocationInput | undefined | null): string => {
   if (point == null) return "";
   if (typeof point === "string") return point.trim();
+  if ("label" in point && typeof point.label === "string" && point.label.trim()) {
+    return point.label.trim();
+  }
   const coords = toCoordinates(point);
   if (!coords) return "";
   return `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
@@ -137,15 +158,55 @@ export interface ListBookingsParams {  page?: number;
   vehicleId?: string;
 }
 
+export type BookingParty = "admin" | "customer" | "driver";
+
+/**
+ * How `user` relates to a booking: an admin, the booking's customer, its
+ * assigned driver, or nobody (null). Every per-booking endpoint goes through
+ * this so one customer can never read or change another customer's booking.
+ */
+export async function bookingPartyOf(
+  booking: { customerId: string; driverId: string },
+  user: any
+): Promise<BookingParty | null> {
+  if (!user?.id) return null;
+  const roleName = normalizeRoleName(typeof user.role === "string" ? user.role : user.role?.name);
+  if (roleName !== null && isAdminRole(roleName)) return "admin";
+  if (booking.customerId === user.id) return "customer";
+  const driverId = await getDriverIdForUser(user.id);
+  if (driverId !== null && driverId === booking.driverId) return "driver";
+  return null;
+}
+
 export class BookingService {
+  /** Pays a pending referral reward; never fails the trip if it can't. */
+  public static async rewardReferral(bookingId: string) {
+    try {
+      await ReferralService.completeReferral(bookingId);
+    } catch (err) {
+      console.error("[referral] reward failed for booking", bookingId, err);
+    }
+  }
+
   public static async createBooking(data: CreateBookingDTO, authenticatedUser?: any) {
+    // Only admins may book on someone else's behalf. Previously any customer
+    // could pass another user's customerId and create a booking on their account.
+    if (data.customerId && authenticatedUser && data.customerId !== authenticatedUser.id) {
+      const roleName = normalizeRoleName(
+        typeof authenticatedUser.role === "string" ? authenticatedUser.role : authenticatedUser.role?.name
+      );
+      if (roleName === null || !isAdminRole(roleName)) {
+        throw new ForbiddenException("Only admins can create a booking for another customer");
+      }
+    }
     const customerId = data.customerId || authenticatedUser?.id;
     if (!customerId) {
       throw new BadRequestException("customerId is required to create a booking");
     }
 
     // Past date check
-    const todayStr = new Date().toISOString().split("T")[0];
+    // Cairo calendar day, not UTC (UTC rejected "today" between 00:00 and 02:00).
+    const todayStr = dateKey();
     if (data.bookingDate < todayStr) {
       throw new BadRequestException("Cannot book a trip for a past date");
     }
@@ -192,17 +253,18 @@ export class BookingService {
       const normalizedDate = new Date(`${data.bookingDate}T00:00:00.000Z`);
 
       // 3. VehicleAvailability check
+      // A day is only closed when it is BLOCKED (e.g. maintenance). BOOKED just
+      // means the vehicle has at least one trip that day; several trips per day
+      // are allowed as long as their times don't overlap (checked below).
       const existingAvailability = await tx.vehicleAvailability.findFirst({
         where: {
           vehicleId: data.vehicleId,
           date: normalizedDate,
-          status: { in: [AvailabilityStatus.BOOKED, AvailabilityStatus.BLOCKED] },
+          status: AvailabilityStatus.BLOCKED,
         },
       });
       if (existingAvailability) {
-        throw new ConflictException(
-          "Vehicle is already booked or blocked for the specified date"
-        );
+        throw new ConflictException("Vehicle is blocked for the specified date");
       }
 
       // 4. Overlapping active bookings check for vehicle AND driver
@@ -218,9 +280,9 @@ export class BookingService {
       });
 
       for (const existing of existingBookings) {
-        if (checkSlotOverlap(data.startTime, data.endTime, existing.startTime, existing.endTime)) {
+        if (checkSlotOverlapWithBuffer(data.startTime, data.endTime, existing.startTime, existing.endTime)) {
           throw new ConflictException(
-            "Vehicle or driver has an overlapping booking for this time slot"
+            `Vehicle or driver has a booking within ${BOOKING_BUFFER_MINUTES} minutes of this time slot`
           );
         }
       }
@@ -272,7 +334,8 @@ export class BookingService {
           basePrice: priceEstimate.basePrice,
           distancePrice: priceEstimate.distancePrice,
           totalPrice: priceEstimate.totalPrice,
-          depositPaid: priceEstimate.depositPaid,
+          depositRequired: priceEstimate.depositPaid,
+          depositPaid: 0,
           paymentStatus: PaymentStatus.UNPAID,
           notes: data.notes || "",
           driverNotes: data.driverNotes || "",
@@ -296,7 +359,6 @@ export class BookingService {
         },
         update: {
           status: AvailabilityStatus.BOOKED,
-          bookingId: newBooking.id,
           reason: "Booking created",
         },
       });
@@ -336,44 +398,27 @@ export class BookingService {
         data: { status: BookingStatus.CANCELLED },
       });
 
-      // 2. Release VehicleAvailability record back to AVAILABLE
+      // 2. Release the vehicle's day — but only if no other active trip of
+      //    this vehicle remains that day, and never over a BLOCKED day.
       const normalizedDate = new Date(`${booking.bookingDate}T00:00:00.000Z`);
-      const existingAvail = await tx.vehicleAvailability.findFirst({
-        where: {
-          vehicleId: booking.vehicleId,
-          bookingId: bookingId,
-        },
+      const dayRow = await tx.vehicleAvailability.findUnique({
+        where: { vehicleId_date: { vehicleId: booking.vehicleId, date: normalizedDate } },
       });
-
-      if (existingAvail) {
-        await tx.vehicleAvailability.update({
-          where: { id: existingAvail.id },
-          data: {
-            status: AvailabilityStatus.AVAILABLE,
-            bookingId: null,
-            reason: "Booking cancelled",
-          },
-        });
-      } else {
-        // Fallback upsert
-        await tx.vehicleAvailability.upsert({
+      if (dayRow && dayRow.status !== AvailabilityStatus.BLOCKED) {
+        const stillBooked = await tx.bookings.findFirst({
           where: {
-            vehicleId_date: {
-              vehicleId: booking.vehicleId,
-              date: normalizedDate,
-            },
-          },
-          create: {
             vehicleId: booking.vehicleId,
-            date: normalizedDate,
-            status: AvailabilityStatus.AVAILABLE,
-            reason: "Booking cancelled",
+            bookingDate: booking.bookingDate,
+            status: { not: BookingStatus.CANCELLED },
+            id: { not: bookingId },
           },
-          update: {
-            status: AvailabilityStatus.AVAILABLE,
-            bookingId: null,
-            reason: "Booking cancelled",
-          },
+          select: { id: true },
+        });
+        await tx.vehicleAvailability.update({
+          where: { id: dayRow.id },
+          data: stillBooked
+            ? { status: AvailabilityStatus.BOOKED, bookingId: stillBooked.id, reason: "Booking cancelled; other trips remain" }
+            : { status: AvailabilityStatus.AVAILABLE, bookingId: null, reason: "Booking cancelled" },
         });
       }
 
@@ -460,10 +505,41 @@ export class BookingService {
       );
     }
 
+    // Authorization. Previously any signed-in user could confirm, complete or
+    // cancel any booking by id.
+    if (user) {
+      const party = await bookingPartyOf(booking, user);
+      if (party === null) {
+        throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+      }
+      const allowed: Record<BookingParty, BookingStatus[]> = {
+        admin: [BookingStatus.CONFIRMED, BookingStatus.COMPLETED, BookingStatus.CANCELLED],
+        driver: [BookingStatus.CONFIRMED],
+        // A customer's booking is confirmed by paying the deposit (automatic)
+        // or by the driver/admin — never by the customer directly.
+        customer: [BookingStatus.CANCELLED],
+      };
+      if (!allowed[party].includes(newStatus)) {
+        throw new ForbiddenException(`You cannot set this booking to ${newStatus}`);
+      }
+    }
+
+    // Cancelling must release the vehicle day and promote the waitlist, exactly
+    // like DELETE /bookings/:id. A bare status update used to leave the vehicle
+    // blocked for that date.
+    if (newStatus === BookingStatus.CANCELLED) {
+      const result = await this.cancelBooking(bookingId, user?.id);
+      return result.booking;
+    }
+
     const updated = await prismaClient.bookings.update({
       where: { id: bookingId },
       data: { status: newStatus },
     });
+
+    if (newStatus === BookingStatus.COMPLETED) {
+      await BookingService.rewardReferral(bookingId);
+    }
 
     return updated;
   }
@@ -509,7 +585,35 @@ export class BookingService {
         }
     }
 
+    // A trip runs only on a confirmed booking (deposit paid, or confirmed by the
+    // driver/admin). Otherwise the trip completes while the booking stays
+    // PENDING: no revenue, no referral reward, wrong dashboard numbers.
+    if (newTripStatus === TripStatus.INPROGRESS && booking.status !== BookingStatus.CONFIRMED) {
+      throw new BadRequestException("Confirm the booking before starting the trip");
+    }
+
+    // Drivers can start a trip at most TRIP_EARLY_START_MINUTES before its slot
+    // (Cairo time); otherwise a booking days away would show as "live" on the
+    // dashboard and could be completed early. Admins are exempt.
+    if (newTripStatus === TripStatus.INPROGRESS && user) {
+      const roleName = normalizeRoleName(typeof user.role === "string" ? user.role : user.role?.name);
+      if (roleName === null || !isAdminRole(roleName)) {
+        const slotStart = zonedToInstant(booking.bookingDate, booking.startTime).getTime();
+        if (Date.now() < slotStart - TRIP_EARLY_START_MINUTES * 60_000) {
+          throw new BadRequestException(
+            `This trip can be started from ${TRIP_EARLY_START_MINUTES} minutes before its scheduled time`
+          );
+        }
+      }
+    }
+
     const updateData: any = { tripStatus: newTripStatus };
+    if (newTripStatus === TripStatus.INPROGRESS && !booking.tripStartedAt) {
+      updateData.tripStartedAt = new Date();
+    }
+    if (newTripStatus === TripStatus.COMPLETED) {
+      updateData.tripCompletedAt = new Date();
+    }
 
     // If trip completed, auto complete booking if status was confirmed/pending
     if (
@@ -523,6 +627,10 @@ export class BookingService {
       where: { id: bookingId },
       data: updateData,
     });
+
+    if (updated.status === BookingStatus.COMPLETED) {
+      await BookingService.rewardReferral(bookingId);
+    }
 
     // Update driver status dynamically
     if (booking.driverId) {

@@ -14,3 +14,7 @@ node_modules
 
 /scripts
 data.xlsx
+# Local run artifacts
+tmp-*.log
+tmp-*.err
+tmp-*.pid

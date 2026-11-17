@@ -40,7 +40,8 @@ const corsOptions = {
         "http://localhost:53666",
         "http://127.0.0.1:53666",
         "http://192.168.4.103:5000",
-
+        // Extra origins (e.g. the deployed web dashboard), comma-separated.
+        ...(process.env.CORS_ORIGINS || "").split(",").map((o) => o.trim()).filter(Boolean),
     ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -74,6 +75,16 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, {
 
 
 app.use("/api/v1", rootRouterV1);
+
+// Admin web dashboard (built by `npm run dashboard:build`). Served from the
+// API's own origin so the auth cookie is first-party and needs no CORS.
+const DASHBOARD_DIST = path.join(process.cwd(), 'dashboard', 'dist');
+if (fs.existsSync(DASHBOARD_DIST)) {
+    app.use('/dashboard', express.static(DASHBOARD_DIST, { index: false, maxAge: '1h' }));
+    app.get(/^\/dashboard(\/.*)?$/, (_req, res) => {
+        res.sendFile(path.join(DASHBOARD_DIST, 'index.html'));
+    });
+}
 
 
 app.use(errorMiddleware);

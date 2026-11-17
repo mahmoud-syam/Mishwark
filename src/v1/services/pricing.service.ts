@@ -61,6 +61,9 @@ export interface PriceBreakdown {
   surgeMultiplier: number;
   discountAmount: number;
   totalPrice: number;
+  /** Deposit needed to confirm the booking. */
+  depositRequired: number;
+  /** @deprecated same value as depositRequired, kept for older app builds. */
   depositPaid: number;
 }
 
@@ -109,6 +112,7 @@ export function calculateEstimatedPrice(params: CalculatePriceParams & TrustedRa
     surgeMultiplier: surge,
     discountAmount: Math.round(discountAmount * 100) / 100,
     totalPrice,
+    depositRequired: depositPaid,
     depositPaid,
   };
 }

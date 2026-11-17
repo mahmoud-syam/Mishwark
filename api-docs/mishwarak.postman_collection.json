@@ -510,6 +510,46 @@
           "response": []
         },
         {
+          "name": "GET /auth/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "The signed-in user and role (role re-read from the database)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "POST /auth/logout-all-devices",
           "request": {
             "method": "POST",
@@ -3152,37 +3192,6 @@
           ]
         },
         {
-          "name": "POST /referrals/:id/complete",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/referrals/:id/complete",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "referrals",
-                ":id",
-                "complete"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"bookingId\": \"{{bookingId}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "description": "PUBLIC. Credits both referrer & referee wallets when the refereed user completes their first booking."
-          },
-          "response": []
-        },
-        {
           "name": "GET /referrals/me",
           "request": {
             "method": "GET",
@@ -3780,7 +3789,7 @@
                 }
               ]
             },
-            "description": "Bookings filtered by a specific date (YYYY-MM-DD)."
+            "description": "GET: bookings for a date (YYYY-MM-DD). POST: book on behalf of a customer (confirmed immediately; priceOverride is Super Admin only; markPaid records a manual payment)."
           },
           "response": [],
           "event": [
@@ -4134,6 +4143,630 @@
               ]
             },
             "description": "System & evaluation-related settings."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/overview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "overview"
+              ]
+            },
+            "description": "Web dashboard KPIs: today vs yesterday bookings, month revenue vs same span last month, fleet availability, 7-day occupancy and revenue, maintenance/complaint alerts."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/days/:date",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/days/:date",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "days",
+                ":date"
+              ]
+            },
+            "description": "Everything booked on one day (YYYY-MM-DD) with stats and per-driver assignments."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/trips/live",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/trips/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "trips",
+                "live"
+              ]
+            },
+            "description": "Trips in progress with elapsed/remaining minutes and delay detection."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/drivers-summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/drivers-summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "drivers-summary"
+              ]
+            },
+            "description": "Drivers ranked by this month's revenue, with rating, reviews and complaints (rating <= 2). ?limit="
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/drivers-assignable",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/drivers-assignable",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "drivers-assignable"
+              ]
+            },
+            "description": "Drivers that can be assigned to a new booking."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/drivers/:id/analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/drivers/:id/analytics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "drivers",
+                ":id",
+                "analytics"
+              ]
+            },
+            "description": "Driver income vs company commission. ?period=day|month|year"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /admin/drivers/:id/commission",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/drivers/:id/commission",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "drivers",
+                ":id",
+                "commission"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"commissionRate\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sets the company commission percentage for a driver (0-100). Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/customers/search",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/customers/search",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "customers",
+                "search"
+              ]
+            },
+            "description": "Customer search by name or phone. ?q="
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/customers",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "customers"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Hind Abdelrahman\",\n  \"phoneNumber\": \"+201012345678\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Quick-creates a customer account (name + phone). Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/customers/:id/analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/customers/:id/analytics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "customers",
+                ":id",
+                "analytics"
+              ]
+            },
+            "description": "Customer spend, bookings, wallet and referrals. ?period=day|month|year"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/bookings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "bookings"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "2026-09-15",
+                  "disabled": false
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{userId}}\",\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"bookingDate\": \"2026-12-20\",\n  \"startTime\": \"19:00\",\n  \"endTime\": \"22:00\",\n  \"startPoint\": {\n    \"latitude\": 30.0566,\n    \"longitude\": 31.3301,\n    \"label\": \"Wedding hall, Nasr City\"\n  },\n  \"endPoint\": {\n    \"latitude\": 30.0911,\n    \"longitude\": 31.3253,\n    \"label\": \"Fairmont, Cairo\"\n  },\n  \"eventType\": \"Wedding\",\n  \"markPaid\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "GET: bookings for a date (YYYY-MM-DD). POST: book on behalf of a customer (confirmed immediately; priceOverride is Super Admin only; markPaid records a manual payment)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /admin/vehicles/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/vehicles/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "vehicles",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"basePrice\": 1800,\n  \"pricePerKm\": 80\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Updates vehicle pricing/status. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/audit-logs/export",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/audit-logs/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "audit-logs",
+                "export"
+              ]
+            },
+            "description": "Audit trail as an .xlsx download. ?action="
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/audit-logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/audit-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "audit-logs"
+              ]
+            },
+            "description": "Append-only audit trail. ?action=CREATE|UPDATE|DELETE&page=&limit="
           },
           "response": [],
           "event": [

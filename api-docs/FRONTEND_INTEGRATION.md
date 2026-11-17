@@ -56,6 +56,10 @@ interface ApiError {
 }
 ```
 
+Validation failures are always **422** with Zod issues in `errors`, malformed
+JSON is **400**, and an unexpected server error is a generic **500**
+("Something went wrong") — internal details are logged, never returned.
+
 | Status | Meaning |
 |--------|---------|
 | 400 | Business rule rejected it (`errorCode` 1001–1005) |
@@ -94,7 +98,13 @@ POST /auth/otp/request
 
 `role` is `customer` (default) or `driver`. Only used when the phone number is
 new; for an existing phone the account's role is untouched. Drivers must send
-`licenseNumber`. The response echoes the code in non-production as `dev_otp`.
+`licenseNumber`.
+
+The 4-digit code is sent by SMS once the server has an SMS provider
+(`SMS_PROVIDER`); until then it is returned as `dev_otp` so development works.
+Codes expire after 5 minutes and die after 5 wrong attempts ("OTP code
+expired"). Requesting a new code within 60 seconds returns **429**; a failed SMS
+returns **502** and can be retried immediately.
 
 ```http
 POST /auth/otp/verify
@@ -111,7 +121,8 @@ POST /auth/otp/verify
 ```
 
 This is the **only** flow that returns the JWT in the body. The code `0000` is
-accepted in every environment as a testing bypass.
+accepted as a testing bypass outside production only (or when the server sets
+`OTP_TEST_BYPASS=true`).
 
 ### 2. Login (always 2FA-gated)
 
@@ -143,8 +154,10 @@ Then, depending on which you got:
 Both 2FA verification routes set the JWT as a **`token` cookie only**, with
 nothing in the body. With `credentials: 'include'` the cookie arrives
 automatically; otherwise read `Set-Cookie` and attach it as `Authorization:
-Bearer <token>` yourself. The cookie is `sameSite: lax`, `secure: false`,
-`httpOnly: false`, 7-day max age.
+Bearer <token>` yourself (native HTTP clients can read `Set-Cookie`;
+browser JavaScript can't). The cookie is `httpOnly`, `sameSite: lax`, and
+`secure` when `NODE_ENV=production` (override with `COOKIE_SECURE`). Its
+max age is 24 hours, the same as the JWT inside it.
 
 If a wrong TOTP code is sent, `tokenVersion` is **not** incremented, so the
 user's other sessions survive.
@@ -320,6 +333,12 @@ Rules:
 - Omitting `driverId` auto-assigns an `ACTIVE` driver. If none is available the
   request is rejected.
 - A vehicle in `MAINTENANCE` cannot be booked.
+- A vehicle can take several trips a day, but trips of the same vehicle or
+  driver must be at least 60 minutes apart (`BOOKING_BUFFER_MINUTES`);
+  otherwise **409**. Only a day marked BLOCKED (e.g. maintenance) is closed.
+- A new booking is `PENDING` with `depositRequired` (20% of the price) and
+  `depositPaid: 0`. It becomes `CONFIRMED` automatically once confirmed payments
+  cover the deposit, or when the driver/admin confirms it.
 - A unique DB constraint on `[vehicleId, bookingDate, startTime]` returns
   **409** on a double-book. Surface it as "that slot was just taken", not a
   generic error.
@@ -332,6 +351,11 @@ BookingStatus:  PENDING → CONFIRMED | CANCELLED
                 COMPLETED, CANCELLED → terminal
 
 TripStatus:     NOTSTARTED → INPROGRESS → ARRIVED → COMPLETED
+                (INPROGRESS → COMPLETED is also accepted; ARRIVED is optional)
+
+Starting a trip (INPROGRESS) requires a CONFIRMED booking, and a driver can
+start it at most 2 hours before its slot, Cairo time (TRIP_EARLY_START_MINUTES).
+Admins are exempt from the time window only.
 ```
 
 Anything else is a 400. `PATCH /bookings/:id/trip-status` with `COMPLETED`
@@ -340,6 +364,21 @@ auto-completes the booking and releases the driver.
 `DELETE /bookings/:id` cancels: it releases vehicle availability and the
 driver, and promotes waitlist position #1. Only `PENDING` and `CONFIRMED`
 bookings can be cancelled.
+
+### Who can act on a booking
+
+`GET /bookings/:id`, cancelling, payments, chat and reviews are limited to the
+booking's customer, its assigned driver and admins; anyone else gets **404**.
+
+| Action | Customer (owner) | Assigned driver | Admin |
+|---|---|---|---|
+| `PATCH /status` → `CONFIRMED` | ✗ (pay the deposit) | ✓ | ✓ |
+| `PATCH /status` → `CANCELLED` / `DELETE` | ✓ | ✗ | ✓ |
+| `PATCH /status` → `COMPLETED` | ✗ (use trip-status) | ✗ (use trip-status) | ✓ |
+| `POST /payments/:id/refund` | ✗ | ✗ | ✓ |
+
+Reviews: the server sets `revieweeId` from the booking (the other party);
+sending a different one is a 400.
 
 ### Queries
 
@@ -362,8 +401,12 @@ GET   /driver/bookings?filter=today|upcoming|completed&page=1&limit=10
 POST  /driver/vehicles       { vehicleId, isPrimary }
 DELETE /driver/vehicles/:vehicleId
 GET   /driver/stats?startDate=2026-01-01&endDate=2026-09-30
-GET   /driver/:id            PUBLIC — rating included
+GET   /driver/:id            PUBLIC — id, fullName, pic, rating, status, vehicles only
 ```
+
+`PATCH /driver/status` returns **403** when an admin set the driver's current
+OFF/ONLEAVE status from the dashboard; only an admin can lift it. A status the
+driver set himself stays his to change.
 
 `GET /driver/profile` returns **404** (`errorCode` 1001) for a `CUSTOMER`
 token. Do not call it unconditionally; check the role first, or treat 1001 as
@@ -371,8 +414,9 @@ token. Do not call it unconditionally; check the role first, or treat 1001 as
 
 `POST /driver/vehicles` rejects a vehicle already assigned to another driver.
 
-`GET /driver/stats` includes daily earnings, net payout after the platform fee,
-and trip counts.
+`GET /driver/stats` returns trip counts, `totalRevenue` (gross),
+`commissionRate`, `companyShare` and `netEarnings` (gross minus the company's
+commission, the same split the admin dashboard shows).
 
 ---
 
@@ -424,14 +468,26 @@ GET    /payments/booking/:bookingId
 GET    /payments/summary/:bookingId
 ```
 
-`amount` must be positive. `paymentMethod` is one of `PAYMOB`, `FAWRY`, `CASH`,
-`WALLET`. `PATCH /payments/:id/status` accepts `SUCCESS`, `FAILED`, `REFUNDED`.
+`amount` must be positive and at most `totalPrice − depositPaid`; the customer
+can pay the deposit first or everything at once. `paymentMethod` is one of
+`PAYMOB`, `FAWRY`, `CASH`, `WALLET`.
+
+**Who confirms a payment** (`PATCH /payments/:id/status`, `SUCCESS` / `FAILED`):
+an admin (any method, from the dashboard's payment window) or the booking's
+assigned driver (`CASH` only, for cash he collected). The customer app creates
+the payment and then waits; it cannot mark it paid (403). When a gateway is
+integrated, its webhook settles online payments.
+
+On every confirmed payment the booking's `depositPaid` (sum of confirmed
+payments) and `paymentStatus` are recalculated, and a `PENDING` booking whose
+deposit is covered becomes `CONFIRMED`. `GET /payments/summary/:bookingId`
+returns `depositRequired`, `depositDue`, `totalPaid` and `remaining`.
 
 ```http
 GET  /wallet/balance              → { success: true, data: { balance: number } }
 GET  /wallet/transactions?page=1&limit=20&type=REFUND
-POST /wallet/credit               admin only — { amount, type, description }
-POST /wallet/debit                admin only
+POST /wallet/credit               admin only — { userId, amount, type, description? }
+POST /wallet/debit                admin only — same body
 ```
 
 ```http
@@ -442,8 +498,11 @@ DELETE /waitlist/:id
 POST   /waitlist/:id/convert
 ```
 
-`requestedDate` is `YYYY-MM-DD`, `requestedTime` is `HH:mm`. Conversion creates
-a booking from the entry.
+`requestedDate` is `YYYY-MM-DD`, `requestedTime` is `HH:mm`. When a slot frees
+up, entry #1 becomes `NOTIFIED`; `POST /waitlist/:id/convert` marks it
+`CONVERTED` and the app then creates the booking with `POST /bookings` (route
+and times are needed). Waitlist entries, packages, single reviews and
+referrals are visible only to their owner (and admins); others get 404.
 
 ```http
 POST   /packages                   { packageName, packageType, discountPercentage? }
@@ -487,14 +546,13 @@ Polling only — there is no websocket or SSE channel. `messageType` defaults to
 ```http
 POST /referrals/generate-code
 POST /referrals/apply            { referralCode }
-POST /referrals/:id/complete     { bookingId }  PUBLIC
 GET  /referrals/me
 GET  /referrals/:id
 ```
 
-`POST /referrals/:id/complete` is public and credits both wallets when the
-referred user completes a first booking. Because it is unauthenticated, gate it
-by booking ownership on your side rather than trusting it blindly.
+The reward is paid by the server: when the referred customer's trip
+completes, the referral flips to `COMPLETED` and both wallets are credited
+(once). There is no client endpoint for it any more.
 
 ```http
 GET   /notifications?page=1&limit=20&status=SENT

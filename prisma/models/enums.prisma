@@ -149,3 +149,9 @@ enum WalletTransactionType {
   PAYMENT_DEDUCTION
   DEPOSIT
 }
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}

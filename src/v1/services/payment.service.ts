@@ -1,5 +1,6 @@
 import prismaClient from "../utils/prismaClientHelper";
 import {
+  BookingStatus,
   PaymentMethod,
   PaymentRecordStatus,
   PaymentStatus,
@@ -23,8 +24,17 @@ export class PaymentService {
       throw new NotFoundException(`Booking with ID ${data.bookingId} not found`);
     }
 
-    if (data.amount > booking.totalPrice - booking.depositPaid) {
-      throw new BadRequestException("Payment amount exceeds remaining balance");
+    if (booking.status === BookingStatus.CANCELLED) {
+      throw new BadRequestException("Cannot pay for a cancelled booking");
+    }
+    if (!(data.amount > 0)) {
+      throw new BadRequestException("Payment amount must be positive");
+    }
+    // depositPaid is the sum of confirmed payments, so the customer can pay the
+    // deposit first and the rest later, or everything at once.
+    const remaining = Math.round((booking.totalPrice - booking.depositPaid) * 100) / 100;
+    if (data.amount > remaining + 0.001) {
+      throw new BadRequestException(`Payment amount exceeds remaining balance (${remaining})`);
     }
 
     const payment = await prismaClient.payments.create({
@@ -65,9 +75,7 @@ export class PaymentService {
       },
     });
 
-    if (status === PaymentRecordStatus.SUCCESS) {
-      await this.recalculateBookingPaymentStatus(payment.bookingId);
-    }
+    await this.recalculateBookingPaymentStatus(payment.bookingId);
 
     return updatedPayment;
   }
@@ -94,11 +102,16 @@ export class PaymentService {
       paymentStatus = PaymentStatus.UNPAID;
     }
 
+    // Paying the required deposit confirms a pending booking automatically.
+    const depositCovered = totalPaid > 0 && totalPaid + 0.001 >= booking.depositRequired;
+    const autoConfirm = booking.status === BookingStatus.PENDING && depositCovered;
+
     await prismaClient.bookings.update({
       where: { id: bookingId },
       data: {
         paymentStatus,
-        depositPaid: totalPaid,
+        depositPaid: Math.round(totalPaid * 100) / 100,
+        ...(autoConfirm && { status: BookingStatus.CONFIRMED }),
       },
     });
   }
@@ -173,6 +186,8 @@ export class PaymentService {
 
     return {
       totalPrice: booking.totalPrice,
+      depositRequired: booking.depositRequired,
+      depositDue: Math.max(0, Math.round((booking.depositRequired - totalPaid) * 100) / 100),
       totalPaid,
       remaining,
       paymentStatus: booking.paymentStatus,

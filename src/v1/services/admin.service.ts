@@ -328,7 +328,8 @@ export class AdminService {
 
     return await prismaClient.drivers.update({
       where: { id: driverId },
-      data: { status },
+      // OFF/ONLEAVE set here is locked for the driver app; ACTIVE unlocks it.
+      data: { status, statusSetByAdmin: status !== DriverStatus.ACTIVE },
     });
   }
 

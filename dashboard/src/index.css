@@ -1,0 +1,79 @@
+@import "tailwindcss";
+@import "@fontsource/ibm-plex-sans-arabic/400.css";
+@import "@fontsource/ibm-plex-sans-arabic/500.css";
+@import "@fontsource/ibm-plex-sans-arabic/700.css";
+@import "@fontsource/aref-ruqaa/700.css";
+
+/* Design tokens, taken from the Mishwark Figma file (variables panel). */
+@theme {
+  --color-ink: #14151f;        /* blue/10  page background */
+  --color-surface: #1d1f2b;    /* blue/14  cards & panels */
+  --color-raised: #262838;     /* blue/18  inner cards, buttons, inputs */
+  --color-raised-2: #2f3244;   /* blue/23  hover */
+  --color-line: #33354a;       /* blue/25  borders & dividers */
+  --color-muted: #9496a6;      /* grey/62  secondary text */
+  --color-cream: #f3efe4;      /* grey/92  primary text */
+  --color-gold: #c9a24b;       /* orange/54 accent */
+  --color-gold-deep: #8a6b23;  /* orange/34 */
+  --color-wine: #8b2e3a;       /* red/36 */
+  --color-wine-deep: #4a1620;  /* red/19 */
+  --color-rose: #d98a95;       /* red/70 */
+  --color-blush: #f0c4cb;      /* red/85 */
+  --color-mint: #5fae7f;       /* spring-green/53 */
+
+  --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --font-display: "Aref Ruqaa", "IBM Plex Sans Arabic", serif;
+
+  --radius-card: 16px;
+  --radius-panel: 18px;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--color-ink);
+  }
+  body {
+    @apply bg-ink text-cream font-sans antialiased;
+    min-height: 100dvh;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--color-gold) 35%, transparent);
+  }
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+  /* Dates, times and numbers inside RTL text keep their own direction. */
+  .ltr {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+}
+
+@layer components {
+  .field-input {
+    @apply w-full rounded-xl border border-line bg-raised px-3 py-2.5 text-[13px] text-cream placeholder:text-muted/80 outline-none transition focus:border-gold/70;
+  }
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line) transparent;
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.pulse-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot { animation: none; }
+}
