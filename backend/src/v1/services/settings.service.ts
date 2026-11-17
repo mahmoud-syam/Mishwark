@@ -28,6 +28,11 @@ export interface BusinessSettings {
   depositRate: number;
   bookingBufferMinutes: number;
   tripEarlyStartMinutes: number;
+  maxAdvanceBookingDays: number;
+  minTripMinutes: number;
+  overnightLatestEndHour: number;
+  freeCancellationHours: number;
+  tempPasswordDays: number;
   defaultCommissionRate: number;
   referralRewardAmount: number;
   referredDiscountAmount: number;
@@ -45,6 +50,11 @@ export const DEFAULT_SETTINGS: BusinessSettings = {
   depositRate: 20,
   bookingBufferMinutes: 60,
   tripEarlyStartMinutes: 120,
+  maxAdvanceBookingDays: 365,
+  minTripMinutes: 30,
+  overnightLatestEndHour: 6,
+  freeCancellationHours: 48,
+  tempPasswordDays: 7,
   defaultCommissionRate: 20,
   referralRewardAmount: 25,
   referredDiscountAmount: 25,
@@ -61,6 +71,11 @@ export const SETTING_KEYS = [
   "depositRate",
   "bookingBufferMinutes",
   "tripEarlyStartMinutes",
+  "maxAdvanceBookingDays",
+  "minTripMinutes",
+  "overnightLatestEndHour",
+  "freeCancellationHours",
+  "tempPasswordDays",
   "defaultCommissionRate",
   "referralRewardAmount",
   "referredDiscountAmount",
@@ -81,6 +96,11 @@ export const updateSettingsSchema = z
     depositRate: z.number().min(0).max(100),
     bookingBufferMinutes: z.number().int().min(0).max(720),
     tripEarlyStartMinutes: z.number().int().min(0).max(1440),
+    maxAdvanceBookingDays: z.number().int().min(1).max(1095),
+    minTripMinutes: z.number().int().min(0).max(720),
+    overnightLatestEndHour: z.number().int().min(0).max(12),
+    freeCancellationHours: z.number().int().min(0).max(720),
+    tempPasswordDays: z.number().int().min(1).max(90),
     defaultCommissionRate: z.number().min(0).max(100),
     referralRewardAmount: money,
     referredDiscountAmount: money,

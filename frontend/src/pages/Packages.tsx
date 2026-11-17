@@ -72,8 +72,7 @@ export default function Packages() {
   return (
     <Page>
       <PageHeader
-        back="/"
-        eyebrow="Super Admin"
+        eyebrow="خصومات العملاء على الباكدجات"
         title="الباكدجات"
         actions={
           <Chips

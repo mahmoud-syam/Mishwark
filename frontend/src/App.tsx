@@ -18,6 +18,7 @@ const Packages = lazy(() => import("./pages/Packages"));
 const Fleet = lazy(() => import("./pages/Fleet"));
 const Team = lazy(() => import("./pages/Team"));
 const FleetVehicle = lazy(() => import("./pages/FleetVehicle"));
+const Bookings = lazy(() => import("./pages/Bookings"));
 
 function Splash() {
   return (
@@ -61,6 +62,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<RequireAdmin><Overview /></RequireAdmin>} />
       <Route path="/day/:date" element={<RequireAdmin><DayDetails /></RequireAdmin>} />
+      <Route path="/bookings" element={<RequireAdmin><Bookings /></RequireAdmin>} />
       <Route path="/book" element={<RequireAdmin><BookOnBehalf /></RequireAdmin>} />
       <Route path="/live" element={<RequireAdmin><LiveOps /></RequireAdmin>} />
       <Route path="/drivers" element={<RequireAdmin><Drivers /></RequireAdmin>} />

@@ -1,3 +1,4 @@
+import { TIME_RE } from "../utils/slots";
 import { z } from "zod";
 import { AuditAction, PaymentMethod } from "../../../generated/prisma";
 
@@ -33,8 +34,8 @@ export const bookOnBehalfSchema = z
     vehicleId: z.string().min(1),
     driverId: z.string().min(1).optional(),
     bookingDate: dateParamSchema,
-    startTime: z.string().regex(/^\d{2}:\d{2}$/),
-    endTime: z.string().regex(/^\d{2}:\d{2}$/),
+    startTime: z.string().regex(TIME_RE),
+    endTime: z.string().regex(TIME_RE),
     startPoint: point,
     endPoint: point,
     eventType: z.string().max(100).optional(),
@@ -43,7 +44,8 @@ export const bookOnBehalfSchema = z
     markPaid: z.boolean().optional(),
     paymentMethod: z.nativeEnum(PaymentMethod).optional(),
   })
-  .refine((v) => v.startTime < v.endTime, { path: ["endTime"], message: "endTime must be later than startTime" });
+  // An earlier end time = ends the next morning (limit checked when booking).
+  .refine((v) => v.startTime !== v.endTime, { path: ["endTime"], message: "endTime must be different from startTime" });
 
 export const auditActionSchema = z
   .string()

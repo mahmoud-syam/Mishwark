@@ -93,6 +93,12 @@ export interface DayDetails {
     depositRequired: number;
     paid: number;
     payments: PaymentRecord[];
+    bookingDate: string;
+    notes: string;
+    createdAt: string;
+    cancelledAt: string | null;
+    depositOutcome: "REFUNDED" | "KEPT" | null;
+    depositRefunded: number;
     customer: { id: string; name: string; phoneNumber: string | null };
     vehicle: { id: string; name: string; plateNumber: string };
     driver: { id: string; fullName: string };
@@ -178,6 +184,11 @@ export interface BusinessSettings {
   depositRate: number;
   bookingBufferMinutes: number;
   tripEarlyStartMinutes: number;
+  maxAdvanceBookingDays: number;
+  minTripMinutes: number;
+  overnightLatestEndHour: number;
+  freeCancellationHours: number;
+  tempPasswordDays: number;
   defaultCommissionRate: number;
   referralRewardAmount: number;
   referredDiscountAmount: number;
@@ -282,7 +293,28 @@ export interface TeamMember {
   role: TeamRole;
   twoFactorEnabled: boolean;
   mustChangePassword: boolean;
+  tempPasswordExpiresAt: string | null;
   lastLoginAt: string | null;
   disabledAt: string | null;
   createdAt: string;
+}
+
+/** One row of the bookings page (same shape as a day's booking). */
+export type BookingRow = DayDetails["bookings"][number];
+
+export interface BookingSearch {
+  items: BookingRow[];
+  counts: Record<BookingStatus, number>;
+  pagination: { total: number; page: number; limit: number; totalPages: number };
+}
+
+/** GET /bookings/:id/cancellation: what cancelling now does to the money paid. */
+export interface CancellationTerms {
+  paid: number;
+  refund: number;
+  kept: number;
+  outcome: "REFUNDED" | "KEPT" | null;
+  freeUntil: string;
+  freeCancellationHours: number;
+  overridden: boolean;
 }

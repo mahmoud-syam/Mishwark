@@ -12,6 +12,8 @@ import {
 import { BadRequestException, ConflictException, NotFoundException } from "../utils/errors";
 import { addDays, dateKey, diffDays, isDateKey } from "../utils/businessTime";
 import SettingsService from "./settings.service";
+import { isOvernight, nearbyDays } from "../utils/slots";
+import { bookingRef } from "../utils/bookingRef";
 import { imageTypeOf } from "../middlewares/multer.middleware";
 
 /**
@@ -39,7 +41,6 @@ export const VEHICLE_UPLOAD_DIR = path.join(process.cwd(), "uploads", "vehicles"
 const dayStart = (key: string) => new Date(`${key}T00:00:00.000Z`);
 const keyOf = (d: Date) => d.toISOString().slice(0, 10);
 const blockReason = (type: string, id: string) => `صيانة (${type}) #${id}`;
-const bookingRef = (id: string) => `MW-${id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
 
 // ------------------------------------------------------------------ input
 const text = (max: number) => z.string().trim().min(1).max(max);
@@ -328,11 +329,15 @@ export class FleetService {
 
   /** Upcoming (today onwards), non-cancelled bookings of a car. */
   private static async upcomingBookings(vehicleId: string, from = dateKey(), to?: string, driverIds?: string[]) {
-    const rows = await prismaClient.bookings.findMany({
-      where: { vehicleId, status: { in: UPCOMING }, bookingDate: to ? { gte: from, lte: to } : { gte: from }, ...(driverIds && { driverId: { in: driverIds } }) },
-      orderBy: [{ bookingDate: "asc" }, { startTime: "asc" }],
-      select: { id: true, bookingDate: true, startTime: true, endTime: true, customer: { select: { name: true } } },
-    });
+    // The day before is read too: a trip that runs past midnight reaches `from`.
+    const before = addDays(from, -1);
+    const rows = (
+      await prismaClient.bookings.findMany({
+        where: { vehicleId, status: { in: UPCOMING }, bookingDate: to ? { gte: before, lte: to } : { gte: before }, ...(driverIds && { driverId: { in: driverIds } }) },
+        orderBy: [{ bookingDate: "asc" }, { startTime: "asc" }],
+        select: { id: true, bookingDate: true, startTime: true, endTime: true, customer: { select: { name: true } } },
+      })
+    ).filter((b) => b.bookingDate >= from || isOvernight(b.startTime, b.endTime));
     return rows.map((b) => ({ id: b.id, ref: bookingRef(b.id), date: b.bookingDate, startTime: b.startTime, endTime: b.endTime, customer: b.customer?.name ?? "" }));
   }
 
@@ -519,7 +524,7 @@ export class FleetService {
    */
   public static async pickDriver(
     tx: Prisma.TransactionClient,
-    params: { vehicleId: string; driverId?: string; bookingDate: string; startTime: string; endTime: string; overlaps: (s: string, e: string) => boolean }
+    params: { vehicleId: string; driverId?: string; bookingDate: string; startTime: string; endTime: string; overlaps: (t: { bookingDate: string; startTime: string; endTime: string }) => boolean }
   ) {
     const assigned = await tx.vehicleDrivers.findMany({
       where: { vehicleId: params.vehicleId },
@@ -541,10 +546,10 @@ export class FleetService {
     for (const a of assigned) {
       if (unavailable(a.driver.status) || expired(a.driver)) continue;
       const busy = await tx.bookings.findMany({
-        where: { driverId: a.driver.id, bookingDate: params.bookingDate, status: { not: BookingStatus.CANCELLED } },
-        select: { startTime: true, endTime: true },
+        where: { driverId: a.driver.id, bookingDate: { in: nearbyDays(params.bookingDate) }, status: { not: BookingStatus.CANCELLED } },
+        select: { bookingDate: true, startTime: true, endTime: true },
       });
-      if (!busy.some((b) => params.overlaps(b.startTime, b.endTime))) return a.driver.id;
+      if (!busy.some(params.overlaps)) return a.driver.id;
     }
     throw new ConflictException("No driver of this car is free at this time");
   }

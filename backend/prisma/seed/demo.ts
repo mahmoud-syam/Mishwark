@@ -392,12 +392,22 @@ async function main() {
   });
 
   // ---- packages: one waiting for an admin to set its discount, one at 10%
-  const upcomingPending = (customerId: string) =>
-    prisma.bookings.findMany({
+  // Unpaid pending trips first; the random data doesn't always give a customer
+  // two, so fall back to their other upcoming trips (never an empty package).
+  const upcomingPending = async (customerId: string) => {
+    const pending = await prisma.bookings.findMany({
       where: { customerId, status: BookingStatus.PENDING, depositPaid: 0, bookingDate: { gt: today } },
       orderBy: { bookingDate: "asc" },
       take: 2,
     });
+    if (pending.length >= 2) return pending;
+    const more = await prisma.bookings.findMany({
+      where: { customerId, status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] }, bookingDate: { gt: today }, id: { notIn: pending.map((b) => b.id) } },
+      orderBy: { bookingDate: "asc" },
+      take: 2 - pending.length,
+    });
+    return [...pending, ...more];
+  };
   const demoPackages = [
     { customer: customers[1], name: "زفة فرح — 3 عربيات", type: PackageType.MULTI_CAR, pct: 0 },
     { customer: customers[6], name: "خطوبة وكتب كتاب", type: PackageType.MULTI_EVENT, pct: 10 },

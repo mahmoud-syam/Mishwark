@@ -18,6 +18,7 @@ import {
   getOverview,
   getDriversSummary,
   getDay,
+  searchBookings,
   getLiveTrips,
   getDriverAnalytics,
   updateDriverCommission,
@@ -62,6 +63,7 @@ adminRouter.get("/stats/summary", errorHandler(getDashboardStats));
 adminRouter.get("/bookings/calendar", errorHandler(getBookingsCalendar));
 adminRouter.get("/bookings", errorHandler(getBookingsByDate));
 adminRouter.get("/bookings/all", errorHandler(getAllBookings));
+adminRouter.get("/bookings/search", errorHandler(searchBookings));
 adminRouter.get("/vehicles/status", errorHandler(getFleetStatus));
 adminRouter.get("/drivers/:id/stats", errorHandler(getDriverStats));
 adminRouter.get("/drivers", errorHandler(listDrivers));

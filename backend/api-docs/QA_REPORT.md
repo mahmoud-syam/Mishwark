@@ -19,7 +19,7 @@ The mobile apps are not in this repository, so both apps were simulated through 
 | API sweep (functional, ownership, no-auth, robustness) | 357 / 357 passing |
 | Bugs found and fixed | 17 |
 | Product decisions taken and implemented | 7 + SMS/OTP hardening |
-| Backend test suite | 327 / 327 passing |
+| Backend test suite | 342 / 342 passing |
 
 All dashboard numbers matched the database exactly at every step: revenue,
 pending bookings, live trips, payments, driver and customer analytics,
@@ -151,10 +151,26 @@ A second pass that acted as a tester across admin, customer and driver flows
 | F-48 | Medium | Logout only cleared the cookie; a copied token kept working until it expired. | Logout revokes the token (one session per account, so nothing else is signed out). |
 | F-49 | Low | Price estimate worked for a retired car; a malformed 2FA secret gave a 500; a missing or short `JWT_SECRET` was only found on the first sign-in. | 400 for both; the API refuses to start without `JWT_SECRET` (32+ characters in production). |
 
-Still open, needs a product decision: trips that end after midnight (a 22:00
-to 01:00 wedding can't be booked today), what happens to a paid deposit on
-cancellation, how far ahead a booking may be made and the shortest trip, and
-whether temporary passwords should expire.
+### Booking policies (2026-11-18)
+
+The four open product questions, implemented with defaults that can all be
+changed on the Settings page (for the owner to review):
+
+| Question | Default |
+|---|---|
+| Trips past midnight | Allowed; must end by 06:00 (0 turns them off). Clash checks cover the day before and after. |
+| Booking horizon / shortest trip | 365 days ahead, at least 30 minutes. |
+| Deposit on cancellation | Cancelled 48 h+ before: everything paid back to the wallet. Later: deposit kept, the rest back. An admin can decide either way. |
+| Temporary password expiry | 7 days. |
+
+Found while testing them:
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-50 | High | A cancelled booking kept its slot: the same car couldn't be booked again that day at the same start time (unique index counted cancelled bookings). | Partial unique index on active bookings only. |
+| F-51 | Medium | The dashboard had no way to find, confirm or cancel a booking outside the day view. | New Bookings page (search by ref/name/phone, status tabs, payment filter) with confirm, complete, payments and cancel. |
+| F-52 | Low | An admin confirming or cancelling a booking wasn't in the audit log. | Logged with the old and new status, and the money settled on cancel. |
+| F-53 | Low | `HH:mm` accepted impossible times like 25:99. | Validated as 00:00 to 23:59. |
 
 New: Team page (Super Admin only) to create dashboard accounts with a
 temporary password (changed at first sign-in, then 2FA), reset 2FA or the

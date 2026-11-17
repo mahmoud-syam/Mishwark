@@ -34,6 +34,7 @@ const signInError = (err: unknown): string | null => {
     return `محاولات غلط كتير. استنى ${m ? `${m[1]} دقيقة` : "شوية"} وجرّب تاني.`;
   }
   if (err.status === 403 && /disabled/i.test(err.message)) return "الحساب ده موقوف. كلّم السوبر أدمن.";
+  if (err.status === 403 && /temporary password/i.test(err.message)) return "الباسورد المؤقت ده انتهت صلاحيته. اطلب من السوبر أدمن باسورد جديد.";
   return null;
 };
 

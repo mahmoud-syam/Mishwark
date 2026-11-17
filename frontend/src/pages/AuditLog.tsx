@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Lock } from "lucide-react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { api, download, errorMessage } from "../lib/api";
 import type { AuditAction, AuditEntry } from "../lib/types";
@@ -45,8 +46,7 @@ export default function AuditLog() {
   return (
     <Page>
       <PageHeader
-        back="/"
-        eyebrow="Super Admin"
+        eyebrow="كل اللي اتعمل في النظام"
         title={
           <>
             سجل التوثيق <span dir="ltr">(Audit Log)</span>
@@ -97,8 +97,8 @@ export default function AuditLog() {
         )}
       </Panel>
 
-      <div className="rounded-xl border border-line bg-raised px-4 py-3 text-[13px] text-muted">
-        🔒 كل عملية حذف أو تعديل حساس في النظام بتتسجل هنا تلقائيًا ومايتشالش. ده بيحميك لو احتجت ترجع تتبع أي تغيير حصل.
+      <div className="flex items-start gap-2 rounded-xl border border-line bg-raised px-4 py-3 text-[13px] text-muted">
+        <Lock className="mt-0.5 size-4 shrink-0" /> كل عملية حذف أو تعديل حساس في النظام بتتسجل هنا تلقائيًا ومايتشالش. ده بيحميك لو احتجت ترجع تتبع أي تغيير حصل.
       </div>
     </Page>
   );

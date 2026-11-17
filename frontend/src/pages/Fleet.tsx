@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Bus, CalendarCheck, CalendarClock, CircleCheck, Camera, Car, CarFront, Gem, Plus, Truck, TriangleAlert, Van, Wrench, type LucideIcon } from "lucide-react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
@@ -10,7 +11,7 @@ import { Badge, Chips, cx, Empty, ErrorBox, fieldControl, LinkButton, Page, Page
 
 type Filter = "ALL" | FleetStatus;
 
-const CATEGORY_ICON: Record<string, string> = { CAR: "🚗", VAN: "🚐", BUS: "🚌", TRUCK: "🚚", CLASSIC: "🚘", LUXURY: "🚙" };
+const CATEGORY_ICON: Record<string, LucideIcon> = { CAR: Car, VAN: Van, BUS: Bus, TRUCK: Truck, CLASSIC: CarFront, LUXURY: Gem };
 
 export const canManageFleet = (me: ReturnType<typeof useAuth>["me"]) =>
   me?.role?.name === "SUPER_ADMIN" || !!me?.role?.permissions?.includes("vehicle:manage");
@@ -29,8 +30,11 @@ function CarCard({ v }: { v: FleetItem }) {
         {v.coverImage ? (
           <img src={v.coverImage} alt={v.name} className="h-full w-full object-cover" loading="lazy" />
         ) : (
-          <div className="flex h-full items-center justify-center text-[46px]" aria-hidden>
-            {CATEGORY_ICON[v.category] ?? "🚗"}
+          <div className="flex h-full items-center justify-center text-muted/60" aria-hidden>
+            {(() => {
+              const Icon = CATEGORY_ICON[v.category] ?? Car;
+              return <Icon className="size-14" strokeWidth={1.4} />;
+            })()}
           </div>
         )}
         <span className="absolute right-3 top-3">
@@ -38,7 +42,7 @@ function CarCard({ v }: { v: FleetItem }) {
             {st.label}
           </Badge>
         </span>
-        {v.imagesCount > 0 && <span className="absolute bottom-2 left-3 rounded-full bg-ink/70 px-2 py-0.5 text-[12px] text-cream">📷 {v.imagesCount}</span>}
+        {v.imagesCount > 0 && <span className="absolute bottom-2 left-3 rounded-full bg-ink/70 px-2 py-0.5 text-[12px] text-cream inline-flex items-center gap-1"><Camera className="size-3.5" /> {v.imagesCount}</span>}
       </div>
       <div className="flex flex-1 flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
@@ -58,19 +62,19 @@ function CarCard({ v }: { v: FleetItem }) {
                 السواق: <span className="text-cream">{primary.name}</span>
                 {v.drivers.length > 1 && ` +${v.drivers.length - 1}`}
                 {v.drivers.every((d) => d.status === "ONLEAVE" || d.status === "OFF") && (
-                  <span className="block text-rose">⚠ {v.drivers.length > 1 ? "كل سواقينها" : "سواقها"} في إجازة أو خارج الخدمة · مش هتتحجز</span>
+                  <span className="flex items-center gap-1 text-rose"><TriangleAlert className="size-3.5 shrink-0" /> {v.drivers.length > 1 ? "كل سواقينها" : "سواقها"} في إجازة أو خارج الخدمة · مش هتتحجز</span>
                 )}
               </span>
             ) : (
-              <span className="text-rose">⚠ من غير سواق · مش ظاهرة للعملاء</span>
+              <span className="flex items-center gap-1 text-rose"><TriangleAlert className="size-3.5 shrink-0" /> من غير سواق · مش ظاهرة للعملاء</span>
             ))}
           {m && v.status !== "RETIRED" && (
-            <span className="text-muted">
-              🔧 {m.type}: {m.startDate <= today ? "دلوقتي" : dayMonth(m.startDate)}
+            <span className="flex items-center gap-1 text-muted">
+              <Wrench className="size-3.5 shrink-0" /> {m.type}: {m.startDate <= today ? "دلوقتي" : dayMonth(m.startDate)}
               {m.endDate !== m.startDate && ` → ${dayMonth(m.endDate)}`}
             </span>
           )}
-          {v.upcomingBookings > 0 && <span className="text-muted">📅 {v.upcomingBookings} حجز جاي</span>}
+          {v.upcomingBookings > 0 && <span className="flex items-center gap-1 text-muted"><CalendarClock className="size-3.5 shrink-0" /> {v.upcomingBookings} حجز جاي</span>}
         </div>
       </div>
     </Link>
@@ -96,23 +100,22 @@ export default function Fleet() {
   return (
     <Page>
       <PageHeader
-        back="/"
-        eyebrow="Super Admin"
+        eyebrow="العربيات والسواقين والصيانة"
         title="الأسطول"
-        actions={canManageFleet(me) && <LinkButton to="/fleet/new" variant="primary">+ إضافة عربية</LinkButton>}
+        actions={canManageFleet(me) && <LinkButton to="/fleet/new" variant="primary"><Plus className="size-4" /> إضافة عربية</LinkButton>}
       />
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
 
       <StatGrid>
-        <StatCard label="عربيات شغّالة" value={s ? String(s.total) : ""} loading={!s} delta={s ? `${s.retired} موقوفة` : ""} />
-        <StatCard label="متاحة النهارده" value={s ? String(s.available) : ""} loading={!s} tone="mint" />
-        <StatCard label="محجوزة النهارده" value={s ? String(s.booked) : ""} loading={!s} />
-        <StatCard label="في الصيانة" value={s ? String(s.maintenance) : ""} loading={!s} tone="rose" />
+        <StatCard icon={<Car />} label="عربيات شغّالة" value={s ? String(s.total) : ""} loading={!s} delta={s ? `${s.retired} موقوفة` : ""} />
+        <StatCard icon={<CircleCheck />} label="متاحة النهارده" value={s ? String(s.available) : ""} loading={!s} tone="mint" />
+        <StatCard icon={<CalendarCheck />} label="محجوزة النهارده" value={s ? String(s.booked) : ""} loading={!s} />
+        <StatCard icon={<Wrench />} label="في الصيانة" value={s ? String(s.maintenance) : ""} loading={!s} tone="rose" />
       </StatGrid>
 
       {s && s.withoutDriver > 0 && (
-        <div className="rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-[14px] text-cream">
-          ⚠ {s.withoutDriver === 1 ? "عربية واحدة" : `${s.withoutDriver} عربيات`} من غير سواق: مش هتظهر للعملاء ولا تتحجز لحد ما تحدد لها سواق.
+        <div className="flex items-center gap-2 rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-[14px] text-cream">
+          <TriangleAlert className="size-4 shrink-0 text-gold" /> {s.withoutDriver === 1 ? "عربية واحدة" : `${s.withoutDriver} عربيات`} من غير سواق: مش هتظهر للعملاء ولا تتحجز لحد ما تحدد لها سواق.
         </div>
       )}
 

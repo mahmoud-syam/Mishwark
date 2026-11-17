@@ -141,10 +141,13 @@ describe('Route metrics: server-computed distanceKm and durationMinutes', () => 
     expect(createBookingSchema.safeParse({ ...base, startPoint: CAIRO, endPoint: ALEXANDRIA }).success).toBe(true);
   });
 
-  test('RM-T2-20: createBooking rejects endTime at or before startTime', () => {
+  test('RM-T2-20: createBooking rejects an end time equal to the start or an impossible time', () => {
     const base = { vehicleId: 'v1', bookingDate: '2099-01-01', startPoint: CAIRO, endPoint: ALEXANDRIA };
     expect(createBookingSchema.safeParse({ ...base, startTime: '10:00', endTime: '10:00' }).success).toBe(false);
-    expect(createBookingSchema.safeParse({ ...base, startTime: '12:00', endTime: '10:00' }).success).toBe(false);
+    expect(createBookingSchema.safeParse({ ...base, startTime: '25:00', endTime: '26:00' }).success).toBe(false);
+    // An earlier end time = the trip ends the next morning; the overnight
+    // limit from Settings is applied when booking (booking_rules tests).
+    expect(createBookingSchema.safeParse({ ...base, startTime: '22:00', endTime: '01:00' }).success).toBe(true);
   });
 
   test('RM-T2-21: createBooking rejects a client that claims a negative distance', () => {

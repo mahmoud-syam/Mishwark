@@ -1,3 +1,4 @@
+import { TIME_RE } from "../utils/slots";
 import { z } from "zod";
 import { VehicleCategory, BookingStatus, TripStatus } from "../../../generated/prisma";
 
@@ -81,8 +82,8 @@ export const createBookingSchema = z
     vehicleId: z.string().min(1, "vehicleId is required"),
     driverId: z.string().optional(),
     bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "bookingDate must be in YYYY-MM-DD format"),
-    startTime: z.string().regex(/^\d{2}:\d{2}$/, "startTime must be in HH:mm format"),
-    endTime: z.string().regex(/^\d{2}:\d{2}$/, "endTime must be in HH:mm format"),
+    startTime: z.string().regex(TIME_RE, "startTime must be in HH:mm format"),
+    endTime: z.string().regex(TIME_RE, "endTime must be in HH:mm format"),
     distanceKm: nonNegative.optional(),
     durationMinutes: nonNegative.optional(),
     notes: z.string().max(2000).optional(),
@@ -94,11 +95,13 @@ export const createBookingSchema = z
   })
   .merge(routeFields)
   .superRefine((value, ctx) => {
-    if (value.startTime >= value.endTime) {
+    // An earlier end time means the trip ends the next morning (checked
+    // against the overnight limit in Settings); the same time is no trip.
+    if (value.startTime === value.endTime) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["endTime"],
-        message: "endTime must be later than startTime",
+        message: "endTime must be different from startTime",
       });
     }
     // Without a resolvable route there is no trustworthy distance, and a
@@ -133,6 +136,8 @@ export const updateTripStatusSchema = z.object({
 
 export const cancelBookingSchema = z.object({
   reason: z.string().optional(),
+  // Admin only: refund the deposit (true) or keep it (false) whatever the policy says.
+  refundDeposit: z.boolean().optional(),
 });
 
 export const listBookingsQuerySchema = z.object({

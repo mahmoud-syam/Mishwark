@@ -11,6 +11,16 @@ model SystemSettings {
   bookingBufferMinutes      Int      @default(60)
   /// How early a driver may start a trip before its scheduled time.
   tripEarlyStartMinutes     Int      @default(120)
+  /// How many days ahead a trip may be booked.
+  maxAdvanceBookingDays     Int      @default(365)
+  /// Shortest trip that can be booked, in minutes.
+  minTripMinutes            Int      @default(30)
+  /// Latest hour (next morning) a trip may end when it runs past midnight. 0 = no trips past midnight.
+  overnightLatestEndHour    Int      @default(6)
+  /// A customer who cancels at least this many hours before the trip gets the deposit back (to the wallet); later, it is kept.
+  freeCancellationHours     Int      @default(48)
+  /// Days a temporary password given to a team member stays valid.
+  tempPasswordDays          Int      @default(7)
 
   // Money
   /// Commission (percent) given to newly created drivers.

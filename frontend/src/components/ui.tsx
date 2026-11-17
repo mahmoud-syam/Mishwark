@@ -208,7 +208,12 @@ export function StatCard({
 }
 
 export function StatGrid({ children }: { children: ReactNode }) {
-  return <div className="stagger grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">{children}</div>;
+  // Columns follow the space the grid actually has (narrow pages stay at 2), not the window.
+  return (
+    <div className="@container">
+      <div className="stagger grid grid-cols-2 gap-3 sm:gap-4 @3xl:grid-cols-4">{children}</div>
+    </div>
+  );
 }
 
 // ------------------------------------------------------------------ badges
