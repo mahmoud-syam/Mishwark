@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CalendarCheck, Car, ChevronLeft, Gauge, MessageSquareWarning, Plus, Wallet, Wrench } from "lucide-react";
+import { AlertTriangle, CalendarCheck, Car, ChevronLeft, Gauge, MessageSquareWarning, Plus, UserX, Wallet, Wrench } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import type { BookingListItem, DayDetails, DriverSummary, Overview as OverviewData } from "../lib/types";
@@ -119,6 +119,13 @@ function AlertsStrip({ data }: { data?: OverviewData }) {
             {icon("bg-amber/15 text-amber", <Wrench />)}
             <span>
               {a.vehicleName} {a.daysUntil === 0 ? "داخلة صيانة مجدولة النهاردة" : a.daysUntil === 1 ? "هتدخل صيانة مجدولة بكرة" : `هتدخل صيانة مجدولة بعد ${a.daysUntil} أيام`}
+            </span>
+          </Link>
+        ) : a.type === "driver_unavailable" ? (
+          <Link key={i} to={`/drivers/${a.entityId}`} className={row}>
+            {icon("bg-wine/12 text-rose", <UserX />)}
+            <span>
+              {a.driverName} {a.driverStatus === "ONLEAVE" ? "في إجازة" : "خارج الخدمة"} وعليه {a.trips} {a.trips === 1 ? "رحلة جاية" : "رحلات جاية"} (أولها {dayMonth(a.firstDate)}). انقلها لسواق تاني
             </span>
           </Link>
         ) : a.type === "no_driver" ? (

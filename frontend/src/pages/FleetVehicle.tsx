@@ -22,6 +22,7 @@ const AR: Record<string, string> = {
   "A car can have up to 12 photos": "أقصى عدد صور للعربية 12 صورة.",
   "Each photo must be 5 MB or smaller": "حجم الصورة لازم يكون 5 ميجا أو أقل.",
   "The main driver must be one of the car's drivers": "السواق الأساسي لازم يكون من سواقين العربية.",
+  "These upcoming trips are with a driver you're removing. Move them to another driver first": "الرحلات دي مع سواق إنت بتشيله من العربية. انقلها لسواق تاني الأول:",
 };
 const msg = (e: unknown) => {
   if (e instanceof ApiError) {
@@ -411,7 +412,7 @@ function Drivers({ car, canEdit }: { car: FleetDetail; canEdit: boolean }) {
                 </option>
               ))}
           </select>
-          {save.error && <ErrorBox error={msg(save.error)} />}
+          {save.error && <ErrorWithBookings error={save.error} />}
           <div className="flex items-center justify-between gap-2">
             <span className="text-[12px] text-muted">لو العميل ما اختارش سواق، الأساسي بيتجرّب الأول.</span>
             <Button variant="primary" size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>

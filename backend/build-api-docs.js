@@ -124,8 +124,8 @@ const BODY_EXAMPLES = {
   "/auth/set-password": { loginToken: "{{loginToken}}", newPassword: "MyOwnPass#2026" },
   // The controller reads `secret` from the body, not `otpCode`.
   "/auth/2fa/verify": { token: "123456", secret: "JBSWY3DPEHPK3PXP" },
-  // Disable takes no body: it acts on the authenticated user.
-  "/auth/2fa/disable": {},
+  // The current code is required while 2FA is on.
+  "/auth/2fa/disable": { token: "123456" },
 
   // bookings
   "/bookings/estimate-distance": {
@@ -290,15 +290,15 @@ const DESCRIPTIONS = {
   "/auth/login": "Email/password sign-in, step 1. Limits: 5 wrong passwords for one account from one device (IP) block that device from that account for 15 minutes (429, `errors.retryAfterSeconds`); the owner on another device is unaffected. 403 for a disabled account. Never returns a session: it answers with the next step and a `loginToken` (signed, 5 minutes): `passwordChangeRequired` (temporary password: call /auth/set-password), `twoFactorSetupRequired` (with `secret` + `qrCodeDataURL`: call /auth/verify-2fa-setup) or `twoFactorRequired` (call /auth/verify-2fa). 400 on a wrong email or password.",
   "/auth/set-password": "Sign-in step after a temporary password (accounts created or reset from the Team page): the user picks their own password (8+ characters, not the temporary one). Answers with the next step and a new `loginToken`. 400 if the pass is missing, expired or already used.",
   "/auth/signup": "Create a customer or driver account. Multipart/form-data — fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
-  "/auth/otp/request": "Public. Sends a 4-digit OTP to the phone. In dev the code is returned as dev_otp.",
+  "/auth/otp/request": "Public. Sends a 4-digit OTP to the phone. 01…, +20… and 0020… are the same number (stored as +20…). In dev the code is returned as dev_otp.",
   "/auth/otp/verify": "Public. Verifies OTP and returns a JWT. Dev bypass code: 0000. Response drives role-based home screen.",
-  "/auth/logout": "Clears the auth cookie / current session.",
+  "/auth/logout": "Signs out: clears the auth cookie and revokes the token sent with the request (it gets 401 afterwards). Always 200.",
   "/auth/logout-all-devices": "Bumps tokenVersion, invalidating every session for the user.",
   "/auth/verify-2fa": "Last sign-in step when 2FA is on: `loginToken` from /auth/login plus the 6-digit code. Sets the session cookie and returns `user`. Each pass works once; a wrong code changes nothing. A bare `userId` is no longer accepted (400).",
   "/auth/verify-2fa-setup": "Last sign-in step when 2FA isn't set up yet: `loginToken` plus the code from the authenticator app. The secret is the one inside the pass (the one shown in the QR); any `secret` in the body is ignored. Sets the session cookie and returns `user`. A bare `userId` is no longer accepted (400).",
   "/auth/2fa/setup": "Returns TOTP secret + QR code data URL for authenticator enrollment.",
   "/auth/2fa/verify": "Validates an OTP to enable 2FA.",
-  "/auth/2fa/disable": "Disables 2FA for the authenticated user.",
+  "/auth/2fa/disable": "Disables 2FA for the authenticated user. Needs the current 6-digit code in `token` (400 without it).",
   "/auth/change-password/{userId}": "Needs user_password:manage. Sets a user's password (8+ characters) and optionally resets 2FA; signs the user out everywhere. Dashboard accounts (Admin, Super Admin) only by a Super Admin (403); use the Team page for them.",
   "/auth/reset-2fa/{userId}": "Needs user_password:manage. Resets a user's 2FA and signs them out everywhere. Dashboard accounts (Admin, Super Admin) only by a Super Admin (403).",
   "GET /admin/team": "Team page (Super Admin only, 403 otherwise): dashboard accounts (Admin and Super Admin) with role, `twoFactorEnabled`, `mustChangePassword` (hasn't replaced the temporary password yet) and `lastLoginAt`. Super Admins first.",
@@ -308,7 +308,7 @@ const DESCRIPTIONS = {
   "/admin/team/{id}/disable": "Disables a team account (someone left): signed out everywhere at once, can't sign in (403 \"This account is disabled\"), history and audit entries kept. Any account but your own, Super Admins included. Super Admin only. Audit-logged.",
   "/admin/team/{id}/enable": "Enables a disabled team account again; the member signs in as before (password + 2FA). Super Admin only. Audit-logged.",
   "/admin/team/{id}/role": "Changes a member's role (ADMIN or SUPER_ADMIN). Signs them out so the new permissions apply. Super Admin only; not on your own account. Audit-logged.",
-  "/bookings/estimate-price": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount.",
+  "/bookings/estimate-price": "PUBLIC. Server-side price estimate. 400 for a retired car. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount.",
   "/bookings/estimate-distance": "PUBLIC. Resolves startPoint/endPoint (coordinates or a place name) into distanceKm and durationMinutes. Coordinates are passed through; free text is geocoded via OpenRouteService. Without ORS_API_KEY the server falls back to a straight-line estimate and says so in `source` and `warning`.",
   "/bookings/{id}/status": "Transitions booking status. PENDING→CONFIRMED/CANCELLED, CONFIRMED→COMPLETED/CANCELLED.",
   "/bookings/{id}/trip-status": "NOTSTARTED→INPROGRESS→ARRIVED→COMPLETED. Trip COMPLETED auto-completes the booking and releases the driver.",
@@ -350,7 +350,7 @@ const DESCRIPTIONS = {
   "/admin/vehicle-features": "Suggested feature labels for the fleet form (the defaults plus every feature already used on a car).",
   "/admin/vehicles/{id}/retire": "Takes a car out of service instead of deleting it: hidden from the app and from new bookings, history kept. Needs vehicle:manage. 409 with `errors.bookings` (the upcoming bookings) while any are pending or confirmed. Audit-logged.",
   "/admin/vehicles/{id}/reactivate": "Puts a retired car back in service. Needs vehicle:manage. Audit-logged.",
-  "/admin/vehicles/{id}/drivers": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged.",
+  "/admin/vehicles/{id}/drivers": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged. 409 with errors.bookings when a driver being removed still has upcoming trips on this car.",
   "/admin/vehicles/{id}/images": "Uploads car photos as multipart/form-data, field `images` (up to 8 per request, 12 per car). JPG, PNG or WEBP only, checked by the file's content; 5 MB each (413 over). The first photo becomes the cover. Needs vehicle:manage.",
   "/admin/vehicles/{id}/images/{imageId}": "Deletes a photo. If it was the cover, the next photo becomes the cover. Needs vehicle:manage.",
   "/admin/vehicles/{id}/images/{imageId}/cover": "Makes this photo the cover (shown first in the app). Needs vehicle:manage.",

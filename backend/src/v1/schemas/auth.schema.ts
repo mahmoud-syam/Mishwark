@@ -1,3 +1,4 @@
+import { normalizePhone } from "../utils/phone";
 import z, { number } from "zod";
 
 
@@ -202,7 +203,7 @@ export const InsuranceSchema = z.object({
 export type Insurance = z.infer<typeof InsuranceSchema>
 
 export const OtpRequestSchema = z.object({
-    phoneNumber: z.string().min(8, "Phone number is too short"),
+    phoneNumber: z.string().min(8, "Phone number is too short").transform(normalizePhone),
     /** Account type requested when the phone number is not yet registered. */
     role: z.preprocess(
         parseMultipartEnum(SELF_SIGNUP_ROLES),
@@ -215,7 +216,7 @@ export const OtpRequestSchema = z.object({
 export type OtpRequestSchema = z.infer<typeof OtpRequestSchema>;
 
 export const OtpVerifySchema = z.object({
-    phoneNumber: z.string().min(8, "Phone number is too short"),
+    phoneNumber: z.string().min(8, "Phone number is too short").transform(normalizePhone),
     code: z.string().length(4, "OTP must be 4 digits")
 });
 

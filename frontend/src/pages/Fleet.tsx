@@ -23,7 +23,7 @@ function CarCard({ v }: { v: FleetItem }) {
   return (
     <Link
       to={`/fleet/${v.id}`}
-      className={cx("lift group flex flex-col overflow-hidden rounded-2xl border border-line bg-surface transition hover:border-gold/50", v.status === "RETIRED" && "opacity-60")}
+      className={cx("card lift group flex flex-col overflow-hidden transition hover:border-gold/50", v.status === "RETIRED" && "opacity-60")}
     >
       <div className="relative h-36 bg-raised">
         {v.coverImage ? (

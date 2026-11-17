@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import ReviewService from "../services/review.service";
-import { paramStr, queryNum } from "../utils/routeParams";
+import { paramStr, queryNum, queryLimit } from "../utils/routeParams";
 import prismaClient from "../utils/prismaClientHelper";
 import { assertOwnerOrAdmin } from "../utils/ownership";
 import { bookingPartyOf } from "../services/booking.service";
@@ -39,7 +39,7 @@ export const getUserReviews = async (req: Request, res: Response) => {
   const result = await ReviewService.getUserReviews(
     userId,
     queryNum(req.query.page, 1),
-    queryNum(req.query.limit, 10)
+    queryLimit(req.query.limit, 10)
   );
   res.status(200).json({ success: true, data: result.items, pagination: result.pagination });
 };

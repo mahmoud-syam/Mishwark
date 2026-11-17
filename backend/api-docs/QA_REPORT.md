@@ -15,11 +15,11 @@ The mobile apps are not in this repository, so both apps were simulated through 
 
 | | Count |
 |---|---|
-| End-to-end checks (final run) | 103 / 103 passing |
-| API sweep (98 operations: functional, ownership, no-auth, robustness) | 289 / 289 passing |
+| End-to-end checks (final run) | 106 / 106 + 47 / 47 passing |
+| API sweep (functional, ownership, no-auth, robustness) | 357 / 357 passing |
 | Bugs found and fixed | 17 |
 | Product decisions taken and implemented | 7 + SMS/OTP hardening |
-| Backend test suite | 272 / 272 passing (+26 new tests) |
+| Backend test suite | 327 / 327 passing |
 
 All dashboard numbers matched the database exactly at every step: revenue,
 pending bookings, live trips, payments, driver and customer analytics,
@@ -132,6 +132,29 @@ Deploying behind Cloudflare Tunnel needs nothing more (`TRUST_PROXY=loopback`,
 the default). Behind another proxy set `TRUST_PROXY`, or every visitor shares
 the proxy's address and the per-IP limits hit everyone at once. Counters are
 in memory: right for one API instance.
+
+### Review of the whole cycle (2026-11-17)
+
+A second pass that acted as a tester across admin, customer and driver flows
+(`probe` script, 16 exploratory checks). Fixed:
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-40 | High | Driver and employee documents (national ID, licence, criminal record) were downloadable by anyone with the link. | Only profile pictures and car photos are public. Signup keeps only the profile picture, refuses a fake image, and deletes every other uploaded file. |
+| F-41 | High | `010…`, `+2010…` and `0020…` were three different accounts for the same phone. | Every phone is stored as `+20…` (OTP sign-in, customers added from the dashboard). Existing numbers were converted by a migration when that caused no clash. |
+| F-42 | High | A booking could be made today for a time that had already passed. | Refused when the start is more than 15 minutes in the past (Cairo time). |
+| F-43 | High | Removing a driver from a car left that car's upcoming trips with a driver who no longer drives it. | 409 that lists the trips; move them first. |
+| F-44 | High | Putting a driver on leave (or off) gave no sign of the trips they still hold. | New overview alert `driver_unavailable` with the number of trips and the first date. |
+| F-45 | Medium | A driver whose licence had expired could be assigned. | Skipped by auto-assignment; refused (400) when chosen by hand. |
+| F-46 | Medium | `?limit=` had no ceiling (`limit=100000` returned everything). | Every list caps the page at 100. |
+| F-47 | Medium | 2FA could be turned off with just a session. | Needs the current 6-digit code. |
+| F-48 | Medium | Logout only cleared the cookie; a copied token kept working until it expired. | Logout revokes the token (one session per account, so nothing else is signed out). |
+| F-49 | Low | Price estimate worked for a retired car; a malformed 2FA secret gave a 500; a missing or short `JWT_SECRET` was only found on the first sign-in. | 400 for both; the API refuses to start without `JWT_SECRET` (32+ characters in production). |
+
+Still open, needs a product decision: trips that end after midnight (a 22:00
+to 01:00 wedding can't be booked today), what happens to a paid deposit on
+cancellation, how far ahead a booking may be made and the shortest trip, and
+whether temporary passwords should expire.
 
 New: Team page (Super Admin only) to create dashboard accounts with a
 temporary password (changed at first sign-in, then 2FA), reset 2FA or the

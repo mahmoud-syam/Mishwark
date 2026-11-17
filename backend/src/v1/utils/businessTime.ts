@@ -80,3 +80,7 @@ export const diffDays = (a: string, b: string): number => {
 
 export const isDateKey = (value: unknown): value is string =>
   typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+/** Current business time as "HH:mm" (Cairo by default). */
+export const timeKey = (date: Date = new Date(), tz: string = BUSINESS_TZ): string =>
+  new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);

@@ -1,10 +1,11 @@
+import { normalizePhone } from "../utils/phone";
 import { Request, Response } from "express";
 import * as XLSX from "xlsx";
 import AdminDashboardService from "../services/admin-dashboard.service";
 import AuditService from "../services/audit.service";
 import PackageService from "../services/package.service";
 import { AuditAction, PackageStatus } from "../../../generated/prisma";
-import { paramStr, queryNum, queryStr } from "../utils/routeParams";
+import { paramStr, queryNum, queryStr, queryLimit } from "../utils/routeParams";
 import {
   auditActionSchema,
   bookOnBehalfSchema,
@@ -23,7 +24,7 @@ export const getOverview = async (_req: Request, res: Response) => {
 };
 
 export const getDriversSummary = async (req: Request, res: Response) => {
-  const limit = Math.min(50, Math.max(1, queryNum(req.query.limit, 3)));
+  const limit = queryLimit(req.query.limit, 3);
   res.json({ success: true, data: await AdminDashboardService.driversSummary(limit) });
 };
 
@@ -53,12 +54,13 @@ export const getCustomerAnalytics = async (req: Request, res: Response) => {
 };
 
 export const searchCustomers = async (req: Request, res: Response) => {
-  const data = await AdminDashboardService.searchCustomers(queryStr(req.query.q) ?? "", Math.min(20, queryNum(req.query.limit, 8)));
+  const data = await AdminDashboardService.searchCustomers(queryStr(req.query.q) ?? "", Math.min(20, queryLimit(req.query.limit, 8)));
   res.json({ success: true, data });
 };
 
 export const createCustomer = async (req: Request, res: Response) => {
-  const input = quickCustomerSchema.parse(req.body);
+  const parsed = quickCustomerSchema.parse(req.body);
+  const input = { ...parsed, phoneNumber: normalizePhone(parsed.phoneNumber) };
   res.status(201).json({ success: true, data: await AdminDashboardService.quickCreateCustomer(input, actorOf(req)) });
 };
 
@@ -74,7 +76,7 @@ export const getAssignableDrivers = async (req: Request, res: Response) => {
 
 export const listAuditLogs = async (req: Request, res: Response) => {
   const action = auditActionSchema.parse(queryStr(req.query.action));
-  const result = await AuditService.list({ action, page: queryNum(req.query.page, 1), limit: queryNum(req.query.limit, 20) });
+  const result = await AuditService.list({ action, page: queryNum(req.query.page, 1), limit: queryLimit(req.query.limit, 20) });
   res.json({ success: true, data: result.items, pagination: result.pagination });
 };
 
@@ -115,7 +117,7 @@ export const listPackages = async (req: Request, res: Response) => {
   const result = await PackageService.listForAdmin({
     status: PACKAGE_STATUSES.includes(status as any) ? (status as PackageStatus) : undefined,
     page: queryNum(req.query.page, 1),
-    limit: queryNum(req.query.limit, 50),
+    limit: queryLimit(req.query.limit, 50),
   });
   res.json({ success: true, data: result.items, pagination: result.pagination });
 };

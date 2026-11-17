@@ -12,7 +12,12 @@ export const generate2FASecret = async (email: string) => {
     return { secret, qrCodeDataURL };
 };
 
+/** False for a wrong code, and also for a malformed secret or code (otplib throws on those). */
 export const verify2FAToken = async (token: string, secret: string) => {
-    const result = await verify({ token, secret });
-    return result.valid;
+    try {
+        const result = await verify({ token, secret });
+        return result.valid;
+    } catch {
+        return false;
+    }
 };

@@ -96,6 +96,9 @@ POST /auth/otp/request
 { "phoneNumber": "+201001234567", "role": "customer", "name": "Ahmed" }
 ```
 
+Phone numbers are stored as `+20…`. `01001234567`, `+20 100 123 4567` and
+`00201001234567` all reach the same account, on request and verify alike.
+
 `role` is `customer` (default) or `driver`. Only used when the phone number is
 new; for an existing phone the account's role is untouched. Drivers must send
 `licenseNumber`.
@@ -194,6 +197,9 @@ array in a text part, e.g. `[{"number":"+201001234567"}]`), `pic` (file part),
 `licenseNumber` + `licenseExpiry` (required when `role=driver`), optional
 `referralCode`.
 
+Only `pic` is kept, and it must be a real JPG, PNG or WEBP (400 otherwise);
+any other uploaded file is discarded. Driver documents are not public.
+
 Password min 8 characters. Admin roles cannot be self-assigned — that requires
 `PATCH /admin/users/role`. Signup does not return a token.
 
@@ -213,18 +219,19 @@ list.
 The role is re-read from the database on every authenticated request, so a role
 change takes effect immediately. A `tokenVersion` bump invalidates every
 existing session. That happens on OTP verification, 2FA login, admin password
-change, and 2FA reset — so all of these sign the target user out everywhere.
+change, 2FA reset and logout — so all of these sign the target user out
+everywhere. After `POST /auth/logout` the same token gets 401; drop it locally.
 
 ### 2FA management (authenticated)
 
 ```http
 GET  /auth/2fa/setup    → { "secret": "BASE32", "qrCodeDataURL": "data:image/png;base64,..." }
 POST /auth/2fa/verify   → { "token": "123456", "secret": "BASE32" }  // both required
-POST /auth/2fa/disable  → no body
+POST /auth/2fa/disable  → { "token": "123456" }  // current code, required while 2FA is on
 ```
 
 `/auth/2fa/verify` stores the secret and flips `twoFactorEnabled`. Missing
-`token` or `secret` is a 400, not a 500.
+`token` or `secret`, or a malformed secret, is a 400, not a 500.
 
 ### Admin credential management
 
@@ -658,6 +665,10 @@ The web dashboard's fleet page uses `GET/POST /admin/vehicles`,
 `GET/PATCH /admin/vehicles/:id`, `.../retire`, `.../reactivate`,
 `PUT .../drivers`, photo upload/cover/delete and maintenance endpoints (all
 changes need `vehicle:manage`). The apps don't call these; see the API docs.
+`PUT .../drivers` returns 409 with `errors.bookings` when a driver being
+removed still has upcoming trips on that car. `GET /admin/overview` alerts
+include `driver_unavailable` (a driver who is off or on leave but still holds
+upcoming trips).
 
 ---
 
@@ -670,6 +681,14 @@ for the distance display → `POST /bookings/estimate-price` for the quote →
 **Optimistic UI**: safe for booking **status** transitions (you know the target
 state) but not for `POST /bookings` — the 409 double-book conflict is real and
 must be surfaced, not retried.
+
+**Booking rules worth surfacing**: a start time more than 15 minutes in the
+past today is a 400 ("This start time has already passed"). A retired car gets
+400 from `POST /bookings/estimate-price` ("This car is no longer available").
+Drivers whose licence has expired are never auto-assigned; choosing one by hand
+is a 400.
+
+**Page size**: every `?limit=` is capped at 100; read `pagination.limit` back.
 
 **Caching**: no `Cache-Control` headers are set. `GET /vehicles` is safe to
 cache client-side for a session. Availability and booking lists are not —

@@ -18,3 +18,7 @@ export function queryStr(value: any): string | undefined {
   if (Array.isArray(value)) return value[0];
   return value as string;
 }
+/** A page size from the query string: 1..max (100 by default), so one request can't pull a whole table. */
+export function queryLimit(value: any, fallback: number, max = 100): number {
+  return Math.min(max, Math.max(1, queryNum(value, fallback)));
+}

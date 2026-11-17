@@ -327,9 +327,9 @@ export class FleetService {
   }
 
   /** Upcoming (today onwards), non-cancelled bookings of a car. */
-  private static async upcomingBookings(vehicleId: string, from = dateKey(), to?: string) {
+  private static async upcomingBookings(vehicleId: string, from = dateKey(), to?: string, driverIds?: string[]) {
     const rows = await prismaClient.bookings.findMany({
-      where: { vehicleId, status: { in: UPCOMING }, bookingDate: to ? { gte: from, lte: to } : { gte: from } },
+      where: { vehicleId, status: { in: UPCOMING }, bookingDate: to ? { gte: from, lte: to } : { gte: from }, ...(driverIds && { driverId: { in: driverIds } }) },
       orderBy: [{ bookingDate: "asc" }, { startTime: "asc" }],
       select: { id: true, bookingDate: true, startTime: true, endTime: true, customer: { select: { name: true } } },
     });
@@ -364,6 +364,14 @@ export class FleetService {
     if (driverIds.length && !driverIds.includes(primary)) throw new BadRequestException("The main driver must be one of the car's drivers");
 
     const before = await prismaClient.vehicleDrivers.findMany({ where: { vehicleId: id }, include: { driver: { select: { fullName: true } } } });
+    // A driver taken off the car can't keep its upcoming trips: move them first.
+    const removed = before.map((b) => b.driverId).filter((d) => !driverIds.includes(d));
+    if (removed.length) {
+      const stranded = await this.upcomingBookings(id, dateKey(), undefined, removed);
+      if (stranded.length) {
+        throw new ConflictException("These upcoming trips are with a driver you're removing. Move them to another driver first", undefined, { bookings: stranded });
+      }
+    }
     await prismaClient.$transaction([
       prismaClient.vehicleDrivers.deleteMany({ where: { vehicleId: id } }),
       ...driverIds.map((driverId) => prismaClient.vehicleDrivers.create({ data: { vehicleId: id, driverId, isPrimary: driverId === primary } })),
@@ -516,19 +524,22 @@ export class FleetService {
     const assigned = await tx.vehicleDrivers.findMany({
       where: { vehicleId: params.vehicleId },
       orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
-      include: { driver: { select: { id: true, status: true } } },
+      include: { driver: { select: { id: true, status: true, licenseExpiry: true } } },
     });
     if (!assigned.length) throw new BadRequestException("This car has no driver assigned yet");
     const unavailable = (s: DriverStatus) => s === DriverStatus.OFF || s === DriverStatus.ONLEAVE;
+    // A licence that has expired by the trip's day rules the driver out.
+    const expired = (d: { licenseExpiry: Date | null }) => !!d.licenseExpiry && dateKey(d.licenseExpiry) < params.bookingDate;
 
     if (params.driverId) {
       const a = assigned.find((x) => x.driver.id === params.driverId);
       if (!a) throw new BadRequestException("This driver isn't assigned to this car");
       if (unavailable(a.driver.status)) throw new BadRequestException("Assigned driver is currently OFF or ON LEAVE");
+      if (expired(a.driver)) throw new BadRequestException("This driver's licence has expired");
       return a.driver.id;
     }
     for (const a of assigned) {
-      if (unavailable(a.driver.status)) continue;
+      if (unavailable(a.driver.status) || expired(a.driver)) continue;
       const busy = await tx.bookings.findMany({
         where: { driverId: a.driver.id, bookingDate: params.bookingDate, status: { not: BookingStatus.CANCELLED } },
         select: { startTime: true, endTime: true },

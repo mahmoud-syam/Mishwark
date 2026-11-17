@@ -31,6 +31,13 @@ function loadOpenApiSpec(): Record<string, unknown> {
 }
 
 
+// Sessions are signed with JWT_SECRET: without a real one, refuse to start
+// rather than fail at the first sign-in (or sign with a weak key).
+if (!process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' && process.env.JWT_SECRET.length < 32)) {
+    console.error('[config] JWT_SECRET is missing' + (process.env.NODE_ENV === 'production' ? ' or shorter than 32 characters' : '') + '. Set it in .env.');
+    process.exit(1);
+}
+
 const app: Express = express();
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -76,7 +83,11 @@ app.use(cors(corsOptions));
 
 app.use(express.urlencoded({ extended: true }));
 
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// Public files: car photos and profile pictures only. Anything else under
+// uploads/ (older uploads, stray files) is not served.
+const UPLOADS = path.join(process.cwd(), 'uploads');
+app.use('/uploads/vehicles', express.static(path.join(UPLOADS, 'vehicles'), { index: false }));
+app.use('/uploads/employees', (req, res, next) => (/^\/pic-[\w.-]+$/.test(req.path) ? next() : res.status(404).end()), express.static(path.join(UPLOADS, 'employees'), { index: false }));
 
 const openApiSpec = loadOpenApiSpec();
 

@@ -1,3 +1,4 @@
+import { BadRequestException } from "../utils/errors";
 import prismaClient from "../utils/prismaClientHelper";
 import { VehicleCategory } from "../../../generated/prisma";
 import MapsService, { LocationInput } from "./maps.service";
@@ -216,10 +217,12 @@ export class PricingService {
     };
 
     if (params.vehicleId) {
+      let retired = false;
       try {
         const vehicle = await prismaClient.vehicles.findUnique({
           where: { id: params.vehicleId },
         });
+        retired = !!vehicle?.retiredAt;
         if (vehicle) {
           if (!category) category = vehicle.category;
           if (basePrice === undefined && vehicle.basePrice > 0) basePrice = vehicle.basePrice;
@@ -229,6 +232,8 @@ export class PricingService {
       } catch (err) {
         // Fallback to defaults if DB unavailable or vehicle not found
       }
+      // No price for a car that is out of service.
+      if (retired) throw new BadRequestException("This car is no longer available");
     }
 
     // Discounts depend on who the quote is for: their own active package and

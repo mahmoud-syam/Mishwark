@@ -22,7 +22,7 @@ import { PricingService, calculateEstimatedPrice } from "./pricing.service";
 import MapsService, { LocationInput, RouteResult, toCoordinates } from "./maps.service";
 import { getDriverIdForUser } from "./role.service";
 import { isAdminRole, normalizeRoleName, USER_ROLES } from "../constants/roles";
-import { dateKey, zonedToInstant } from "../utils/businessTime";
+import { dateKey, timeKey, zonedToInstant } from "../utils/businessTime";
 import ReferralService from "./referral.service";
 import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
 import DiscountService from "./discount.service";
@@ -215,6 +215,12 @@ export class BookingService {
     const todayStr = dateKey();
     if (data.bookingDate < todayStr) {
       throw new BadRequestException("Cannot book a trip for a past date");
+    }
+    // Today: the start time can't be gone already (15 minutes' grace for a
+    // booking made at the door).
+    const toMinutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+    if (data.bookingDate === todayStr && toMinutes(data.startTime) < toMinutes(timeKey()) - 15) {
+      throw new BadRequestException("This start time has already passed");
     }
 
     const settings = await SettingsService.get();

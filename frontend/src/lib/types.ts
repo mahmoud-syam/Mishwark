@@ -16,7 +16,8 @@ export interface Me {
 export type Alert =
   | { type: "maintenance"; severity: "warning"; entityId: string; vehicleName: string; maintenanceType: string; daysUntil: number }
   | { type: "complaint"; severity: "danger"; entityId: string; driverName: string; rating: number; bookingId: string }
-  | { type: "no_driver"; severity: "warning"; entityId: string; vehicleName: string };
+  | { type: "no_driver"; severity: "warning"; entityId: string; vehicleName: string }
+  | { type: "driver_unavailable"; severity: "danger"; entityId: string; driverName: string; driverStatus: DriverStatus; trips: number; firstDate: string };
 
 export interface Overview {
   today: string;

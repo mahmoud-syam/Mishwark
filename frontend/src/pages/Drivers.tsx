@@ -34,7 +34,7 @@ export default function Drivers() {
       ) : (
         <div className="stagger grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {q.data!.map((d, i) => (
-            <div key={d.id} className="flex flex-col gap-2 rounded-[18px] border border-line bg-surface p-3">
+            <div key={d.id} className="card flex flex-col gap-2 p-3">
               <DriverCard d={d} tone={tones[i % 3]} />
               <label className="flex items-center justify-between gap-2 px-1 text-[13px] text-muted">
                 الحالة

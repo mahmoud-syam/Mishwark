@@ -5,7 +5,7 @@ import { api, errorMessage } from "../lib/api";
 import type { DayDetails as DayData } from "../lib/types";
 import { BOOKING_STATUS } from "../lib/labels";
 import { addDays, compact, fullDate, time12, todayKey, weekdayFull } from "../lib/format";
-import { Badge, Brand, cx, Empty, ErrorBox, Page, PageHeader, Panel, Skeleton, StatCard, StatGrid } from "../components/ui";
+import { Badge, cx, Empty, ErrorBox, Page, PageHeader, Panel, Skeleton, StatCard, StatGrid } from "../components/ui";
 import PaymentDialog from "../components/PaymentDialog";
 
 const PAY_BADGE = {
@@ -48,7 +48,6 @@ export default function DayDetails() {
           </span>
         }
         title={date === todayKey() ? "حجوزات اليوم" : "حجوزات اليوم ده"}
-        actions={<Brand />}
       />
 
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
