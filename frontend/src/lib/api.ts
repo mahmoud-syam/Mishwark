@@ -109,6 +109,7 @@ export const errorMessage = (e: unknown) => {
   if (e instanceof ApiError) {
     if (e.status === 0 || e.status >= 500) return "حصلت مشكلة في السيرفر. جرّب تاني بعد شوية.";
     if (e.status === 403) return "معندكش صلاحية للعملية دي.";
+    if (e.status === 429) return "طلبات كتير ورا بعض. استنى كام دقيقة وجرّب تاني.";
     return e.message;
   }
   if (e instanceof TypeError) return "مش قادر أوصل للسيرفر. اتأكد من الاتصال.";

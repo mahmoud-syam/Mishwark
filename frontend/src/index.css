@@ -1,25 +1,32 @@
 @import "tailwindcss";
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 @import "@fontsource/ibm-plex-sans-arabic/400.css";
 @import "@fontsource/ibm-plex-sans-arabic/500.css";
 @import "@fontsource/ibm-plex-sans-arabic/700.css";
 @import "@fontsource/aref-ruqaa/700.css";
 
-/* Design tokens, taken from the Mishwark Figma file (variables panel). */
+/* Design tokens. Light is the default; [data-theme="dark"] on <html> switches.
+ * Tailwind classes (bg-surface, text-cream, …) read these variables, so every
+ * page follows the theme without per-page changes. Names are historical:
+ * "cream" is the main text colour and "gold" the brand accent (now coral). */
 @theme {
-  --color-ink: #14151f;        /* blue/10  page background */
-  --color-surface: #1d1f2b;    /* blue/14  cards & panels */
-  --color-raised: #262838;     /* blue/18  inner cards, buttons, inputs */
-  --color-raised-2: #2f3244;   /* blue/23  hover */
-  --color-line: #33354a;       /* blue/25  borders & dividers */
-  --color-muted: #9496a6;      /* grey/62  secondary text */
-  --color-cream: #f3efe4;      /* grey/92  primary text */
-  --color-gold: #c9a24b;       /* orange/54 accent */
-  --color-gold-deep: #8a6b23;  /* orange/34 */
-  --color-wine: #8b2e3a;       /* red/36 */
-  --color-wine-deep: #4a1620;  /* red/19 */
-  --color-rose: #d98a95;       /* red/70 */
-  --color-blush: #f0c4cb;      /* red/85 */
-  --color-mint: #5fae7f;       /* spring-green/53 */
+  --color-ink: var(--c-ink);            /* page background */
+  --color-surface: var(--c-surface);    /* cards & panels */
+  --color-raised: var(--c-raised);      /* inner cards, inputs */
+  --color-raised-2: var(--c-raised-2);  /* hover */
+  --color-line: var(--c-line);          /* borders & dividers */
+  --color-muted: var(--c-muted);        /* secondary text */
+  --color-cream: var(--c-text);         /* primary text */
+  --color-gold: var(--c-accent);        /* brand accent (coral) */
+  --color-gold-deep: var(--c-accent-deep);
+  --color-navy: var(--c-navy);          /* sidebar, chart bars, icon circles */
+  --color-navy-soft: var(--c-navy-soft);
+  --color-amber: var(--c-amber);        /* warnings */
+  --color-wine: var(--c-danger);        /* danger borders/backgrounds */
+  --color-wine-deep: var(--c-danger-deep);
+  --color-rose: var(--c-danger-text);
+  --color-blush: var(--c-danger-text);
+  --color-mint: var(--c-success);
 
   --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
   --font-display: "Aref Ruqaa", "IBM Plex Sans Arabic", serif;
@@ -28,9 +35,53 @@
   --radius-panel: 18px;
 }
 
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --c-ink: #f0f1fa;
+  --c-surface: #ffffff;
+  --c-raised: #f6f7fc;
+  --c-raised-2: #eceef8;
+  --c-line: #e6e8f2;
+  --c-muted: #8b8fab;
+  --c-text: #1d1c4d;
+  --c-accent: #f2766b;
+  --c-accent-deep: #e5584d;
+  --c-navy: #1f1d5c;
+  --c-navy-soft: #6b69a8;
+  --c-amber: #e8962a;
+  --c-danger: #e5484d;
+  --c-danger-deep: #b8333b;
+  --c-danger-text: #cf3a40;
+  --c-success: #1f9d68;
+  --c-sidebar: #1f1d5c;
+  --shadow-card: 0 10px 30px -18px rgba(31, 29, 92, 0.28);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --c-ink: #0f1026;
+  --c-surface: #17183b;
+  --c-raised: #1f2149;
+  --c-raised-2: #282a58;
+  --c-line: #2d2f5e;
+  --c-muted: #9a9dc2;
+  --c-text: #f1f1fa;
+  --c-accent: #f58a7f;
+  --c-accent-deep: #e8665c;
+  --c-navy: #8f8ce6;
+  --c-navy-soft: #5d5aa8;
+  --c-amber: #f2b357;
+  --c-danger: #e5484d;
+  --c-danger-deep: #8b2e3a;
+  --c-danger-text: #f19aa1;
+  --c-success: #4cc38a;
+  --c-sidebar: #0a0b1d;
+  --shadow-card: none;
+}
+
 @layer base {
   html {
-    color-scheme: dark;
     background: var(--color-ink);
   }
   body {
@@ -60,6 +111,10 @@
 @layer components {
   .field-input {
     @apply w-full rounded-xl border border-line bg-raised px-3 py-2.5 text-[13px] text-cream placeholder:text-muted/80 outline-none transition focus:border-gold/70;
+  }
+  .card {
+    @apply rounded-[18px] border border-line bg-surface;
+    box-shadow: var(--shadow-card);
   }
   .scroll-thin {
     scrollbar-width: thin;
@@ -167,5 +222,16 @@
     background: linear-gradient(90deg, var(--color-raised) 25%, var(--color-raised-2) 50%, var(--color-raised) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.4s ease-in-out infinite;
+  }
+}
+
+/* Side menu on phones slides in from the right. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes drawer-in {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  .drawer-in {
+    animation: drawer-in 220ms var(--ease-out) both;
   }
 }

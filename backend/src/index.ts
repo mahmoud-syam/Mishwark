@@ -8,6 +8,8 @@ import { PORT } from './secrets';
 import rootRouterV1 from './v1/routes';
 import path from 'path';
 import fs from 'fs';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 
 const OPENAPI_SPEC_PATH = path.join(process.cwd(), 'api-docs', 'mishwarak.openapi.json');
 
@@ -30,6 +32,27 @@ function loadOpenApiSpec(): Record<string, unknown> {
 
 
 const app: Express = express();
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Client IP behind a proxy. Cloudflare Tunnel (cloudflared on the same machine)
+// forwards from localhost, so "loopback" is right there. Behind another proxy
+// set TRUST_PROXY (e.g. "1" for one hop, or the proxy's address). Without it,
+// every visitor would share the proxy's address and the limits below would
+// block everyone at once.
+const trustProxy = process.env.TRUST_PROXY ?? 'loopback';
+app.set('trust proxy', /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
+
+// Security headers. Uploaded photos stay loadable by the apps (cross-origin).
+app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+
+// Request limits per IP on sign-in. Wrong passwords and codes are limited per
+// device and account in SignInGuard; these stop floods and SMS abuse.
+// AUTH_RATE_LIMIT / OTP_REQUEST_RATE_LIMIT: requests per IP per 15 minutes.
+const tooMany = { message: 'Too many requests. Try again in a few minutes', errorCode: 4290, errors: null };
+const perIp = (limit: number) => rateLimit({ windowMs: 15 * 60 * 1000, limit, standardHeaders: 'draft-8', legacyHeaders: false, message: tooMany });
+app.use('/api/v1/auth', perIp(Number(process.env.AUTH_RATE_LIMIT ?? 100)));
+app.use('/api/v1/auth/otp/request', perIp(Number(process.env.OTP_REQUEST_RATE_LIMIT ?? 10)));
+
 app.use(cookieParser());
 
 app.use(express.json());
@@ -82,6 +105,13 @@ app.use("/api/v1", rootRouterV1);
 // (backend/ and frontend/ side by side). A deployment can set its own path.
 const DASHBOARD_DIST = path.resolve(process.cwd(), process.env.DASHBOARD_DIST || '../frontend/dist');
 if (fs.existsSync(DASHBOARD_DIST)) {
+    // The dashboard only loads its own files (plus data: images such as the 2FA QR).
+    app.use('/dashboard', helmet.contentSecurityPolicy({
+        directives: {
+            'img-src': ["'self'", 'data:', 'blob:'],
+            'upgrade-insecure-requests': isProduction ? [] : null,
+        },
+    }));
     app.use('/dashboard', express.static(DASHBOARD_DIST, { index: false, maxAge: '1h' }));
     app.get(/^\/dashboard(\/.*)?$/, (_req, res) => {
         res.sendFile(path.join(DASHBOARD_DIST, 'index.html'));

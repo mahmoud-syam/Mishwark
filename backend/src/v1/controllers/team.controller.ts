@@ -53,3 +53,15 @@ export const setTeamMemberRole = async (req: Request, res: Response) => {
   }
   res.status(200).json({ success: true, data: member });
 };
+
+export const disableTeamMember = async (req: Request, res: Response) => {
+  const member = await TeamService.disable(paramStr(req.params.id), req.user!.id);
+  await AuditService.record(actorOf(req), { action: AuditAction.UPDATE, entityType: "user", entityId: member.id, entityLabel: label(member), details: "إيقاف الحساب (خرج من كل الأجهزة)" });
+  res.status(200).json({ success: true, data: member });
+};
+
+export const enableTeamMember = async (req: Request, res: Response) => {
+  const member = await TeamService.enable(paramStr(req.params.id), req.user!.id);
+  await AuditService.record(actorOf(req), { action: AuditAction.UPDATE, entityType: "user", entityId: member.id, entityLabel: label(member), details: "إعادة تفعيل الحساب" });
+  res.status(200).json({ success: true, data: member });
+};

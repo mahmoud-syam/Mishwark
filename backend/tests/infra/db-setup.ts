@@ -1,4 +1,5 @@
 import prismaClient from '../../src/v1/utils/prismaClientHelper';
+import SignInGuard from '../../src/v1/services/sign-in-guard.service';
 import SettingsService from '../../src/v1/services/settings.service';
 import { assertDisposableDatabase } from './db-guard';
 import {
@@ -33,6 +34,7 @@ export async function isDatabaseConnected(): Promise<boolean> {
 
 export async function resetDatabase(): Promise<void> {
   assertDisposableDatabase(); // second line of defence: never wipe a non-test database
+  SignInGuard.reset(); // wrong-attempt counters live in memory
   const connected = await isDatabaseConnected();
   if (!connected) {
     return;
