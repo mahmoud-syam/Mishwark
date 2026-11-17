@@ -1078,7 +1078,7 @@
         "tags": [
           "Bookings"
         ],
-        "summary": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected.",
+        "summary": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount.",
         "responses": {
           "200": {
             "description": "Success",
@@ -1142,7 +1142,7 @@
             }
           }
         },
-        "description": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected.",
+        "description": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount.",
         "operationId": "post_bookings_estimate_price"
       }
     },
@@ -3007,7 +3007,7 @@
         "tags": [
           "Packages"
         ],
-        "summary": "Creates a package with a server-applied discount.",
+        "summary": "Creates a package for the authenticated customer. Its discount % is set by an admin afterwards (discountPercentage in the body is ignored). Bookings created with this packageId get that % off.",
         "security": [
           {
             "bearerAuth": []
@@ -3055,13 +3055,12 @@
               },
               "example": {
                 "packageName": "Wedding Package",
-                "packageType": "MULTI_CAR",
-                "discountPercentage": 10
+                "packageType": "MULTI_CAR"
               }
             }
           }
         },
-        "description": "Creates a package with a server-applied discount.",
+        "description": "Creates a package for the authenticated customer. Its discount % is set by an admin afterwards (discountPercentage in the body is ignored). Bookings created with this packageId get that % off.",
         "operationId": "post_packages"
       }
     },
@@ -3767,7 +3766,7 @@
         "tags": [
           "Referrals"
         ],
-        "summary": "Applies a referral code to the authenticated user.",
+        "summary": "Applies someone's referral code to the authenticated customer. Only before their first booking (400 after). The customer then gets Settings.referredDiscountAmount off their first booking automatically, and the code owner is credited when that trip completes.",
         "security": [
           {
             "bearerAuth": []
@@ -3819,7 +3818,7 @@
             }
           }
         },
-        "description": "Applies a referral code to the authenticated user.",
+        "description": "Applies someone's referral code to the authenticated customer. Only before their first booking (400 after). The customer then gets Settings.referredDiscountAmount off their first booking automatically, and the code owner is credited when that trip completes.",
         "operationId": "post_referrals_apply"
       }
     },
@@ -5083,7 +5082,7 @@
         "tags": [
           "Admin"
         ],
-        "summary": "System & evaluation-related settings.",
+        "summary": "Business settings edited from the dashboard Settings page: deposit %, gap between trips, early trip start, new-driver commission, referral reward, peak surge, dashboard alert thresholds and default prices per vehicle category. GET for any admin; PUT needs settings:manage (Super Admin by default), sends only the fields to change, applies to new bookings only and is audit-logged. Out-of-range or unknown fields return 422.",
         "security": [
           {
             "bearerAuth": []
@@ -5122,14 +5121,14 @@
             "description": "Internal Server Error"
           }
         },
-        "description": "System & evaluation-related settings.",
+        "description": "Business settings edited from the dashboard Settings page: deposit %, gap between trips, early trip start, new-driver commission, referral reward, peak surge, dashboard alert thresholds and default prices per vehicle category. GET for any admin; PUT needs settings:manage (Super Admin by default), sends only the fields to change, applies to new bookings only and is audit-logged. Out-of-range or unknown fields return 422.",
         "operationId": "get_admin_settings"
       },
       "put": {
         "tags": [
           "Admin"
         ],
-        "summary": "System & evaluation-related settings.",
+        "summary": "Business settings edited from the dashboard Settings page: deposit %, gap between trips, early trip start, new-driver commission, referral reward, peak surge, dashboard alert thresholds and default prices per vehicle category. GET for any admin; PUT needs settings:manage (Super Admin by default), sends only the fields to change, applies to new bookings only and is audit-logged. Out-of-range or unknown fields return 422.",
         "security": [
           {
             "bearerAuth": []
@@ -5176,14 +5175,20 @@
                 "$ref": "#/components/schemas/SystemSettingsBody"
               },
               "example": {
-                "performanceHistoryVisible": true,
-                "evaluationsVisible": true,
-                "selfAppraisalsVisible": true
+                "depositRate": 25,
+                "bookingBufferMinutes": 45,
+                "categoryRates": {
+                  "CAR": {
+                    "basePrice": 60,
+                    "pricePerKm": 10,
+                    "pricePerHour": 25
+                  }
+                }
               }
             }
           }
         },
-        "description": "System & evaluation-related settings.",
+        "description": "Business settings edited from the dashboard Settings page: deposit %, gap between trips, early trip start, new-driver commission, referral reward, peak surge, dashboard alert thresholds and default prices per vehicle category. GET for any admin; PUT needs settings:manage (Super Admin by default), sends only the fields to change, applies to new bookings only and is audit-logged. Out-of-range or unknown fields return 422.",
         "operationId": "put_admin_settings"
       }
     },
@@ -5860,6 +5865,112 @@
         "description": "Append-only audit trail. ?action=CREATE|UPDATE|DELETE&page=&limit=",
         "operationId": "get_admin_audit_logs"
       }
+    },
+    "/admin/packages": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Customer packages for the dashboard, newest first, with customer, booking counts and the discount given so far. ?status=ACTIVE|COMPLETED|CANCELLED|EXPIRED&page=&limit=",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Customer packages for the dashboard, newest first, with customer, booking counts and the discount given so far. ?status=ACTIVE|COMPLETED|CANCELLED|EXPIRED&page=&limit=",
+        "operationId": "get_admin_packages"
+      }
+    },
+    "/admin/packages/{id}/discount": {
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Sets an active package's discount % (0-100). Needs booking:manage. Bookings in the package that nothing has been paid on yet (PENDING, depositPaid 0) are re-priced; paid ones keep their price. Returns the package plus `repriced` (count). Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Sets an active package's discount % (0-100). Needs booking:manage. Bookings in the package that nothing has been paid on yet (PENDING, depositPaid 0) are re-priced; paid ones keep their price. Returns the package plus `repriced` (count). Audit-logged.",
+        "operationId": "patch_admin_packages_id_discount"
+      }
     }
   },
   "components": {
@@ -6206,14 +6317,18 @@
           },
           "surgeMultiplier": {
             "type": "number",
-            "minimum": 0,
-            "maximum": 10
+            "deprecated": true,
+            "description": "Ignored. The server applies the peak surge from Settings when isPeakHour is true."
           },
           "packageDiscount": {
-            "type": "number"
+            "type": "number",
+            "deprecated": true,
+            "description": "Ignored. Computed from packageId."
           },
           "referralDiscount": {
-            "type": "number"
+            "type": "number",
+            "deprecated": true,
+            "description": "Ignored. Computed from referralCode."
           },
           "vehicleId": {
             "type": "string"
@@ -6222,7 +6337,13 @@
             "type": "string"
           },
           "referralCode": {
-            "type": "string"
+            "type": "string",
+            "deprecated": true,
+            "description": "Ignored. Apply the code with POST /referrals/apply."
+          },
+          "customerId": {
+            "type": "string",
+            "description": "Admins only: quote with this customer's discounts."
           }
         }
       },
@@ -6281,8 +6402,8 @@
           },
           "surgeMultiplier": {
             "type": "number",
-            "minimum": 0,
-            "maximum": 10
+            "deprecated": true,
+            "description": "Ignored. The server applies the peak surge from Settings when isPeakHour is true."
           }
         },
         "required": [
@@ -6505,8 +6626,8 @@
           },
           "discountPercentage": {
             "type": "number",
-            "minimum": 0,
-            "maximum": 100
+            "deprecated": true,
+            "description": "Ignored. An admin sets the package discount."
           }
         },
         "required": [
@@ -6609,7 +6730,170 @@
       },
       "SystemSettingsBody": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
+          "depositRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Percent of the total price"
+          },
+          "bookingBufferMinutes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 720
+          },
+          "tripEarlyStartMinutes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "defaultCommissionRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "referralRewardAmount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "peakSurgeMultiplier": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "vipSpendThreshold": {
+            "type": "number",
+            "minimum": 0
+          },
+          "delayAlertMinutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 240
+          },
+          "punctualityGraceMinutes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 240
+          },
+          "complaintMaxRating": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "maintenanceAlertDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90
+          },
+          "categoryRates": {
+            "type": "object",
+            "description": "Only the categories to change",
+            "properties": {
+              "CAR": {
+                "type": "object",
+                "properties": {
+                  "basePrice": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "pricePerKm": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "pricePerHour": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              },
+              "VAN": {
+                "type": "object",
+                "properties": {
+                  "basePrice": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "pricePerKm": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "pricePerHour": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              },
+              "BUS": {
+                "type": "object",
+                "properties": {
+                  "basePrice": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "pricePerKm": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "pricePerHour": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              },
+              "TRUCK": {
+                "type": "object",
+                "properties": {
+                  "basePrice": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "pricePerKm": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "pricePerHour": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              },
+              "CLASSIC": {
+                "type": "object",
+                "properties": {
+                  "basePrice": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "pricePerKm": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "pricePerHour": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              },
+              "LUXURY": {
+                "type": "object",
+                "properties": {
+                  "basePrice": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "pricePerKm": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "pricePerHour": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
           "performanceHistoryVisible": {
             "type": "boolean"
           },
@@ -6645,11 +6929,21 @@
               "discountAmount": {
                 "type": "number"
               },
+              "packageDiscount": {
+                "type": "number"
+              },
+              "referralDiscount": {
+                "type": "number"
+              },
               "totalPrice": {
                 "type": "number"
               },
-              "depositPaid": {
+              "depositRequired": {
                 "type": "number"
+              },
+              "depositPaid": {
+                "type": "number",
+                "deprecated": true
               }
             }
           },

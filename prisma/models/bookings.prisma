@@ -44,6 +44,10 @@ model Bookings {
   basePrice              Float                    @default(0)
   distancePrice          Float                    @default(0)
   totalPrice             Float                    @default(0)
+  // Discounts already taken off totalPrice (price before discounts =
+  // totalPrice + packageDiscount + referralDiscount).
+  packageDiscount        Float                    @default(0)
+  referralDiscount       Float                    @default(0)
   // Deposit the customer must pay to confirm (a % of totalPrice), and what has
   // actually been paid so far (sum of SUCCESS payments). They used to be one
   // field, which recorded the deposit as paid the moment the booking existed.

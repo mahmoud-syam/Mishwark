@@ -2,11 +2,14 @@ import { Request, Response } from "express";
 import * as XLSX from "xlsx";
 import AdminDashboardService from "../services/admin-dashboard.service";
 import AuditService from "../services/audit.service";
+import PackageService from "../services/package.service";
+import { AuditAction, PackageStatus } from "../../../generated/prisma";
 import { paramStr, queryNum, queryStr } from "../utils/routeParams";
 import {
   auditActionSchema,
   bookOnBehalfSchema,
   commissionSchema,
+  packageDiscountSchema,
   dateParamSchema,
   periodSchema,
   quickCustomerSchema,
@@ -107,4 +110,34 @@ export const exportAuditLogs = async (req: Request, res: Response) => {
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="audit-log-${new Date().toISOString().slice(0, 10)}.xlsx"`);
   res.send(buffer);
+};
+
+// ---------------------------------------------------------------- packages
+const PACKAGE_STATUSES = ["ACTIVE", "COMPLETED", "CANCELLED", "EXPIRED"] as const;
+
+export const listPackages = async (req: Request, res: Response) => {
+  const status = queryStr(req.query.status);
+  const result = await PackageService.listForAdmin({
+    status: PACKAGE_STATUSES.includes(status as any) ? (status as PackageStatus) : undefined,
+    page: queryNum(req.query.page, 1),
+    limit: queryNum(req.query.limit, 50),
+  });
+  res.json({ success: true, data: result.items, pagination: result.pagination });
+};
+
+export const updatePackageDiscount = async (req: Request, res: Response) => {
+  const { discountPercentage } = packageDiscountSchema.parse(req.body);
+  const id = paramStr(req.params.id);
+  const result = await PackageService.setDiscount(id, discountPercentage);
+  if (result.before !== discountPercentage) {
+    const pkg = result.package!;
+    await AuditService.record(actorOf(req), {
+      action: AuditAction.UPDATE,
+      entityType: "package",
+      entityId: id,
+      entityLabel: `باكدج: ${pkg.packageName}`,
+      details: `خصم الباكدج: ${result.before}% → ${discountPercentage}%` + (result.repriced ? ` · اتعدّل سعر ${result.repriced} حجز` : ""),
+    });
+  }
+  res.json({ success: true, data: { ...result.package, repriced: result.repriced } });
 };

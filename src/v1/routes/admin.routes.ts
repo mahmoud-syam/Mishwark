@@ -29,9 +29,13 @@ import {
   getAssignableDrivers,
   listAuditLogs,
   exportAuditLogs,
+  listPackages,
+  updatePackageDiscount,
 } from "../controllers/admin-dashboard.controller";
 import { authMiddleware } from "../middlewares/auth.middleware";
 import { adminMiddleware } from "../middlewares/admin.middleware";
+import { requirePermission } from "../middlewares/permission.middleware";
+import { PERMISSIONS } from "../constants/roles";
 
 const adminRouter: Router = Router();
 
@@ -64,6 +68,9 @@ adminRouter.post("/bookings", errorHandler(bookOnBehalf));
 adminRouter.patch("/vehicles/:id", errorHandler(updateVehicle));
 adminRouter.get("/audit-logs/export", errorHandler(exportAuditLogs));
 adminRouter.get("/audit-logs", errorHandler(listAuditLogs));
-adminRouter.put("/settings", errorHandler(updateSystemSettings));
+adminRouter.get("/packages", errorHandler(listPackages));
+adminRouter.patch("/packages/:id/discount", requirePermission(PERMISSIONS.BOOKING_MANAGE), errorHandler(updatePackageDiscount));
+// Changing business settings needs settings:manage (Super Admin by default).
+adminRouter.put("/settings", requirePermission(PERMISSIONS.SETTINGS_MANAGE), errorHandler(updateSystemSettings));
 
 export default adminRouter;

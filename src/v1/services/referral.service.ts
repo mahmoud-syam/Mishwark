@@ -1,4 +1,6 @@
 import prismaClient from "../utils/prismaClientHelper";
+import SettingsService from "./settings.service";
+import DiscountService from "./discount.service";
 import {
   ReferralStatus,
   WalletTransactionType,
@@ -53,13 +55,21 @@ export class ReferralService {
       throw new ConflictException("You have already been referred");
     }
 
+    // The code earns the new customer a first-booking discount, so it can't be
+    // applied by someone who already booked.
+    if (!(await DiscountService.isFirstBooking(prismaClient, referredUserId))) {
+      throw new BadRequestException("A referral code can only be used before your first booking");
+    }
+
     const referral = await prismaClient.referrals.create({
       data: {
         referrerId: referrer.id,
         referredId: referredUserId,
         referralCode,
         status: ReferralStatus.PENDING,
-        rewardAmount: 25,
+        // Fixed when the code is applied, so a later change in Settings
+        // doesn't alter rewards already promised.
+        rewardAmount: (await SettingsService.get()).referralRewardAmount,
       },
     });
 

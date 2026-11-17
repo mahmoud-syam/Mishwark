@@ -1,4 +1,5 @@
 import prismaClient from '../../src/v1/utils/prismaClientHelper';
+import SettingsService from '../../src/v1/services/settings.service';
 import {
   DriverStatus,
   VehicleCategory,
@@ -62,6 +63,8 @@ export async function resetDatabase(): Promise<void> {
     await prismaClient.permission.deleteMany();
     await prismaClient.role.deleteMany();
     await prismaClient.systemSettings.deleteMany();
+    // Settings are cached in memory; a wiped row must not leave old values behind.
+    SettingsService.clearCache();
   } catch (error) {
     console.warn('Database reset encountered non-fatal error:', error);
   }

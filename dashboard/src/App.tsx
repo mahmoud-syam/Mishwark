@@ -12,6 +12,8 @@ const DriverAnalytics = lazy(() => import("./pages/DriverAnalytics"));
 const CustomerAnalytics = lazy(() => import("./pages/CustomerAnalytics"));
 const AuditLog = lazy(() => import("./pages/AuditLog"));
 const Drivers = lazy(() => import("./pages/Drivers"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Packages = lazy(() => import("./pages/Packages"));
 
 function Splash() {
   return (
@@ -44,6 +46,8 @@ export default function App() {
       <Route path="/drivers/:id" element={<RequireAdmin><DriverAnalytics /></RequireAdmin>} />
       <Route path="/customers/:id" element={<RequireAdmin><CustomerAnalytics /></RequireAdmin>} />
       <Route path="/audit" element={<RequireAdmin><AuditLog /></RequireAdmin>} />
+      <Route path="/settings" element={<RequireAdmin><Settings /></RequireAdmin>} />
+      <Route path="/packages" element={<RequireAdmin><Packages /></RequireAdmin>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

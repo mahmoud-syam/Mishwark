@@ -96,6 +96,8 @@ export interface DayDetails {
     eventType: string;
     packageId: string | null;
     totalPrice: number;
+    packageDiscount: number;
+    referralDiscount: number;
     paymentStatus: "UNPAID" | "PARTIALLY_PAID" | "PAID";
     depositRequired: number;
     paid: number;
@@ -177,4 +179,41 @@ export interface Vehicle {
   pricePerHour: number;
   capacity: number;
   year: number;
+}
+
+export type CategoryRate = { basePrice: number; pricePerKm: number; pricePerHour: number };
+
+export interface BusinessSettings {
+  depositRate: number;
+  bookingBufferMinutes: number;
+  tripEarlyStartMinutes: number;
+  defaultCommissionRate: number;
+  referralRewardAmount: number;
+  referredDiscountAmount: number;
+  peakSurgeMultiplier: number;
+  vipSpendThreshold: number;
+  delayAlertMinutes: number;
+  punctualityGraceMinutes: number;
+  complaintMaxRating: number;
+  maintenanceAlertDays: number;
+  categoryRates: Record<string, CategoryRate>;
+}
+
+export interface SettingsResponse extends BusinessSettings {
+  defaults: BusinessSettings;
+  updatedAt: string;
+}
+
+export interface AdminPackage {
+  id: string;
+  packageName: string;
+  packageType: "MULTI_CAR" | "MULTI_EVENT";
+  status: "ACTIVE" | "COMPLETED" | "CANCELLED" | "EXPIRED";
+  discountPercentage: number;
+  totalPrice: number;
+  createdAt: string;
+  customer: { id: string; name: string; phoneNumber: string | null };
+  bookingsCount: number;
+  unpaidBookings: number;
+  discountGiven: number;
 }

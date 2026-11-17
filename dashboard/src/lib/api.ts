@@ -63,6 +63,7 @@ export const api = {
   page: <T>(path: string) => request<Envelope<T[]>>("GET", path).then((r) => ({ items: r.data, pagination: r.pagination! })),
   post: <T>(path: string, body?: unknown) => request<Envelope<T>>("POST", path, body ?? {}).then((r) => r.data),
   patch: <T>(path: string, body?: unknown) => request<Envelope<T>>("PATCH", path, body ?? {}).then((r) => r.data),
+  put: <T>(path: string, body?: unknown) => request<Envelope<T>>("PUT", path, body ?? {}).then((r) => r.data),
 };
 
 /** Downloads a binary endpoint (e.g. an Excel export) with the session cookie. */

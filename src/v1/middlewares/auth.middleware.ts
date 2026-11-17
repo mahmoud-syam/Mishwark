@@ -80,3 +80,17 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
         next(error);
     }
 }
+/**
+ * For public endpoints that answer better when they know the caller (the price
+ * estimate applies the caller's own discounts). A valid token sets req.user
+ * exactly like authMiddleware; a missing or bad token just leaves the request
+ * anonymous instead of failing.
+ */
+export const optionalAuthMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+    const hasToken = !!req.cookies?.token || (req.headers.authorization ?? "").startsWith("Bearer ");
+    if (!hasToken) return next();
+    await authMiddleware(req, res, (err?: unknown) => {
+        if (err) req.user = undefined as any;
+        next();
+    });
+};

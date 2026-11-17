@@ -947,7 +947,7 @@
                 }
               }
             },
-            "description": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected."
+            "description": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount."
           },
           "response": [
             {
@@ -2572,14 +2572,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"packageName\": \"Wedding Package\",\n  \"packageType\": \"MULTI_CAR\",\n  \"discountPercentage\": 10\n}",
+              "raw": "{\n  \"packageName\": \"Wedding Package\",\n  \"packageType\": \"MULTI_CAR\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Creates a package with a server-applied discount."
+            "description": "Creates a package for the authenticated customer. Its discount % is set by an admin afterwards (discountPercentage in the body is ignored). Bookings created with this packageId get that % off."
           },
           "response": [],
           "event": [
@@ -3174,7 +3174,7 @@
                 }
               }
             },
-            "description": "Applies a referral code to the authenticated user."
+            "description": "Applies someone's referral code to the authenticated customer. Only before their first booking (400 after). The customer then gets Settings.referredDiscountAmount off their first booking automatically, and the code owner is credited when that trip completes."
           },
           "response": [],
           "event": [
@@ -4142,7 +4142,7 @@
                 "settings"
               ]
             },
-            "description": "System & evaluation-related settings."
+            "description": "Business settings edited from the dashboard Settings page: deposit %, gap between trips, early trip start, new-driver commission, referral reward, peak surge, dashboard alert thresholds and default prices per vehicle category. GET for any admin; PUT needs settings:manage (Super Admin by default), sends only the fields to change, applies to new bookings only and is audit-logged. Out-of-range or unknown fields return 422."
           },
           "response": [],
           "event": [
@@ -4784,6 +4784,97 @@
           ]
         },
         {
+          "name": "GET /admin/packages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/packages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "packages"
+              ]
+            },
+            "description": "Customer packages for the dashboard, newest first, with customer, booking counts and the discount given so far. ?status=ACTIVE|COMPLETED|CANCELLED|EXPIRED&page=&limit="
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /admin/packages/:id/discount",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/packages/:id/discount",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "packages",
+                ":id",
+                "discount"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"discountPercentage\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sets an active package's discount % (0-100). Needs booking:manage. Bookings in the package that nothing has been paid on yet (PENDING, depositPaid 0) are re-priced; paid ones keep their price. Returns the package plus `repriced` (count). Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "PUT /admin/settings",
           "request": {
             "method": "PUT",
@@ -4808,14 +4899,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"performanceHistoryVisible\": true,\n  \"evaluationsVisible\": true,\n  \"selfAppraisalsVisible\": true\n}",
+              "raw": "{\n  \"depositRate\": 25,\n  \"bookingBufferMinutes\": 45,\n  \"categoryRates\": {\n    \"CAR\": {\n      \"basePrice\": 60,\n      \"pricePerKm\": 10,\n      \"pricePerHour\": 25\n    }\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "System & evaluation-related settings."
+            "description": "Business settings edited from the dashboard Settings page: deposit %, gap between trips, early trip start, new-driver commission, referral reward, peak surge, dashboard alert thresholds and default prices per vehicle category. GET for any admin; PUT needs settings:manage (Super Admin by default), sends only the fields to change, applies to new bookings only and is audit-logged. Out-of-range or unknown fields return 422."
           },
           "response": [],
           "event": [

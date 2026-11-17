@@ -58,6 +58,8 @@ export const calculatePriceSchema = z
     vehicleId: z.string().optional(),
     packageId: z.string().optional(),
     referralCode: z.string().optional(),
+    /** Admins only: quote with this customer's discounts. Ignored for others. */
+    customerId: z.string().optional(),
     customBasePrice: clientPriceOverride("customBasePrice").optional(),
     customPricePerKm: clientPriceOverride("customPricePerKm").optional(),
     customPricePerHour: clientPriceOverride("customPricePerHour").optional(),

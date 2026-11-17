@@ -9,6 +9,7 @@ import {
   BadRequestException,
 } from "../utils/errors";
 import { normalizeRoleName, USER_ROLES } from "../constants/roles";
+import SettingsService from "./settings.service";
 
 export class AdminService {
   public static async getDashboardStats() {
@@ -302,6 +303,7 @@ export class AdminService {
         update: {},
         create: {
           userId,
+          commissionRate: (await SettingsService.get()).defaultCommissionRate,
           fullName: user.name,
           pic: user.pic ?? "",
           phoneNumbers: user.phoneNumber
@@ -330,33 +332,6 @@ export class AdminService {
       where: { id: driverId },
       // OFF/ONLEAVE set here is locked for the driver app; ACTIVE unlocks it.
       data: { status, statusSetByAdmin: status !== DriverStatus.ACTIVE },
-    });
-  }
-
-  public static async getSystemSettings() {
-    let settings = await prismaClient.systemSettings.findUnique({ where: { id: "global" } });
-
-    if (!settings) {
-      settings = await prismaClient.systemSettings.create({ data: { id: "global" } });
-    }
-
-    return settings;
-  }
-
-  public static async updateSystemSettings(data: any) {
-    return await prismaClient.systemSettings.upsert({
-      where: { id: "global" },
-      create: {
-        id: "global",
-        performanceHistoryVisible: data.performanceHistoryVisible ?? true,
-        evaluationsVisible: data.evaluationsVisible ?? true,
-        selfAppraisalsVisible: data.selfAppraisalsVisible ?? true,
-      },
-      update: {
-        ...(data.performanceHistoryVisible !== undefined && { performanceHistoryVisible: data.performanceHistoryVisible }),
-        ...(data.evaluationsVisible !== undefined && { evaluationsVisible: data.evaluationsVisible }),
-        ...(data.selfAppraisalsVisible !== undefined && { selfAppraisalsVisible: data.selfAppraisalsVisible }),
-      },
     });
   }
 

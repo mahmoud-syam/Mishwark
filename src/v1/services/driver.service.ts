@@ -191,8 +191,10 @@ export class DriverService {
       }),
     ]);
 
-    const gross = totalRevenue._sum.totalPrice || 0;
-    const companyShare = Math.round(gross * (driver.commissionRate / 100));
+    // Money to the piaster, split the same way as the dashboard
+    // (AdminDashboardService.driverAnalytics): share first, net = gross - share.
+    const gross = Math.round((totalRevenue._sum.totalPrice || 0) * 100) / 100;
+    const companyShare = Math.round(gross * (driver.commissionRate / 100) * 100) / 100;
     return {
       totalTrips,
       completedTrips,
@@ -201,7 +203,7 @@ export class DriverService {
       // Same split the admin dashboard shows for this driver.
       commissionRate: driver.commissionRate,
       companyShare,
-      netEarnings: gross - companyShare,
+      netEarnings: Math.round((gross - companyShare) * 100) / 100,
       averageRating: averageRating._avg.overallRating || 5.0,
       rating: driver.rating,
     };

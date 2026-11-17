@@ -3,6 +3,7 @@ import { z } from "zod";
 import AdminService from "../services/admin.service";
 import { paramStr, queryNum, queryStr } from "../utils/routeParams";
 import AuditService from "../services/audit.service";
+import SettingsService, { updateSettingsSchema } from "../services/settings.service";
 import prismaClient from "../utils/prismaClientHelper";
 import { AuditAction } from "../../../generated/prisma";
 
@@ -91,18 +92,49 @@ export const toggleDriverStatus = async (req: Request, res: Response) => {
 };
 
 export const getSystemSettings = async (req: Request, res: Response) => {
-  const settings = await AdminService.getSystemSettings();
+  const settings = await SettingsService.getForAdmin();
   res.status(200).json({ success: true, data: settings });
 };
 
+/** Arabic names for the audit log (shown on the dashboard). */
+const SETTING_LABELS: Record<string, string> = {
+  depositRate: "نسبة العربون %",
+  bookingBufferMinutes: "الفاصل بين الرحلات (دقيقة)",
+  tripEarlyStartMinutes: "بدء الرحلة مبكراً (دقيقة)",
+  defaultCommissionRate: "عمولة السائق الجديد %",
+  referralRewardAmount: "مكافأة الإحالة",
+  referredDiscountAmount: "خصم العميل المدعو على أول حجز",
+  peakSurgeMultiplier: "مضاعف وقت الذروة",
+  vipSpendThreshold: "حد عميل VIP",
+  delayAlertMinutes: "تنبيه التأخير (دقيقة)",
+  punctualityGraceMinutes: "سماحية التأخير في البدء (دقيقة)",
+  complaintMaxRating: "تقييم الشكوى (أقل من أو يساوي)",
+  maintenanceAlertDays: "تنبيه الصيانة (يوم)",
+  performanceHistoryVisible: "performanceHistoryVisible",
+  evaluationsVisible: "evaluationsVisible",
+  selfAppraisalsVisible: "selfAppraisalsVisible",
+};
+
+const describeSettingsChange = (before: any, after: any): string => {
+  const parts: string[] = [];
+  for (const key of Object.keys(SETTING_LABELS)) {
+    if (before[key] !== after[key]) parts.push(`${SETTING_LABELS[key]}: ${before[key]} → ${after[key]}`);
+  }
+  for (const cat of Object.keys(after.categoryRates ?? {})) {
+    const b = before.categoryRates?.[cat] ?? {};
+    const a = after.categoryRates[cat];
+    for (const f of ["basePrice", "pricePerKm", "pricePerHour"]) {
+      if (b[f] !== a[f]) parts.push(`سعر ${cat} ${f}: ${b[f]} → ${a[f]}`);
+    }
+  }
+  return parts.join(" · ");
+};
+
 export const updateSystemSettings = async (req: Request, res: Response) => {
-  const before = await AdminService.getSystemSettings();
-  const settings = await AdminService.updateSystemSettings(req.body);
-  const details = AuditService.diff(before as any, settings as any, [
-    "performanceHistoryVisible",
-    "evaluationsVisible",
-    "selfAppraisalsVisible",
-  ]);
+  const input = updateSettingsSchema.parse(req.body);
+  const before = await SettingsService.getForAdmin();
+  const settings = await SettingsService.update(input);
+  const details = describeSettingsChange(before, settings);
   if (details) {
     await AuditService.record(actorOf(req), {
       action: AuditAction.UPDATE,

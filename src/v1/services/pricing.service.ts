@@ -1,6 +1,8 @@
 import prismaClient from "../utils/prismaClientHelper";
 import { VehicleCategory } from "../../../generated/prisma";
 import MapsService, { LocationInput } from "./maps.service";
+import SettingsService, { CategoryRate, DEFAULT_CATEGORY_RATES } from "./settings.service";
+import DiscountService from "./discount.service";
 
 export interface CalculatePriceParams {
   vehicleCategory?: VehicleCategory | string;
@@ -60,6 +62,10 @@ export interface PriceBreakdown {
   timePrice: number;
   surgeMultiplier: number;
   discountAmount: number;
+  /** Part of discountAmount from the customer's package. */
+  packageDiscount: number;
+  /** Part of discountAmount from the first-booking referral discount. */
+  referralDiscount: number;
   totalPrice: number;
   /** Deposit needed to confirm the booking. */
   depositRequired: number;
@@ -67,18 +73,24 @@ export interface PriceBreakdown {
   depositPaid: number;
 }
 
-export const CATEGORY_DEFAULT_RATES: Record<string, { basePrice: number; pricePerKm: number; pricePerHour: number }> = {
-  [VehicleCategory.CAR]: { basePrice: 50, pricePerKm: 10, pricePerHour: 25 },
-  [VehicleCategory.VAN]: { basePrice: 150, pricePerKm: 15, pricePerHour: 40 },
-  [VehicleCategory.BUS]: { basePrice: 300, pricePerKm: 25, pricePerHour: 60 },
-  [VehicleCategory.TRUCK]: { basePrice: 250, pricePerKm: 20, pricePerHour: 50 },
-  [VehicleCategory.CLASSIC]: { basePrice: 200, pricePerKm: 18, pricePerHour: 45 },
-  [VehicleCategory.LUXURY]: { basePrice: 350, pricePerKm: 30, pricePerHour: 75 },
-};
+/** Built-in defaults; the live values come from Settings (SettingsService). */
+export const CATEGORY_DEFAULT_RATES: Record<string, CategoryRate> = DEFAULT_CATEGORY_RATES;
 
-export function calculateEstimatedPrice(params: CalculatePriceParams & TrustedRates): PriceBreakdown {
+/** Settings the pure price function needs. Omitted = built-in defaults. */
+export interface PricingSettings {
+  /** Deposit in percent of the total (20 = 20%). */
+  depositRate?: number;
+  /** Package discount as a percent of the price (the package's discountPercentage). */
+  packageDiscountPercent?: number;
+  /** Surge used for peak hours when no explicit multiplier is given. */
+  peakSurgeMultiplier?: number;
+  categoryRates?: Record<string, CategoryRate>;
+}
+
+export function calculateEstimatedPrice(params: CalculatePriceParams & TrustedRates & PricingSettings): PriceBreakdown {
   const categoryKey = (params.vehicleCategory as string) || VehicleCategory.CAR;
-  const rates = CATEGORY_DEFAULT_RATES[categoryKey] || CATEGORY_DEFAULT_RATES[VehicleCategory.CAR];
+  const table = params.categoryRates ?? CATEGORY_DEFAULT_RATES;
+  const rates = table[categoryKey] || table[VehicleCategory.CAR] || CATEGORY_DEFAULT_RATES[VehicleCategory.CAR];
 
   const basePrice = params.basePrice ?? rates.basePrice;
   const pricePerKm = params.pricePerKm ?? rates.pricePerKm;
@@ -93,17 +105,21 @@ export function calculateEstimatedPrice(params: CalculatePriceParams & TrustedRa
 
   let surge = 1.0;
   if (params.isPeakHour) {
-    surge = params.surgeMultiplier && params.surgeMultiplier > 0 ? params.surgeMultiplier : 1.25;
+    surge = params.surgeMultiplier && params.surgeMultiplier > 0 ? params.surgeMultiplier : (params.peakSurgeMultiplier ?? 1.25);
   } else if (params.surgeMultiplier && params.surgeMultiplier > 0) {
     surge = params.surgeMultiplier;
   }
 
   const surchargedTotal = subtotal * surge;
-  const rawDiscount = (params.packageDiscount || 0) + (params.referralDiscount || 0);
-  const discountAmount = Math.min(surchargedTotal, Math.max(0, rawDiscount));
+  // Package first (a % of the price, or a fixed amount), then the referral
+  // amount on what is left; together they never exceed the price.
+  const packagePct = Math.max(0, Math.min(100, params.packageDiscountPercent || 0));
+  const packageAmount = Math.min(surchargedTotal, Math.max(0, (params.packageDiscount || 0) + surchargedTotal * (packagePct / 100)));
+  const referralAmount = Math.min(surchargedTotal - packageAmount, Math.max(0, params.referralDiscount || 0));
+  const discountAmount = packageAmount + referralAmount;
 
   const totalPrice = Math.max(0, Math.round((surchargedTotal - discountAmount) * 100) / 100);
-  const depositPaid = Math.round(totalPrice * 0.20 * 100) / 100;
+  const depositPaid = Math.round(totalPrice * ((params.depositRate ?? 20) / 100) * 100) / 100;
 
   return {
     basePrice,
@@ -111,6 +127,8 @@ export function calculateEstimatedPrice(params: CalculatePriceParams & TrustedRa
     timePrice: Math.round(timePrice * 100) / 100,
     surgeMultiplier: surge,
     discountAmount: Math.round(discountAmount * 100) / 100,
+    packageDiscount: Math.round(packageAmount * 100) / 100,
+    referralDiscount: Math.round(referralAmount * 100) / 100,
     totalPrice,
     depositRequired: depositPaid,
     depositPaid,
@@ -123,7 +141,7 @@ export class PricingService {
    * recomputed server-side and the client's own figures are reported back for
    * comparison; they are never priced.
    */
-  public static async quote(params: CalculatePriceParams): Promise<PriceQuote> {
+  public static async quote(params: CalculatePriceParams, customerId?: string): Promise<PriceQuote> {
     const wantsRoute = params.startPoint != null || params.endPoint != null;
 
     const route = wantsRoute
@@ -154,11 +172,14 @@ export class PricingService {
         }
       : null;
 
-    const breakdown = await this.calculatePrice({
-      ...params,
-      distanceKm,
-      durationMinutes,
-    });
+    const breakdown = await this.calculatePrice(
+      {
+        ...params,
+        distanceKm,
+        durationMinutes,
+      },
+      customerId
+    );
 
     return {
       breakdown,
@@ -176,15 +197,23 @@ export class PricingService {
     };
   }
 
-  public static async calculatePrice(params: CalculatePriceParams): Promise<PriceBreakdown> {
+  public static async calculatePrice(params: CalculatePriceParams, customerId?: string): Promise<PriceBreakdown> {
     // Rates are read from the vehicle row, never from the request. These start
     // undefined and are only filled from the database.
     let basePrice: number | undefined;
     let pricePerKm: number | undefined;
     let pricePerHour: number | undefined;
     let category = params.vehicleCategory;
-    let packageDiscount = params.packageDiscount || 0;
-    let referralDiscount = params.referralDiscount || 0;
+    // Surge and discounts are never taken from the request: a client could
+    // otherwise send surgeMultiplier 0.01 or a large discount. They come from
+    // Settings (peak surge) and from DiscountService (package %, referral).
+    let referralDiscount = 0;
+    const settings = await SettingsService.get();
+    const pricing: PricingSettings = {
+      depositRate: settings.depositRate,
+      peakSurgeMultiplier: settings.peakSurgeMultiplier,
+      categoryRates: settings.categoryRates,
+    };
 
     if (params.vehicleId) {
       try {
@@ -202,51 +231,26 @@ export class PricingService {
       }
     }
 
-    if (params.packageId && params.packageDiscount === undefined) {
-      try {
-        const pkg = await prismaClient.packages.findUnique({
-          where: { id: params.packageId },
-        });
-        if (pkg && pkg.discountPercentage > 0) {
-          // If discount percentage is provided in package
-          const tempEst = calculateEstimatedPrice({
-            vehicleCategory: category,
-            distanceKm: params.distanceKm,
-            durationMinutes: params.durationMinutes,
-            isPeakHour: params.isPeakHour,
-            surgeMultiplier: params.surgeMultiplier,
-            basePrice,
-            pricePerKm,
-            pricePerHour,
-          });
-          packageDiscount = tempEst.totalPrice * (pkg.discountPercentage / 100);
-        }
-      } catch (err) {
-        // Fallback
-      }
-    }
-
-    if (params.referralCode && params.referralDiscount === undefined) {
-      try {
-        const ref = await prismaClient.referrals.findFirst({
-          where: { referralCode: params.referralCode },
-        });
-        if (ref && ref.rewardAmount > 0) {
-          referralDiscount = ref.rewardAmount;
-        }
-      } catch (err) {
-        // Fallback
-      }
+    // Discounts depend on who the quote is for: their own active package and
+    // their first-booking referral discount. Anonymous quotes get none.
+    let packageDiscountPercent = 0;
+    if (customerId) {
+      const pkg = await DiscountService.resolvePackage(prismaClient, params.packageId, customerId, false);
+      packageDiscountPercent = pkg?.discountPercentage ?? 0;
+      referralDiscount = await DiscountService.referralDiscount(prismaClient, customerId);
     }
 
     return calculateEstimatedPrice({
-      ...params,
       vehicleCategory: category,
+      distanceKm: params.distanceKm,
+      durationMinutes: params.durationMinutes,
+      isPeakHour: params.isPeakHour,
       basePrice,
       pricePerKm,
       pricePerHour,
-      packageDiscount,
+      packageDiscountPercent,
       referralDiscount,
+      ...pricing,
     });
   }
 }

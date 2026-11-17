@@ -8,6 +8,8 @@ import { ErrorCodes } from "../exceptions/root";
 import jwt from "jsonwebtoken";
 import { randomInt } from "crypto";
 import SmsService from "../services/sms.service";
+import SettingsService from "../services/settings.service";
+import { ReferralStatus } from "../../../generated/prisma";
 import { authCookieOptions, clearAuthCookieOptions } from "../utils/authCookie";
 
 const OTP_TTL_MINUTES = Number(process.env.OTP_TTL_MINUTES ?? 5);
@@ -110,6 +112,7 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
                 await prisma.drivers.create({
                     data: {
                         userId: createdUser.id,
+                        commissionRate: (await SettingsService.get()).defaultCommissionRate,
                         fullName: name,
                         licenseNumber: licenseNumber ?? "",
                         licenseExpiry: licenseExpiry ? new Date(licenseExpiry) : null,
@@ -119,6 +122,20 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
                                 create: phoneNumbersList.map((number) => ({ number })),
                             }
                             : undefined,
+                    },
+                });
+            }
+
+            // Signing up with a code used to set referredById only, so no
+            // Referrals row existed and the referrer was never rewarded.
+            if (referredById && referralCode) {
+                await prisma.referrals.create({
+                    data: {
+                        referrerId: referredById,
+                        referredId: createdUser.id,
+                        referralCode,
+                        status: ReferralStatus.PENDING,
+                        rewardAmount: (await SettingsService.get()).referralRewardAmount,
                     },
                 });
             }
@@ -460,6 +477,7 @@ export const otpRequest = async (req: Request, res: Response, next: NextFunction
                     await prisma.drivers.create({
                         data: {
                             userId: createdUser.id,
+                            commissionRate: (await SettingsService.get()).defaultCommissionRate,
                             fullName: createdUser.name,
                             licenseNumber: licenseNumber ?? "",
                             pic: "",

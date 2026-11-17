@@ -3,5 +3,35 @@ model SystemSettings {
   performanceHistoryVisible Boolean  @default(true)
   evaluationsVisible        Boolean  @default(true)
   selfAppraisalsVisible     Boolean  @default(true)
+
+  // Bookings & payments
+  /// Deposit asked for at booking time, in percent of the total price.
+  depositRate               Float    @default(20)
+  /// Free time required between two trips of the same vehicle or driver.
+  bookingBufferMinutes      Int      @default(60)
+  /// How early a driver may start a trip before its scheduled time.
+  tripEarlyStartMinutes     Int      @default(120)
+
+  // Money
+  /// Commission (percent) given to newly created drivers.
+  defaultCommissionRate     Float    @default(20)
+  /// Wallet credit the referrer gets when the referred customer's trip completes.
+  referralRewardAmount      Float    @default(25)
+  /// Amount taken off the first booking of a customer who joined with a referral code.
+  referredDiscountAmount    Float    @default(25)
+  /// Price multiplier for peak-hour bookings.
+  peakSurgeMultiplier       Float    @default(1.25)
+
+  // Dashboard alerts
+  vipSpendThreshold         Float    @default(15000)
+  delayAlertMinutes         Int      @default(5)
+  punctualityGraceMinutes   Int      @default(10)
+  complaintMaxRating        Int      @default(2)
+  maintenanceAlertDays      Int      @default(7)
+
+  /// Default prices per vehicle category: { CAR: { basePrice, pricePerKm, pricePerHour }, ... }.
+  /// Null = built-in defaults. A vehicle's own prices still override these.
+  categoryRates             Json?
+
   updatedAt                 DateTime @updatedAt
 }

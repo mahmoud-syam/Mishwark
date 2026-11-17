@@ -17,6 +17,7 @@ import { isSuperAdminRole, USER_ROLES } from "../constants/roles";
 import BookingService from "./booking.service";
 import AuditService, { AuditActor } from "./audit.service";
 import PaymentService from "./payment.service";
+import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
 import {
   addDays,
   addMonths,
@@ -30,17 +31,11 @@ import {
 /** Bookings that represent money the business has earned or locked in. */
 const REVENUE_STATUSES: BookingStatus[] = [BookingStatus.CONFIRMED, BookingStatus.COMPLETED];
 const LIVE_TRIP_STATUSES: TripStatus[] = [TripStatus.INPROGRESS, TripStatus.ARRIVED];
-/** A review at or below this rating is surfaced to admins as a complaint. */
-export const COMPLAINT_MAX_RATING = 2;
-/** A trip that started this many minutes after its slot counts as late. */
-const PUNCTUALITY_GRACE_MINUTES = 10;
-/** Trips projected to finish this late are flagged on the live screen. */
-const DELAY_ALERT_MINUTES = 5;
-const MAINTENANCE_ALERT_DAYS = 7;
-/** Lifetime spend that earns the VIP badge on customer analytics. */
-const VIP_SPEND_THRESHOLD = 15_000;
-/** Matches the deposit the pricing engine asks for. */
-const DEPOSIT_RATE = 0.2;
+/**
+ * Thresholds (complaint rating, punctuality grace, delay alert, maintenance
+ * alert, VIP spend, deposit %) come from the Settings page: SettingsService.
+ */
+export const COMPLAINT_MAX_RATING = DEFAULT_SETTINGS.complaintMaxRating;
 
 export type AnalyticsPeriod = "day" | "month" | "year";
 
@@ -107,6 +102,7 @@ export interface BookOnBehalfInput {
 export class AdminDashboardService {
   // ---------------------------------------------------------------- overview
   public static async overview() {
+    const cfg = await SettingsService.get();
     const today = dateKey();
     const yesterday = addDays(today, -1);
     const mStart = monthStart(today);
@@ -117,7 +113,7 @@ export class AdminDashboardService {
     const lmEnd = lmSpanEnd < lmEndCap ? lmSpanEnd : lmEndCap;
     const weekStart = addDays(today, -6);
     const now = new Date();
-    const maintenanceHorizon = new Date(now.getTime() + MAINTENANCE_ALERT_DAYS * 86_400_000);
+    const maintenanceHorizon = new Date(now.getTime() + cfg.maintenanceAlertDays * 86_400_000);
     const complaintsSince = new Date(now.getTime() - 7 * 86_400_000);
 
     const [
@@ -161,7 +157,7 @@ export class AdminDashboardService {
       prismaClient.reviews.findMany({
         where: {
           reviewerType: ReviewerType.CUSTOMER_TO_DRIVER,
-          overallRating: { lte: COMPLAINT_MAX_RATING },
+          overallRating: { lte: cfg.complaintMaxRating },
           createdAt: { gte: complaintsSince },
         },
         include: { reviewee: { select: { id: true, name: true, drivers: { select: { id: true } } } } },
@@ -230,6 +226,7 @@ export class AdminDashboardService {
 
   // ------------------------------------------------------- drivers summary
   public static async driversSummary(limit = 3) {
+    const cfg = await SettingsService.get();
     const today = dateKey();
     const mStart = monthStart(today);
     const drivers = await prismaClient.drivers.findMany({
@@ -263,7 +260,7 @@ export class AdminDashboardService {
         where: {
           revieweeId: { in: userIds },
           reviewerType: ReviewerType.CUSTOMER_TO_DRIVER,
-          overallRating: { lte: COMPLAINT_MAX_RATING },
+          overallRating: { lte: cfg.complaintMaxRating },
         },
         _count: { _all: true },
       }),
@@ -334,6 +331,8 @@ export class AdminDashboardService {
         eventType: b.eventType,
         packageId: b.packageId,
         totalPrice: b.totalPrice,
+        packageDiscount: b.packageDiscount,
+        referralDiscount: b.referralDiscount,
         paymentStatus: b.paymentStatus,
         depositRequired: b.depositRequired,
         paid: b.depositPaid,
@@ -351,6 +350,7 @@ export class AdminDashboardService {
 
   // ------------------------------------------------------------ live trips
   public static async liveTrips() {
+    const cfg = await SettingsService.get();
     const rows = await prismaClient.bookings.findMany({
       where: { tripStatus: { in: LIVE_TRIP_STATUSES }, status: { not: BookingStatus.CANCELLED } },
       orderBy: [{ bookingDate: "asc" }, { startTime: "asc" }],
@@ -401,7 +401,7 @@ export class AdminDashboardService {
         elapsedMinutes: Math.round(elapsedMinutes),
         remainingMinutes: Math.round(remainingMinutes),
         delayMinutes: Math.round(delayMinutes),
-        isDelayed: delayMinutes >= DELAY_ALERT_MINUTES,
+        isDelayed: delayMinutes >= cfg.delayAlertMinutes,
         progress: total > 0 ? round(Math.min(1, elapsedMinutes / total), 3) : 0,
       };
     });
@@ -409,6 +409,7 @@ export class AdminDashboardService {
 
   // ------------------------------------------------------ driver analytics
   public static async driverAnalytics(driverId: string, period: AnalyticsPeriod) {
+    const cfg = await SettingsService.get();
     const driver = await prismaClient.drivers.findUnique({
       where: { id: driverId },
       select: { id: true, fullName: true, status: true, commissionRate: true, userId: true, user: { select: { name: true } } },
@@ -432,7 +433,7 @@ export class AdminDashboardService {
         _count: { _all: true },
       }),
       prismaClient.reviews.count({
-        where: { revieweeId: driver.userId, reviewerType: ReviewerType.CUSTOMER_TO_DRIVER, overallRating: { lte: COMPLAINT_MAX_RATING } },
+        where: { revieweeId: driver.userId, reviewerType: ReviewerType.CUSTOMER_TO_DRIVER, overallRating: { lte: cfg.complaintMaxRating } },
       }),
       prismaClient.bookings.findMany({
         where: { driverId, tripStartedAt: { not: null } },
@@ -447,10 +448,10 @@ export class AdminDashboardService {
     ]);
 
     const inRange = earning.filter((r) => r.bookingDate >= range.from && r.bookingDate <= range.to);
-    const periodIncome = inRange.reduce((s, r) => s + r.totalPrice, 0);
-    const lifetimeIncome = earning.reduce((s, r) => s + r.totalPrice, 0);
+    const periodIncome = round(inRange.reduce((s, r) => s + r.totalPrice, 0), 2);
+    const lifetimeIncome = round(earning.reduce((s, r) => s + r.totalPrice, 0), 2);
     const onTime = punctualityRows.filter(
-      (r) => r.tripStartedAt!.getTime() <= zonedToInstant(r.bookingDate, r.startTime).getTime() + PUNCTUALITY_GRACE_MINUTES * 60_000
+      (r) => r.tripStartedAt!.getTime() <= zonedToInstant(r.bookingDate, r.startTime).getTime() + cfg.punctualityGraceMinutes * 60_000
     ).length;
 
     return {
@@ -460,13 +461,15 @@ export class AdminDashboardService {
       periodStats: {
         trips: allCount,
         driverIncome: periodIncome,
-        companyShare: round(periodIncome * rate),
-        driverNet: round(periodIncome * (1 - rate)),
+        // To the piaster, net = income - share, so the two always add up and
+        // match GET /driver/stats in the driver app.
+        companyShare: round(periodIncome * rate, 2),
+        driverNet: round(periodIncome - round(periodIncome * rate, 2), 2),
       },
       lifetime: {
         trips: earning.length,
         driverIncome: lifetimeIncome,
-        companyShare: round(lifetimeIncome * rate),
+        companyShare: round(lifetimeIncome * rate, 2),
         averageTripValue: earning.length ? round(lifetimeIncome / earning.length) : 0,
       },
       quality: {
@@ -476,8 +479,8 @@ export class AdminDashboardService {
         punctualityRate: punctualityRows.length ? round((onTime / punctualityRows.length) * 100) : null,
       },
       chart: buckets.map((b) => {
-        const income = sumInBucket(earning, b, (r) => r.totalPrice);
-        return { key: b.key, income, share: round(income * rate) };
+        const income = round(sumInBucket(earning, b, (r) => r.totalPrice), 2);
+        return { key: b.key, income, share: round(income * rate, 2) };
       }),
       recentTrips: recent.map((b) => ({
         id: b.id,
@@ -515,6 +518,7 @@ export class AdminDashboardService {
 
   // ---------------------------------------------------- customer analytics
   public static async customerAnalytics(customerId: string, period: AnalyticsPeriod) {
+    const cfg = await SettingsService.get();
     const customer = await prismaClient.users.findFirst({
       where: { id: customerId, isDeleted: false },
       select: { id: true, name: true, phoneNumber: true, email: true, createdAt: true, customerRating: true, role: { select: { name: true } } },
@@ -556,7 +560,7 @@ export class AdminDashboardService {
         email: customer.email,
         memberSince: customer.createdAt,
         rating: customer.customerRating,
-        isVip: lifetimeSpend >= VIP_SPEND_THRESHOLD,
+        isVip: lifetimeSpend >= cfg.vipSpendThreshold,
       },
       period,
       range,
@@ -657,7 +661,11 @@ export class AdminDashboardService {
 
     if (input.priceOverride !== undefined && input.priceOverride !== computedPrice) {
       data.totalPrice = finalPrice;
-      data.depositRequired = Math.round(finalPrice * DEPOSIT_RATE * 100) / 100;
+      // An overridden price replaces any discount that was computed.
+      data.packageDiscount = 0;
+      data.referralDiscount = 0;
+      const { depositRate } = await SettingsService.get();
+      data.depositRequired = Math.round(finalPrice * (depositRate / 100) * 100) / 100;
       data.notes = [booking.notes, `[price override: ${computedPrice} → ${finalPrice}]`].filter(Boolean).join("\n");
     }
 

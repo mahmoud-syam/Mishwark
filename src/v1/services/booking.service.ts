@@ -24,6 +24,9 @@ import { getDriverIdForUser } from "./role.service";
 import { isAdminRole, normalizeRoleName, USER_ROLES } from "../constants/roles";
 import { dateKey, zonedToInstant } from "../utils/businessTime";
 import ReferralService from "./referral.service";
+import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
+import DiscountService from "./discount.service";
+import PackageService from "./package.service";
 
 export function checkSlotOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
   const toMins = (t: string) => {
@@ -40,10 +43,12 @@ export function checkSlotOverlap(startA: string, endA: string, startB: string, e
   return sA < eB && sB < eA;
 }
 
-/** Turnaround between two trips of the same vehicle or driver (cleaning, travel). */
-export const BOOKING_BUFFER_MINUTES = Number(process.env.BOOKING_BUFFER_MINUTES ?? 60);
-/** How early (before the slot) a driver may start a trip. Admins are exempt. */
-export const TRIP_EARLY_START_MINUTES = Number(process.env.TRIP_EARLY_START_MINUTES ?? 120);
+/**
+ * Defaults only. The live values are edited on the dashboard's Settings page
+ * (SettingsService: bookingBufferMinutes, tripEarlyStartMinutes).
+ */
+export const BOOKING_BUFFER_MINUTES = DEFAULT_SETTINGS.bookingBufferMinutes;
+export const TRIP_EARLY_START_MINUTES = DEFAULT_SETTINGS.tripEarlyStartMinutes;
 
 const shiftTime = (t: string, minutes: number) => {
   const [h, m] = (t || "00:00").split(":").map((x) => parseInt(x || "0", 10));
@@ -211,7 +216,9 @@ export class BookingService {
       throw new BadRequestException("Cannot book a trip for a past date");
     }
 
-    return await prismaClient.$transaction(async (tx) => {
+    const settings = await SettingsService.get();
+
+    const created = await prismaClient.$transaction(async (tx) => {
       // 1. Vehicle check
       const vehicle = await tx.vehicles.findUnique({
         where: { id: data.vehicleId },
@@ -280,9 +287,9 @@ export class BookingService {
       });
 
       for (const existing of existingBookings) {
-        if (checkSlotOverlapWithBuffer(data.startTime, data.endTime, existing.startTime, existing.endTime)) {
+        if (checkSlotOverlapWithBuffer(data.startTime, data.endTime, existing.startTime, existing.endTime, settings.bookingBufferMinutes)) {
           throw new ConflictException(
-            `Vehicle or driver has a booking within ${BOOKING_BUFFER_MINUTES} minutes of this time slot`
+            `Vehicle or driver has a booking within ${settings.bookingBufferMinutes} minutes of this time slot`
           );
         }
       }
@@ -295,13 +302,23 @@ export class BookingService {
       // alongside it for auditing.
       const route = await MapsService.route(data.startPoint, data.endPoint);
 
-      // 6. Calculate price estimate from the server-computed distance
+      // 6. Discounts: the customer's own active package (% set by an admin) and
+      // the referral discount on a referred customer's first booking.
+      const pkg = await DiscountService.resolvePackage(tx, data.packageId, customerId, true);
+      const referralDiscount = await DiscountService.referralDiscount(tx, customerId);
+
+      // 7. Calculate price estimate from the server-computed distance
       const priceEstimate = calculateEstimatedPrice({
+        packageDiscountPercent: pkg?.discountPercentage ?? 0,
+        referralDiscount,
         vehicleCategory: vehicle.category,
         distanceKm: route.distanceKm,
         durationMinutes: route.durationMinutes,
+        // The client's surgeMultiplier is ignored: the peak surge comes from Settings.
         isPeakHour: data.isPeakHour,
-        surgeMultiplier: data.surgeMultiplier,
+        depositRate: settings.depositRate,
+        peakSurgeMultiplier: settings.peakSurgeMultiplier,
+        categoryRates: settings.categoryRates,
         basePrice: vehicle.basePrice > 0 ? vehicle.basePrice : undefined,
         pricePerKm: vehicle.pricePerKm > 0 ? vehicle.pricePerKm : undefined,
         pricePerHour: vehicle.pricePerHour > 0 ? vehicle.pricePerHour : undefined,
@@ -334,6 +351,8 @@ export class BookingService {
           basePrice: priceEstimate.basePrice,
           distancePrice: priceEstimate.distancePrice,
           totalPrice: priceEstimate.totalPrice,
+          packageDiscount: priceEstimate.packageDiscount,
+          referralDiscount: priceEstimate.referralDiscount,
           depositRequired: priceEstimate.depositPaid,
           depositPaid: 0,
           paymentStatus: PaymentStatus.UNPAID,
@@ -365,6 +384,10 @@ export class BookingService {
 
       return newBooking;
     });
+
+    // The package's total is the sum of its bookings' (discounted) prices.
+    if (created.packageId) await PackageService.recalculatePackageTotal(created.packageId);
+    return created;
   }
 
   public static async cancelBooking(bookingId: string, cancelledByUserId?: string) {
@@ -598,10 +621,11 @@ export class BookingService {
     if (newTripStatus === TripStatus.INPROGRESS && user) {
       const roleName = normalizeRoleName(typeof user.role === "string" ? user.role : user.role?.name);
       if (roleName === null || !isAdminRole(roleName)) {
+        const { tripEarlyStartMinutes } = await SettingsService.get();
         const slotStart = zonedToInstant(booking.bookingDate, booking.startTime).getTime();
-        if (Date.now() < slotStart - TRIP_EARLY_START_MINUTES * 60_000) {
+        if (Date.now() < slotStart - tripEarlyStartMinutes * 60_000) {
           throw new BadRequestException(
-            `This trip can be started from ${TRIP_EARLY_START_MINUTES} minutes before its scheduled time`
+            `This trip can be started from ${tripEarlyStartMinutes} minutes before its scheduled time`
           );
         }
       }

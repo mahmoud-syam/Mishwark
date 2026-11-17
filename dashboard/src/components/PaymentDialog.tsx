@@ -93,6 +93,13 @@ export default function PaymentDialog({ booking, onClose }: { booking: Booking; 
           العربون المطلوب للتأكيد: <b className="text-cream">{egp(booking.depositRequired)}</b>
           {depositDue > 0 ? <span className="text-gold"> · لسه {egp(depositDue)}</span> : <span className="text-mint"> · اتدفع ✓</span>}
         </p>
+        {(booking.packageDiscount > 0 || booking.referralDiscount > 0) && (
+          <p className="text-[11px] text-muted">
+            الإجمالي بعد الخصم
+            {booking.packageDiscount > 0 && <span> · خصم الباكدج <b className="text-mint">{egp(booking.packageDiscount)}</b></span>}
+            {booking.referralDiscount > 0 && <span> · خصم الإحالة <b className="text-mint">{egp(booking.referralDiscount)}</b></span>}
+          </p>
+        )}
 
         {booking.payments.length > 0 && (
           <ul className="flex flex-col gap-1.5">

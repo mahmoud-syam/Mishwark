@@ -3,6 +3,7 @@ import BookingService, { ListBookingsParams, bookingPartyOf } from "../services/
 import prismaClient from "../utils/prismaClientHelper";
 import { ForbiddenException, NotFoundException } from "../utils/errors";
 import PricingService from "../services/pricing.service";
+import { isAdminRole, normalizeRoleName } from "../constants/roles";
 import MapsService from "../services/maps.service";
 import { queryNum, queryStr } from "../utils/routeParams";
 import {
@@ -15,7 +16,12 @@ export const calculatePrice = async (req: Request, res: Response) => {
   // Parsed rather than passed through: this endpoint is public, and the schema
   // is what rejects client-supplied price overrides.
   const input = calculatePriceSchema.parse(req.body);
-  const quote = await PricingService.quote(input);
+  // Discounts are for the caller. An admin quoting for a customer (booking on
+  // their behalf) passes customerId to see that customer's discounts.
+  const user: any = (req as any).user;
+  const roleName = normalizeRoleName(user?.role?.name);
+  const forCustomer = input.customerId && roleName && isAdminRole(roleName) ? input.customerId : user?.id;
+  const quote = await PricingService.quote(input, forCustomer);
 
   res.status(200).json({
     success: true,

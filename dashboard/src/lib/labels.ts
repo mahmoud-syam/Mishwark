@@ -26,3 +26,24 @@ export const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
   ADMIN: "Admin",
 };
+
+export const VEHICLE_CATEGORY: Record<string, string> = {
+  CAR: "ملاكي",
+  VAN: "فان",
+  BUS: "باص",
+  TRUCK: "نقل",
+  CLASSIC: "كلاسيك",
+  LUXURY: "فاخرة",
+};
+
+export const PACKAGE_TYPE: Record<string, string> = {
+  MULTI_CAR: "كذا عربية",
+  MULTI_EVENT: "كذا مناسبة",
+};
+
+export const PACKAGE_STATUS: Record<string, { label: string; tone: Tone }> = {
+  ACTIVE: { label: "شغّالة", tone: "mint" },
+  COMPLETED: { label: "خلصت", tone: "muted" },
+  CANCELLED: { label: "ملغية", tone: "rose" },
+  EXPIRED: { label: "منتهية", tone: "muted" },
+};

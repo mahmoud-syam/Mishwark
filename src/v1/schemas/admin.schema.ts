@@ -29,11 +29,7 @@ export const updateUserRoleSchema = z.object({
   roleId: z.string().min(1),
 });
 
-export const systemSettingsSchema = z.object({
-  performanceHistoryVisible: z.boolean().optional(),
-  evaluationsVisible: z.boolean().optional(),
-  selfAppraisalsVisible: z.boolean().optional(),
-});
+// Settings body schema: updateSettingsSchema in services/settings.service.ts
 
 export const toggleDriverStatusSchema = z.object({
   status: z.enum(["ACTIVE", "OFF", "ONLEAVE"]),

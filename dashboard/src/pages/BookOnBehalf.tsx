@@ -13,6 +13,7 @@ interface Estimate {
   distancePrice: number;
   timePrice: number;
   totalPrice: number;
+  referralDiscount: number;
 }
 
 const addHours = (hhmm: string, h: number) => {
@@ -75,14 +76,15 @@ export default function BookOnBehalf() {
 
   const fromValue = toPlaceValue(from);
   const toValue = toPlaceValue(to);
-  const estimateKey = useDebounced(JSON.stringify([vehicleId, fromValue, toValue]), 450);
+  const estimateKey = useDebounced(JSON.stringify([vehicleId, fromValue, toValue, customer?.id ?? null]), 450);
   const estimate = useQuery({
     queryKey: ["estimate", estimateKey],
     queryFn: () => {
-      const [v, s, e] = JSON.parse(estimateKey);
-      return api.post<Estimate>("/bookings/estimate-price", { vehicleId: v, startPoint: s, endPoint: e });
+      const [v, s, e, c] = JSON.parse(estimateKey);
+      // With the customer, the quote includes their first-booking referral discount.
+      return api.post<Estimate>("/bookings/estimate-price", { vehicleId: v, startPoint: s, endPoint: e, ...(c ? { customerId: c } : {}) });
     },
-    enabled: Boolean(vehicleId && fromValue && toValue) && estimateKey === JSON.stringify([vehicleId, fromValue, toValue]),
+    enabled: Boolean(vehicleId && fromValue && toValue) && estimateKey === JSON.stringify([vehicleId, fromValue, toValue, customer?.id ?? null]),
     retry: false,
   });
 
@@ -213,6 +215,7 @@ export default function BookOnBehalf() {
               <span>أساسي {num(estimate.data.basePrice)}</span>
               <span>مسافة {num(estimate.data.distancePrice)}</span>
               {estimate.data.timePrice > 0 && <span>وقت {num(estimate.data.timePrice)}</span>}
+              {estimate.data.referralDiscount > 0 && <span className="text-mint">خصم أول حجز (إحالة) −{num(estimate.data.referralDiscount)}</span>}
             </div>
           )}
           {estimate.error && <p className="mb-3 text-[11px] text-rose">{estimate.error instanceof ApiError ? estimate.error.message : "مش قادر أحسب السعر دلوقتي."}</p>}

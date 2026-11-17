@@ -24,6 +24,7 @@ import {
   VehicleCategory,
   VehicleStatus,
   WalletTransactionType,
+  PackageType,
 } from "../../generated/prisma";
 import prisma from "../../src/v1/utils/prismaClientHelper";
 import { addDays, dateKey, zonedToInstant } from "../../src/v1/utils/businessTime";
@@ -103,6 +104,7 @@ async function cleanup() {
   await prisma.vehicles.deleteMany({ where: { id: { in: vehicleIds } } });
   await prisma.phoneNumbers.deleteMany({ where: { OR: [{ userId: { in: userIds } }, { driversId: { in: driverIds } }] } });
   await prisma.drivers.deleteMany({ where: { id: { in: driverIds } } });
+  await prisma.packages.deleteMany({ where: { customerId: { in: userIds } } });
   await prisma.users.updateMany({ where: { referredById: { in: userIds } }, data: { referredById: null } });
   await prisma.users.deleteMany({ where: { id: { in: userIds } } });
 }
@@ -360,6 +362,34 @@ async function main() {
       { userId: hind.id, amount: 50, type: WalletTransactionType.MANUAL_ADJUSTMENT, description: "تعويض تأخير" },
     ],
   });
+
+  // ---- packages: one waiting for an admin to set its discount, one at 10%
+  const upcomingPending = (customerId: string) =>
+    prisma.bookings.findMany({
+      where: { customerId, status: BookingStatus.PENDING, depositPaid: 0, bookingDate: { gt: today } },
+      orderBy: { bookingDate: "asc" },
+      take: 2,
+    });
+  const demoPackages = [
+    { customer: customers[1], name: "زفة فرح — 3 عربيات", type: PackageType.MULTI_CAR, pct: 0 },
+    { customer: customers[6], name: "خطوبة وكتب كتاب", type: PackageType.MULTI_EVENT, pct: 10 },
+  ];
+  for (const dp of demoPackages) {
+    const pkg = await prisma.packages.create({
+      data: { customerId: dp.customer.id, packageName: dp.name, packageType: dp.type, discountPercentage: dp.pct },
+    });
+    let total = 0;
+    for (const b of await upcomingPending(dp.customer.id)) {
+      const packageDiscount = Math.round(b.totalPrice * dp.pct) / 100;
+      const totalPrice = Math.round((b.totalPrice - packageDiscount) * 100) / 100;
+      await prisma.bookings.update({
+        where: { id: b.id },
+        data: { packageId: pkg.id, packageDiscount, totalPrice, depositRequired: Math.round(totalPrice * 20) / 100 },
+      });
+      total += totalPrice;
+    }
+    await prisma.packages.update({ where: { id: pkg.id }, data: { totalPrice: Math.round(total * 100) / 100 } });
+  }
 
   // ---- a few audit entries so the log isn't empty on first open
   if (admin) {

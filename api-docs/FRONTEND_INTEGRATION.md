@@ -299,6 +299,22 @@ POST /bookings/estimate-price
 }
 ```
 
+> **Package and referral discounts.** Send the Bearer token with
+> `POST /bookings/estimate-price` so the quote includes the customer's own
+> discounts; the response has `packageDiscount` and `referralDiscount`, and the
+> booking stores the same fields. A package's discount % is set by an admin, so
+> a new package starts at 0% (`discountPercentage` in `POST /packages` is
+> ignored). A referred customer gets the referral discount on their first
+> booking automatically; `POST /referrals/apply` returns 400 once they have
+> booked, so offer the code field only before the first booking.
+
+> **Pricing fields the server ignores.** `surgeMultiplier`, `packageDiscount`
+> and `referralDiscount` in a request body are ignored. The server applies the
+> peak surge from the admin Settings when `isPeakHour` is true, and discounts
+> only from `packageId` / `referralCode`. Deposit % and default prices per car
+> type are also admin settings, so always show the amounts the API returns.
+
+
 Each endpoint accepts exactly one location shape:
 `{latitude, longitude}`, `{startLat, startLng}`, `{lat, lng}`, or a plain place
 name string (geocoded). Free text geocoding needs `ORS_API_KEY`; without it the

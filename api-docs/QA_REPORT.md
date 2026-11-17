@@ -84,47 +84,11 @@ then the server logs a production warning on every start.
 | F-16 | Medium | Invalid input on 10 endpoints returned **500**, and unexpected errors returned the raw Prisma message with server file paths. | One error middleware: validation → 422, malformed JSON → 400, known database errors → 404/409/400, everything else → a generic 500 (details logged only). |
 | F-17 | Low | The past-date check used the UTC day. | Uses the Cairo day. |
 | F-18 | High | The auth cookie was hard-coded `httpOnly: false, secure: false` with a 7-day life, so any script on the dashboard could read the admin token and it could travel over plain HTTP. | `httpOnly` always, `secure` in production (`COOKIE_SECURE` override), 24 h life to match the JWT. One helper: `utils/authCookie.ts`. Apps unaffected (they use the body token). |
-
-### Contract changes the mobile apps must handle
-
-1. **404 instead of data:** a booking, chat or payment that isn't the caller's now returns 404. The apps should never need someone else's, so normal flows are unaffected.
-2. **Reviews:** `revieweeId` is now optional. The server fills it in from the booking, and sending a wrong one returns 400.
-3. **Cancelling and refunds:** a driver cancelling a booking now gets 403, and refunds are admin-only.
-4. **`/driver/stats`:** three new fields (additive, nothing removed).
-5. **Production login:** with `NODE_ENV=production`, the code `0000` no longer works. The apps must use the real code.
-
----
-
-## Product decisions (agreed and implemented)
-
-| # | Decision | What changed |
-|---|---|---|
-| D-1 | Payments are confirmed by the **admin or the assigned driver** | `PATCH /payments/:id/status`: admin any method, driver CASH only, customer 403. The dashboard has a payment window on the day view (confirm/reject pending payments, record money received). Every settlement is audit-logged. |
-| D-2 | **Deposit required vs. paid** | New `depositRequired` (20%). `depositPaid` is now the sum of confirmed payments (migration backfilled existing rows from their payments). The customer can pay the deposit or the full amount. |
-| D-3 | Drivers start a trip **at most 2 hours early** | Enforced in Cairo time (`TRIP_EARLY_START_MINUTES`). Admins are exempt. |
-| D-4 | Referral reward is **automatic** | Paid by the server when the referred customer's trip completes, idempotent (no double credit). The public `POST /referrals/:id/complete` was removed. |
-| D-5 | **Several trips per vehicle per day, 60 minutes apart** | Only BLOCKED days are closed. Overlap check includes a turnaround buffer (`BOOKING_BUFFER_MINUTES`). Cancelling one trip keeps the day booked if others remain. |
-| D-6 | Booking confirmed **automatically by the deposit**, or manually by driver/admin | Customers can no longer confirm their own booking. |
-| D-7 | A leave set by an admin is **lifted only by an admin** | New `Drivers.statusSetByAdmin`. Driver app gets 403 while it's set. The dashboard shows 🔒 on the driver. |
-
-Migration: `prisma/migrations/20261116150000_booking_rules` (deposit split + backfill, admin status lock, OTP columns).
-
-### What the mobile developers need to update
-
-1. **Customer app:**
-   - After creating a payment, show "waiting for confirmation". The app can no longer mark it paid.
-   - Show `depositRequired` from the booking or the quote.
-   - Remove any "confirm booking" action.
-2. **Driver app:**
-   - Add a "confirm booking" button on pending bookings, and "cash received" (`PATCH /payments/:id/status` SUCCESS on a CASH payment).
-   - "Start trip" is rejected before confirmation or more than 2 hours early.
-   - Show the 403 message when the admin locked the status.
-3. **Both apps:**
-   - Handle 429 (wait 60 seconds) and "OTP code expired" on login.
-   - Stop calling `/referrals/:id/complete`.
-
-## Other notes (not changed)
-
-- **UTC date check (fixed):** the past-date check now uses the Cairo calendar day. With the UTC date, booking for "today" was rejected between midnight and 02:00.
-- **Auth cookie:** the auth cookie is `httpOnly: false, secure: false`. Making it `httpOnly` and `secure` in production would protect admin sessions from XSS. Check first that no client reads it from JS.
-- **Public driver profile:** `GET /driver/:id` is public. Confirm it exposes no personal data beyond name and rating.
+| F-19 | Critical | `POST /bookings` and the price estimate trusted `surgeMultiplier`, `packageDiscount` and `referralDiscount` from the request: a customer could send `surgeMultiplier: 0.01` and pay 1% of the price. | Ignored server-side. The peak surge comes from Settings (applied when `isPeakHour` is true); discounts come only from `packageId` / `referralCode`. Old app builds that send the fields keep working. |
+| F-20 | High | `PUT /admin/settings` had no permission check (any admin) and no body validation. | Requires `settings:manage` (Super Admin by default); body validated with ranges, unknown fields refused (422). |
+| F-21 | High | Package and referral discounts showed on the estimate but `POST /bookings` never applied them: the customer saw one price and was charged another. | The booking now carries `packageDiscount` and `referralDiscount`; deposit and package total follow the discounted price. |
+| F-22 | Critical | A customer set their own package discount (`discountPercentage` up to 100%), and a booking could use any package id, including another customer's. | The customer's value is ignored; an admin sets the % (`PATCH /admin/packages/:id/discount`). A booking may only use the customer's own ACTIVE package (404 / 400). Existing packages reset to 0% by migration. |
+| F-23 | High | Any referral code, passed by anyone, took 25 EGP off any estimate, any number of times. | Only a customer who applied a code gets the discount (Settings `referredDiscountAmount`), on their first booking only. Codes can be applied only before the first booking. |
+| F-24 | High | Signing up with a referral code set `referredById` but created no referral record, so the referrer was never paid. | Signup creates the PENDING referral (reward from Settings); paid when the first trip completes. |
+| F-25 | Low | Package total re-applied the discount on top of booking prices; removing a booking or cancelling the package left its discount. | Package total = sum of booking prices. Leaving the package removes its discount from bookings nothing was paid on. |
+| F-26 | Low | The commission split was rounded to whole pounds, differently in the driver app and the dashboard (net 79.09 vs 79 for the same trips, and share + net didn't add up). Showed once discounts produced piaster prices. | Both round to the piaster: share = revenue x rate, net = revenue - share, in `GET /driver/stats` and the dashboard driver report. |

@@ -99,6 +99,8 @@ function TopBar({ liveTrips }: { liveTrips: number }) {
           الرحلات الجارية{liveTrips > 0 && <span className="text-gold">({liveTrips})</span>}
         </LinkButton>
         <LinkButton to="/audit">📋 سجل التوثيق</LinkButton>
+        <LinkButton to="/packages">🎁 الباكدجات</LinkButton>
+        <LinkButton to="/settings">⚙️ الإعدادات</LinkButton>
         <span className="mx-1 hidden sm:block">
           <Brand />
         </span>

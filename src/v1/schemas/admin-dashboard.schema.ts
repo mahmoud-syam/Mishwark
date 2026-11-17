@@ -59,3 +59,7 @@ export const auditActionSchema = z
   .optional()
   .transform((v) => (v ? v.toUpperCase() : undefined))
   .pipe(z.nativeEnum(AuditAction).optional());
+
+export const packageDiscountSchema = z.object({
+  discountPercentage: z.number().min(0).max(100),
+});
