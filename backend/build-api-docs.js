@@ -119,8 +119,9 @@ const BODY_EXAMPLES = {
   "/auth/login": { email: "admin@mishwarak.com", password: "secret123" },
   "/auth/otp/request": { phoneNumber: "+201011111111", role: "customer", name: "Ahmed Ali" },
   "/auth/otp/verify": { phoneNumber: "+201011111111", code: "0000" },
-  "/auth/verify-2fa": { userId: "USER_ID", token: "123456" },
-  "/auth/verify-2fa-setup": { userId: "USER_ID", token: "123456", secret: "TOTP_SECRET" },
+  "/auth/verify-2fa": { loginToken: "{{loginToken}}", token: "123456" },
+  "/auth/verify-2fa-setup": { loginToken: "{{loginToken}}", token: "123456" },
+  "/auth/set-password": { loginToken: "{{loginToken}}", newPassword: "MyOwnPass#2026" },
   // The controller reads `secret` from the body, not `otpCode`.
   "/auth/2fa/verify": { token: "123456", secret: "JBSWY3DPEHPK3PXP" },
   // Disable takes no body: it acts on the authenticated user.
@@ -237,7 +238,12 @@ const BODY_EXAMPLES = {
   "/admin/maintenance/{id}/complete": { cost: 1450, notes: "Done" },
 
   // change password: admin-permissioned, no oldPassword, optionally resets 2FA
-  "/auth/change-password/{userId}": { newPassword: "newpass123", reset2FA: false },
+  "/auth/change-password/{userId}": { newPassword: "NewPass#2026", reset2FA: false },
+  // Team page (Super Admin only)
+  "POST /admin/team": { name: "Sara Ahmed", email: "sara@company.com", role: "ADMIN" },
+  "/admin/team/{id}/reset-2fa": {},
+  "/admin/team/{id}/reset-password": {},
+  "/admin/team/{id}/role": { role: "SUPER_ADMIN" },
   "/auth/reset-2fa/{userId}": {},
 };
 
@@ -279,19 +285,25 @@ const ID_CAPTURE = {
 // 4. Descriptions + success responses per endpoint
 // ---------------------------------------------------------------
 const DESCRIPTIONS = {
-  "/auth/login": "Email/password login (admin & internal staff). Returns JWT cookie + user.",
+  "/auth/login": "Email/password sign-in, step 1. Never returns a session: it answers with the next step and a `loginToken` (signed, 5 minutes): `passwordChangeRequired` (temporary password: call /auth/set-password), `twoFactorSetupRequired` (with `secret` + `qrCodeDataURL`: call /auth/verify-2fa-setup) or `twoFactorRequired` (call /auth/verify-2fa). 400 on a wrong email or password.",
+  "/auth/set-password": "Sign-in step after a temporary password (accounts created or reset from the Team page): the user picks their own password (8+ characters, not the temporary one). Answers with the next step and a new `loginToken`. 400 if the pass is missing, expired or already used.",
   "/auth/signup": "Create a customer or driver account. Multipart/form-data — fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
   "/auth/otp/request": "Public. Sends a 4-digit OTP to the phone. In dev the code is returned as dev_otp.",
   "/auth/otp/verify": "Public. Verifies OTP and returns a JWT. Dev bypass code: 0000. Response drives role-based home screen.",
   "/auth/logout": "Clears the auth cookie / current session.",
   "/auth/logout-all-devices": "Bumps tokenVersion, invalidating every session for the user.",
-  "/auth/verify-2fa": "Completes a 2FA challenge during login using a temporary token.",
-  "/auth/verify-2fa-setup": "Confirms and enables 2FA for a user.",
+  "/auth/verify-2fa": "Last sign-in step when 2FA is on: `loginToken` from /auth/login plus the 6-digit code. Sets the session cookie and returns `user`. Each pass works once; a wrong code changes nothing. A bare `userId` is no longer accepted (400).",
+  "/auth/verify-2fa-setup": "Last sign-in step when 2FA isn't set up yet: `loginToken` plus the code from the authenticator app. The secret is the one inside the pass (the one shown in the QR); any `secret` in the body is ignored. Sets the session cookie and returns `user`. A bare `userId` is no longer accepted (400).",
   "/auth/2fa/setup": "Returns TOTP secret + QR code data URL for authenticator enrollment.",
   "/auth/2fa/verify": "Validates an OTP to enable 2FA.",
   "/auth/2fa/disable": "Disables 2FA for the authenticated user.",
-  "/auth/change-password/{userId}": "Admin (user_password:manage). Changes a user's password and optionally resets 2FA. Protected by requirePermission.",
-  "/auth/reset-2fa/{userId}": "Admin (user_password:manage). Resets a user's 2FA.",
+  "/auth/change-password/{userId}": "Needs user_password:manage. Sets a user's password (8+ characters) and optionally resets 2FA; signs the user out everywhere. Dashboard accounts (Admin, Super Admin) only by a Super Admin (403); use the Team page for them.",
+  "/auth/reset-2fa/{userId}": "Needs user_password:manage. Resets a user's 2FA and signs them out everywhere. Dashboard accounts (Admin, Super Admin) only by a Super Admin (403).",
+  "GET /admin/team": "Team page (Super Admin only, 403 otherwise): dashboard accounts (Admin and Super Admin) with role, `twoFactorEnabled`, `mustChangePassword` (hasn't replaced the temporary password yet) and `lastLoginAt`. Super Admins first.",
+  "POST /admin/team": "Creates a dashboard account (Super Admin only). Returns `member` and a `temporaryPassword`, shown this once (only its hash is stored). At first sign-in the member picks their own password, then sets up 2FA. 409 if the email is taken. Audit-logged.",
+  "/admin/team/{id}/reset-2fa": "Lost phone: the member sets up 2FA again at the next sign-in. Signs them out everywhere. Super Admin only; not on your own account (400) or on non-team accounts (404). Audit-logged.",
+  "/admin/team/{id}/reset-password": "Forgotten password: returns a new `temporaryPassword` (shown once); the old password stops working and the member picks a new one at sign-in. Signs them out everywhere. Super Admin only. Audit-logged.",
+  "/admin/team/{id}/role": "Changes a member's role (ADMIN or SUPER_ADMIN). Signs them out so the new permissions apply. Super Admin only; not on your own account. Audit-logged.",
   "/bookings/estimate-price": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount.",
   "/bookings/estimate-distance": "PUBLIC. Resolves startPoint/endPoint (coordinates or a place name) into distanceKm and durationMinutes. Coordinates are passed through; free text is geocoded via OpenRouteService. Without ORS_API_KEY the server falls back to a straight-line estimate and says so in `source` and `warning`.",
   "/bookings/{id}/status": "Transitions booking status. PENDING→CONFIRMED/CANCELLED, CONFIRMED→COMPLETED/CANCELLED.",
@@ -360,7 +372,9 @@ const SUCCESS_RESPONSES = {
   "/waitlist": { success: true, data: { id: "{{waitlistId}}", position: 2, status: "WAITING" } },
   "/auth/otp/request": { message: "OTP sent successfully", dev_otp: "1234" },
   "/auth/otp/verify": { success: true, token: "{{token}}", user: { id: "{{userId}}", name: "John Customer", phoneNumber: "+201011111111", role: "Customer" } },
-  "/auth/login": { message: "Login successful", user: { id: "{{userId}}", email: "admin@mishwarak.com" } },
+  "/auth/login": { message: "2FA required", twoFactorRequired: true, userId: "{{userId}}", loginToken: "eyJhbGciOi..." },
+  "/auth/verify-2fa": { message: "Login successful", user: { id: "{{userId}}", email: "admin@mishwarak.com" } },
+  "POST /admin/team": { success: true, data: { member: { id: "UUID", name: "Sara Ahmed", email: "sara@company.com", role: "ADMIN", twoFactorEnabled: false, mustChangePassword: true, lastLoginAt: null }, temporaryPassword: "Kp7m-Qx3a-Wd9e" } },
 };
 
 // ---------------------------------------------------------------
@@ -373,6 +387,9 @@ const REQUEST_SCHEMAS = {
   "/auth/otp/verify": "OtpVerify",
   "/auth/verify-2fa": "Verify2faBody",
   "/auth/verify-2fa-setup": "Verify2faSetupBody",
+  "/auth/set-password": "SetPasswordBody",
+  "POST /admin/team": "TeamCreateBody",
+  "/admin/team/{id}/role": "TeamRoleBody",
   "/auth/2fa/verify": "Verify2faEnableBody",
   "/auth/change-password/{userId}": "ChangePasswordBody",
   "/bookings/estimate-distance": "EstimateDistanceBody",
@@ -435,16 +452,28 @@ const openapiSchemas = {
   // controller reads just `userId` and `token`.
   Verify2faBody: {
     type: "object",
-    properties: { userId: { type: "string", format: "uuid" }, token: { type: "string" } },
-    required: ["userId", "token"],
+    properties: { loginToken: { type: "string", description: "From POST /auth/login (twoFactorRequired)." }, token: { type: "string", description: "6-digit code" } },
+    required: ["loginToken", "token"],
   },
+  SetPasswordBody: {
+    type: "object",
+    properties: { loginToken: { type: "string", description: "From POST /auth/login (passwordChangeRequired)." }, newPassword: { type: "string", minLength: 8, maxLength: 100 } },
+    required: ["loginToken", "newPassword"],
+  },
+  TeamCreateBody: {
+    type: "object",
+    additionalProperties: false,
+    properties: { name: { type: "string", minLength: 2, maxLength: 80 }, email: { type: "string", format: "email" }, role: { type: "string", enum: ["ADMIN", "SUPER_ADMIN"] } },
+    required: ["name", "email", "role"],
+  },
+  TeamRoleBody: { type: "object", properties: { role: { type: "string", enum: ["ADMIN", "SUPER_ADMIN"] } }, required: ["role"] },
   // POST /auth/verify-2fa-setup: first-time enrolment. `secret` is the value
   // POST /auth/login returned as `secret` (also shown in the QR code), and the
   // controller verifies the code against it before persisting it.
   Verify2faSetupBody: {
     type: "object",
-    properties: { userId: { type: "string", format: "uuid" }, token: { type: "string" }, secret: { type: "string" } },
-    required: ["userId", "token", "secret"],
+    properties: { loginToken: { type: "string", description: "From POST /auth/login or /auth/set-password (twoFactorSetupRequired). It carries the secret." }, token: { type: "string", description: "6-digit code from the authenticator app" } },
+    required: ["loginToken", "token"],
   },
   // Authenticated 2FA enrolment: `secret` comes from GET /auth/2fa/setup.
   Verify2faEnableBody: {
@@ -457,7 +486,7 @@ const openapiSchemas = {
   // other sessions are signed out.
   ChangePasswordBody: {
     type: "object",
-    properties: { newPassword: { type: "string", minLength: 6 }, reset2FA: { type: "boolean" } },
+    properties: { newPassword: { type: "string", minLength: 8, maxLength: 100 }, reset2FA: { type: "boolean" } },
     required: ["newPassword"],
   },
   LocationInput: {
@@ -593,6 +622,7 @@ function buildPostman(groups) {
       { key: "driverUserId", value: "" },
       { key: "driverId", value: "" },
       { key: "userId", value: "" },
+      { key: "loginToken", value: "" },
       { key: "paymentId", value: "" },
       { key: "waitlistId", value: "" },
       { key: "packageId", value: "" },
@@ -705,6 +735,8 @@ function buildPostman(groups) {
               "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
               "// /auth/login is 2FA-gated and returns no token. It hands back the",
               "// userId needed by POST /auth/verify-2fa (or /verify-2fa-setup).",
+              "// Each sign-in step needs the loginToken the previous step returned.",
+              "if (json.loginToken) pm.environment.set('loginToken', json.loginToken);",
               "if (json.userId) {",
               "  pm.environment.set('userId', json.userId);",
               "  console.log('2FA required for userId:', json.userId);",
@@ -876,7 +908,7 @@ const TOKEN_CAPTURE_ROUTES = {
 
 // /auth/login is a two-step, 2FA-gated flow and never returns a token itself.
 // Remembering the userId it hands back is what makes step 2 followable.
-const LOGIN_STEP_ROUTES = new Set(["/auth/login"]);
+const LOGIN_STEP_ROUTES = new Set(["/auth/login", "/auth/set-password"]);
 
 // /auth/signup is the only route mounted behind multer, so it is the only one
 // that must be described as multipart/form-data. Declaring it as JSON makes
@@ -989,6 +1021,7 @@ const environment = {
     { key: "token", value: "", type: "secret", enabled: true },
     { key: "role", value: "", type: "default", enabled: true },
     { key: "userId", value: "", type: "default", enabled: true },
+    { key: "loginToken", value: "", type: "default", enabled: true },
     { key: "vehicleId", value: "", type: "default", enabled: true },
     { key: "bookingId", value: "", type: "default", enabled: true },
     { key: "paymentId", value: "", type: "default", enabled: true },

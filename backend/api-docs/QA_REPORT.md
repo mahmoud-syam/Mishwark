@@ -109,3 +109,19 @@ Found while building the fleet page and fixed on `feature/fleet-management`.
 
 Still open: signup (`POST /auth/signup`, `pic` and documents) has the same
 declared-type-only check as F-32. Not changed here; worth the same fix.
+
+### Team accounts & sign-in (2026-11-17)
+
+Found while building the Team page and fixed on `feature/team-accounts`.
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-34 | Critical | `POST /auth/verify-2fa-setup` took a `userId` and a 2FA secret chosen by the caller, without checking the password or that 2FA was off. Anyone who knew an account's id (the Super Admin's included) could attach their own authenticator and sign in without the password. | `POST /auth/login` now hands out a signed `loginToken` (5 minutes, one step, single use) after the password is checked; the next steps refuse a bare `userId`. The 2FA secret travels inside the signed pass, never from the caller. |
+| F-35 | High | `POST /auth/verify-2fa` also took only `userId` + code: the password step could be skipped, leaving the 6-digit code as the only factor. | Same `loginToken` requirement. A wrong code changes nothing. |
+| F-36 | High | `PUT /auth/change-password/:userId` and `POST /auth/reset-2fa/:userId` let any admin holding `user_password:manage` reset any account, including the Super Admin's. No password rules (an empty or 1-character password was accepted). | Dashboard accounts are reset by a Super Admin only (403); passwords need 8+ characters (422). The Team page is the place for dashboard accounts. |
+| F-37 | Low | The authenticator app showed the accounts as "ACS Portal". | Shown as "Mishwark". |
+
+New: Team page (Super Admin only) to create dashboard accounts with a
+temporary password (changed at first sign-in, then 2FA), reset 2FA or the
+password, and change the role. Every action signs the member out and is
+audit-logged.

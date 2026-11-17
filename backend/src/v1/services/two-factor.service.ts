@@ -4,7 +4,7 @@ import QRCode from 'qrcode';
 export const generate2FASecret = async (email: string) => {
     const secret = generateSecret();
     const otpauth = generateURI({
-        issuer: 'ACS Portal',
+        issuer: 'Mishwark',
         label: email,
         secret
     });

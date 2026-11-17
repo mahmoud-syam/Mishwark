@@ -52,6 +52,7 @@ import {
   cancelMaintenance,
 } from "../controllers/fleet.controller";
 import { PERMISSIONS } from "../constants/roles";
+import { createTeamMember, listTeam, requireSuperAdmin, resetTeamMember2FA, resetTeamMemberPassword, setTeamMemberRole } from "../controllers/team.controller";
 
 const adminRouter: Router = Router();
 
@@ -101,6 +102,13 @@ adminRouter.patch("/vehicles/:id/images/:imageId/cover", canManageFleet, errorHa
 adminRouter.post("/vehicles/:id/maintenance", canManageFleet, errorHandler(scheduleMaintenance));
 adminRouter.patch("/maintenance/:id/complete", canManageFleet, errorHandler(completeMaintenance));
 adminRouter.delete("/maintenance/:id", canManageFleet, errorHandler(cancelMaintenance));
+
+// Team page: dashboard accounts, Super Admin only.
+adminRouter.get("/team", requireSuperAdmin, errorHandler(listTeam));
+adminRouter.post("/team", requireSuperAdmin, errorHandler(createTeamMember));
+adminRouter.post("/team/:id/reset-2fa", requireSuperAdmin, errorHandler(resetTeamMember2FA));
+adminRouter.post("/team/:id/reset-password", requireSuperAdmin, errorHandler(resetTeamMemberPassword));
+adminRouter.patch("/team/:id/role", requireSuperAdmin, errorHandler(setTeamMemberRole));
 
 // Changing business settings needs settings:manage (Super Admin by default).
 adminRouter.put("/settings", requirePermission(PERMISSIONS.SETTINGS_MANAGE), errorHandler(updateSystemSettings));

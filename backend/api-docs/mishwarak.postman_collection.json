@@ -35,6 +35,10 @@
       "value": ""
     },
     {
+      "key": "loginToken",
+      "value": ""
+    },
+    {
       "key": "paymentId",
       "value": ""
     },
@@ -181,7 +185,7 @@
                 }
               }
             },
-            "description": "Email/password login (admin & internal staff). Returns JWT cookie + user."
+            "description": "Email/password sign-in, step 1. Never returns a session: it answers with the next step and a `loginToken` (signed, 5 minutes): `passwordChangeRequired` (temporary password: call /auth/set-password), `twoFactorSetupRequired` (with `secret` + `qrCodeDataURL`: call /auth/verify-2fa-setup) or `twoFactorRequired` (call /auth/verify-2fa). 400 on a wrong email or password."
           },
           "response": [
             {
@@ -210,7 +214,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"message\": \"Login successful\",\n  \"user\": {\n    \"id\": \"{{userId}}\",\n    \"email\": \"admin@mishwarak.com\"\n  }\n}"
+              "body": "{\n  \"message\": \"2FA required\",\n  \"twoFactorRequired\": true,\n  \"userId\": \"{{userId}}\",\n  \"loginToken\": \"eyJhbGciOi...\"\n}"
             }
           ],
           "event": [
@@ -223,6 +227,8 @@
                   "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
                   "// /auth/login is 2FA-gated and returns no token. It hands back the",
                   "// userId needed by POST /auth/verify-2fa (or /verify-2fa-setup).",
+                  "// Each sign-in step needs the loginToken the previous step returned.",
+                  "if (json.loginToken) pm.environment.set('loginToken', json.loginToken);",
                   "if (json.userId) {",
                   "  pm.environment.set('userId', json.userId);",
                   "  console.log('2FA required for userId:', json.userId);",
@@ -397,16 +403,45 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": \"USER_ID\",\n  \"token\": \"123456\"\n}",
+              "raw": "{\n  \"loginToken\": \"{{loginToken}}\",\n  \"token\": \"123456\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Completes a 2FA challenge during login using a temporary token."
+            "description": "Last sign-in step when 2FA is on: `loginToken` from /auth/login plus the 6-digit code. Sets the session cookie and returns `user`. Each pass works once; a wrong code changes nothing. A bare `userId` is no longer accepted (400)."
           },
-          "response": [],
+          "response": [
+            {
+              "name": "200 Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/verify-2fa",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "auth",
+                    "verify-2fa"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Login successful\",\n  \"user\": {\n    \"id\": \"{{userId}}\",\n    \"email\": \"admin@mishwarak.com\"\n  }\n}"
+            }
+          ],
           "event": [
             {
               "listen": "test",
@@ -454,14 +489,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": \"USER_ID\",\n  \"token\": \"123456\",\n  \"secret\": \"TOTP_SECRET\"\n}",
+              "raw": "{\n  \"loginToken\": \"{{loginToken}}\",\n  \"token\": \"123456\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Confirms and enables 2FA for a user."
+            "description": "Last sign-in step when 2FA isn't set up yet: `loginToken` plus the code from the authenticator app. The secret is the one inside the pass (the one shown in the QR); any `secret` in the body is ignored. Sets the session cookie and returns `user`. A bare `userId` is no longer accepted (400)."
           },
           "response": [],
           "event": [
@@ -487,6 +522,57 @@
                   "if (role) pm.environment.set('role', role);",
                   "const uid = json.userId || (json.user && json.user.id);",
                   "if (uid) pm.environment.set('userId', uid);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/set-password",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/set-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "set-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"loginToken\": \"{{loginToken}}\",\n  \"newPassword\": \"MyOwnPass#2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sign-in step after a temporary password (accounts created or reset from the Team page): the user picks their own password (8+ characters, not the temporary one). Answers with the next step and a new `loginToken`. 400 if the pass is missing, expired or already used."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json = {};",
+                  "try { json = pm.response.json(); } catch (e) { /* non-JSON body */ }",
+                  "// /auth/login is 2FA-gated and returns no token. It hands back the",
+                  "// userId needed by POST /auth/verify-2fa (or /verify-2fa-setup).",
+                  "// Each sign-in step needs the loginToken the previous step returned.",
+                  "if (json.loginToken) pm.environment.set('loginToken', json.loginToken);",
+                  "if (json.userId) {",
+                  "  pm.environment.set('userId', json.userId);",
+                  "  console.log('2FA required for userId:', json.userId);",
+                  "}",
+                  "if (json.twoFactorSetupRequired) console.log('Enable 2FA first: POST /auth/verify-2fa-setup');"
                 ]
               }
             }
@@ -617,7 +703,7 @@
                 ":userId"
               ]
             },
-            "description": "Admin (user_password:manage). Resets a user's 2FA."
+            "description": "Needs user_password:manage. Resets a user's 2FA and signs them out everywhere. Dashboard accounts (Admin, Super Admin) only by a Super Admin (403)."
           },
           "response": [],
           "event": [
@@ -660,14 +746,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"newPassword\": \"newpass123\",\n  \"reset2FA\": false\n}",
+              "raw": "{\n  \"newPassword\": \"NewPass#2026\",\n  \"reset2FA\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Admin (user_password:manage). Changes a user's password and optionally resets 2FA. Protected by requirePermission."
+            "description": "Needs user_password:manage. Sets a user's password (8+ characters) and optionally resets 2FA; signs the user out everywhere. Dashboard accounts (Admin, Super Admin) only by a Super Admin (403); use the Team page for them."
           },
           "response": [],
           "event": [
@@ -5462,6 +5548,265 @@
               ]
             },
             "description": "Cancels maintenance that isn't done yet and frees its days. Needs vehicle:manage. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/team",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/team",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "team"
+              ]
+            },
+            "description": "Team page (Super Admin only, 403 otherwise): dashboard accounts (Admin and Super Admin) with role, `twoFactorEnabled`, `mustChangePassword` (hasn't replaced the temporary password yet) and `lastLoginAt`. Super Admins first."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/team",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/team",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "team"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sara Ahmed\",\n  \"email\": \"sara@company.com\",\n  \"role\": \"ADMIN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a dashboard account (Super Admin only). Returns `member` and a `temporaryPassword`, shown this once (only its hash is stored). At first sign-in the member picks their own password, then sets up 2FA. 409 if the email is taken. Audit-logged."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/team",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "team"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"member\": {\n      \"id\": \"UUID\",\n      \"name\": \"Sara Ahmed\",\n      \"email\": \"sara@company.com\",\n      \"role\": \"ADMIN\",\n      \"twoFactorEnabled\": false,\n      \"mustChangePassword\": true,\n      \"lastLoginAt\": null\n    },\n    \"temporaryPassword\": \"Kp7m-Qx3a-Wd9e\"\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/team/:id/reset-2fa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/team/:id/reset-2fa",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "team",
+                ":id",
+                "reset-2fa"
+              ]
+            },
+            "description": "Lost phone: the member sets up 2FA again at the next sign-in. Signs them out everywhere. Super Admin only; not on your own account (400) or on non-team accounts (404). Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/team/:id/reset-password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/team/:id/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "team",
+                ":id",
+                "reset-password"
+              ]
+            },
+            "description": "Forgotten password: returns a new `temporaryPassword` (shown once); the old password stops working and the member picks a new one at sign-in. Signs them out everywhere. Super Admin only. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /admin/team/:id/role",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/team/:id/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "team",
+                ":id",
+                "role"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"SUPER_ADMIN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Changes a member's role (ADMIN or SUPER_ADMIN). Signs them out so the new permissions apply. Super Admin only; not on your own account. Audit-logged."
           },
           "response": [],
           "event": [

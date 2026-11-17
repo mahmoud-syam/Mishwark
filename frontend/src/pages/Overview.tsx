@@ -81,7 +81,7 @@ export default function Overview() {
 
 // ----------------------------------------------------------------- top bar
 function TopBar({ liveTrips }: { liveTrips: number }) {
-  const { me, logout } = useAuth();
+  const { me, logout, isSuperAdmin } = useAuth();
   return (
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div className="flex flex-col gap-1.5">
@@ -101,6 +101,7 @@ function TopBar({ liveTrips }: { liveTrips: number }) {
         <LinkButton to="/fleet">🚗 الأسطول</LinkButton>
         <LinkButton to="/packages">🎁 الباكدجات</LinkButton>
         <LinkButton to="/settings">⚙️ الإعدادات</LinkButton>
+        {isSuperAdmin && <LinkButton to="/team">👥 الفريق</LinkButton>}
         <span className="mx-1 hidden sm:block">
           <Brand />
         </span>
