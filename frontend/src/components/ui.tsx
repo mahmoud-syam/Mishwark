@@ -80,7 +80,7 @@ export function Brand() {
   return (
     <Link to="/" className="flex items-center gap-2" aria-label="Mishwark — الرئيسية">
       <BrandMark />
-      <span className="text-[17px] font-bold text-white" dir="ltr">
+      <span className="text-[19px] font-bold text-white" dir="ltr">
         Mishwark
       </span>
     </Link>
@@ -93,7 +93,7 @@ export function BackButton({ to }: { to?: string }) {
     <button
       type="button"
       onClick={() => (to ? nav(to) : window.history.length > 1 ? nav(-1) : nav("/"))}
-      className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-[14px] text-cream shadow-[var(--shadow-card)] transition hover:border-gold/60"
+      className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-[16px] text-cream shadow-[var(--shadow-card)] transition hover:border-gold/60"
       aria-label="رجوع"
     >
       ←
@@ -120,8 +120,8 @@ export function PageHeader({
         {back && <BackButton to={typeof back === "string" ? back : undefined} />}
         {leading}
         <div className="flex flex-col gap-1">
-          {eyebrow && <div className="text-[12px] text-muted">{eyebrow}</div>}
-          <h1 className="text-[24px] font-bold leading-tight text-cream">{title}</h1>
+          {eyebrow && <div className="text-[14px] text-muted">{eyebrow}</div>}
+          <h1 className="text-[27px] font-bold leading-tight text-cream">{title}</h1>
         </div>
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -147,8 +147,8 @@ export function Panel({
     <section className={cx("card flex flex-col p-[22px]", className)}>
       {(title || tag) && (
         <div className="flex items-center justify-between gap-3 pb-4">
-          <h2 className="text-[16px] font-bold text-cream">{title}</h2>
-          {tag && <span className="text-[11px] text-muted">{tag}</span>}
+          <h2 className="text-[18px] font-bold text-cream">{title}</h2>
+          {tag && <span className="text-[13px] text-muted">{tag}</span>}
         </div>
       )}
       <div className={bodyClassName}>{children}</div>
@@ -190,18 +190,18 @@ export function StatCard({
         </span>
       )}
       <div className="flex min-w-0 flex-col gap-0.5">
-      <div className="text-[12px] text-muted">{label}</div>
+      <div className="text-[14px] text-muted">{label}</div>
       {loading ? (
         <Skeleton className="my-1.5 h-8 w-24" />
       ) : (
-        <div className={cx("text-[22px] font-bold leading-[1.35] sm:text-[26px]", valueTone[tone])}>
+        <div className={cx("text-[25px] font-bold leading-[1.35] sm:text-[29px]", valueTone[tone])}>
           {/* Numeric values ("9 / 14", "72%") must stay LTR inside RTL text; Arabic values flow naturally. */}
           <span className={typeof value === "string" && /[\u0600-\u06FF]/.test(value) ? undefined : "ltr"}>
             {typeof value === "string" || typeof value === "number" ? <CountUp text={String(value)} /> : value}
           </span>
         </div>
       )}
-      <div className={cx("min-h-[17px] text-[11px]", valueTone[deltaTone])}>{loading ? "" : delta}</div>
+      <div className={cx("min-h-[17px] text-[13px]", valueTone[deltaTone])}>{loading ? "" : delta}</div>
       </div>
     </div>
   );
@@ -222,7 +222,7 @@ const badgeTone: Record<Tone, { bg: string; text: string; dot: string }> = {
 export function Badge({ tone, children, dot, className }: { tone: Tone; children: ReactNode; dot?: boolean; className?: string }) {
   const t = badgeTone[tone];
   return (
-    <span className={cx("inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full text-[10px]", dot ? "px-2 py-[3px]" : "px-2.5 py-1", t.bg, t.text, className)}>
+    <span className={cx("inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full text-[12px]", dot ? "px-2 py-[3px]" : "px-2.5 py-1", t.bg, t.text, className)}>
       {children}
       {dot && <span className={cx("size-1.5 rounded-[3px]", t.dot)} />}
     </span>
@@ -245,7 +245,7 @@ export function Button({
   children,
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: "sm" | "md" | "lg" }) {
-  const sizing = size === "sm" ? "px-4 py-[9px] text-[11px] rounded-[9px]" : size === "lg" ? "px-6 py-3.5 text-[13px] rounded-xl" : "px-4 py-2.5 text-[12px] rounded-xl";
+  const sizing = size === "sm" ? "px-4 py-[9px] text-[13px] rounded-[9px]" : size === "lg" ? "px-6 py-3.5 text-[15px] rounded-xl" : "px-4 py-2.5 text-[14px] rounded-xl";
   return (
     <button
       type="button"
@@ -259,7 +259,7 @@ export function Button({
 
 export function LinkButton({ to, variant = "secondary", children, className }: { to: string; variant?: Variant; children: ReactNode; className?: string }) {
   return (
-    <Link to={to} className={cx("inline-flex items-center justify-center gap-1.5 rounded-[9px] px-4 py-[9px] text-[11px] font-bold transition", btnVariant[variant], className)}>
+    <Link to={to} className={cx("inline-flex items-center justify-center gap-1.5 rounded-[9px] px-4 py-[9px] text-[13px] font-bold transition", btnVariant[variant], className)}>
       {children}
     </Link>
   );
@@ -288,7 +288,7 @@ export function Chips<T extends string>({
             aria-checked={active}
             onClick={() => onChange(o.value)}
             className={cx(
-              "rounded-full border px-[15px] py-[7px] text-[11px] transition",
+              "rounded-full border px-[15px] py-[7px] text-[13px] transition",
               active ? "border-gold bg-gold/12 font-bold text-gold" : "border-line bg-surface text-muted hover:text-cream"
             )}
           >
@@ -330,8 +330,9 @@ export function BarChart({
   const top = niceCeil(max);
   const ticks = [1, 0.75, 0.5, 0.25, 0].map((t) => t * top);
   return (
-    <div className="flex gap-3">
-      <div className="flex shrink-0 flex-col justify-between pb-6 text-[10px] text-muted ltr" style={{ height: height + 24 }} aria-hidden>
+    // Top padding keeps the value box of the tallest bar inside the chart.
+    <div className="flex gap-3 pt-12">
+      <div className="flex shrink-0 flex-col justify-between pb-6 text-[12px] text-muted ltr" style={{ height: height + 24 }} aria-hidden>
         {ticks.map((t) => (
           <span key={t} className="leading-none">{format ? format(t) : t}</span>
         ))}
@@ -356,8 +357,8 @@ export function BarChart({
                     )}
                     style={{ bottom: h + 8 }}
                   >
-                    {d.caption && <span className="text-[9px] opacity-80">{d.caption}</span>}
-                    <span className="text-[12px] font-bold ltr">{format ? format(d.value) : d.value}</span>
+                    {d.caption && <span className="text-[11px] opacity-80">{d.caption}</span>}
+                    <span className="text-[14px] font-bold ltr">{format ? format(d.value) : d.value}</span>
                   </span>
                   <div
                     className={cx(
@@ -371,7 +372,7 @@ export function BarChart({
                     )}
                   </div>
                 </div>
-                <span className={cx("truncate text-[10px]", hot ? "font-bold text-cream" : "text-muted")}>{d.label}</span>
+                <span className={cx("truncate text-[12px]", hot ? "font-bold text-cream" : "text-muted")}>{d.label}</span>
               </div>
             );
           })}
@@ -404,7 +405,7 @@ export function Table({ head, children }: { head: ReactNode[]; children: ReactNo
         <thead>
           <tr>
             {head.map((h, i) => (
-              <th key={i} className="border-b border-line px-1.5 py-2 text-[11px] font-normal text-muted">
+              <th key={i} className="border-b border-line px-1.5 py-2 text-[13px] font-normal text-muted">
                 {h}
               </th>
             ))}
@@ -416,15 +417,15 @@ export function Table({ head, children }: { head: ReactNode[]; children: ReactNo
   );
 }
 export const Td = ({ children, className }: { children: ReactNode; className?: string }) => (
-  <td className={cx("border-b border-line px-1.5 py-2.5 text-[12px] text-cream", className)}>{children}</td>
+  <td className={cx("border-b border-line px-1.5 py-2.5 text-[14px] text-cream", className)}>{children}</td>
 );
 
 // ---------------------------------------------------------- list rows (kv)
 export function KeyValue({ label, value, tone = "cream" }: { label: ReactNode; value: ReactNode; tone?: Tone | "cream" }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-line py-3 last:border-b-0">
-      <span className="text-[12px] font-bold text-cream">{label}</span>
-      <span className={cx("text-[14px] font-bold", valueTone[tone])}>{value}</span>
+      <span className="text-[14px] font-bold text-cream">{label}</span>
+      <span className={cx("text-[16px] font-bold", valueTone[tone])}>{value}</span>
     </div>
   );
 }
@@ -435,12 +436,12 @@ export function Skeleton({ className }: { className?: string }) {
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-[12px] text-muted">{children}</div>;
+  return <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-[14px] text-muted">{children}</div>;
 }
 
 export function ErrorBox({ error, onRetry }: { error: string; onRetry?: () => void }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-wine bg-wine/15 px-4 py-3 text-[12px] text-blush" role="alert">
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-wine bg-wine/15 px-4 py-3 text-[14px] text-blush" role="alert">
       <span>{error}</span>
       {onRetry && (
         <button type="button" onClick={onRetry} className="font-bold underline underline-offset-4">
@@ -454,20 +455,20 @@ export function ErrorBox({ error, onRetry }: { error: string; onRetry?: () => vo
 export function Field({ label, children, hint }: { label: ReactNode; children: ReactNode; hint?: ReactNode }) {
   return (
     <label className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-line bg-raised px-3 pb-2.5 pt-2.5 focus-within:border-gold/60">
-      <span className="text-[10px] text-muted">{label}</span>
+      <span className="text-[12px] text-muted">{label}</span>
       {children}
-      {hint && <span className="text-[10px] text-gold">{hint}</span>}
+      {hint && <span className="text-[12px] text-gold">{hint}</span>}
     </label>
   );
 }
 
 /** Bare input that sits inside a <Field>. */
-export const fieldControl = "w-full bg-transparent text-[13px] font-bold text-cream outline-none placeholder:font-normal placeholder:text-muted/70";
+export const fieldControl = "w-full bg-transparent text-[15px] font-bold text-cream outline-none placeholder:font-normal placeholder:text-muted/70";
 
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode }) {
   return (
     <label className="flex cursor-pointer items-center justify-between gap-3 py-1">
-      <span className="text-[12px] font-bold text-cream">{label}</span>
+      <span className="text-[14px] font-bold text-cream">{label}</span>
       <button
         type="button"
         role="switch"

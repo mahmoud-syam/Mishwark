@@ -87,19 +87,19 @@ function Greeting() {
   return (
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div className="flex items-center gap-4">
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-linear-135 from-navy to-navy-soft text-[17px] font-bold text-white shadow-[var(--shadow-card)]">
+        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-linear-135 from-navy to-navy-soft text-[19px] font-bold text-white shadow-[var(--shadow-card)]">
           {initials(me?.name ?? "")}
         </span>
         <div className="flex flex-col gap-1">
-          <h1 className="text-[24px] leading-tight text-cream">
+          <h1 className="text-[27px] leading-tight text-cream">
             أهلًا، <span className="font-bold text-gold">{first}</span>
           </h1>
-          <p className="text-[12px] text-muted">
+          <p className="text-[14px] text-muted">
             {weekdayFull(today)}، {dayMonth(today)} · تابع شغل النهاردة من هنا
           </p>
         </div>
       </div>
-      <LinkButton to="/book" variant="primary" className="rounded-xl px-5 py-3 text-[12px]">
+      <LinkButton to="/book" variant="primary" className="rounded-xl px-5 py-3 text-[14px]">
         <Plus className="size-4" /> احجز لعميل
       </LinkButton>
     </header>
@@ -109,7 +109,7 @@ function Greeting() {
 // ------------------------------------------------------------------ alerts
 function AlertsStrip({ data }: { data?: OverviewData }) {
   if (!data || data.alerts.length === 0) return null;
-  const row = "card flex items-center gap-3 px-4 py-3 text-[12px] text-cream transition hover:border-gold/50";
+  const row = "card flex items-center gap-3 px-4 py-3 text-[14px] text-cream transition hover:border-gold/50";
   const icon = (tone: string, node: ReactNode) => <span className={cx("flex size-8 shrink-0 items-center justify-center rounded-full [&_svg]:size-4", tone)}>{node}</span>;
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -171,10 +171,10 @@ function RevenuePanel({ data, loading }: { data?: OverviewData["weeklyRevenue"];
       title={
         <span className="flex flex-col gap-0.5">
           <span>الإيرادات</span>
-          <span className="text-[11px] font-normal text-muted">آخر 7 أيام</span>
+          <span className="text-[13px] font-normal text-muted">آخر 7 أيام</span>
         </span>
       }
-      tag={data ? <span className="text-[12px]">الإجمالي: <b className="text-cream">{egp(total)}</b></span> : undefined}
+      tag={data ? <span className="text-[14px]">الإجمالي: <b className="text-cream">{egp(total)}</b></span> : undefined}
     >
       {loading || !data ? (
         <Skeleton className="h-[190px]" />
@@ -211,7 +211,7 @@ function FleetDonut({ data, loading }: { data?: OverviewData; loading: boolean }
         <Skeleton className="h-40" />
       ) : (
         <div className="flex items-center justify-between gap-4">
-          <ul className="flex flex-col gap-3 text-[12px]">
+          <ul className="flex flex-col gap-3 text-[14px]">
             {parts.map((p) => (
               <li key={p.label} className="flex items-center gap-2">
                 <span className="size-2.5 rounded-full" style={{ background: p.color }} />
@@ -244,7 +244,7 @@ function FleetDonut({ data, loading }: { data?: OverviewData; loading: boolean }
               })}
             <g className="rotate-90" style={{ transformOrigin: "70px 70px" }}>
               <circle cx="70" cy="70" r="36" fill="var(--color-surface)" />
-              <text x="70" y="76" textAnchor="middle" className="fill-cream text-[20px] font-bold">
+              <text x="70" y="76" textAnchor="middle" className="fill-cream text-[22px] font-bold">
                 {pct}%
               </text>
             </g>
@@ -286,12 +286,12 @@ function TodayPanel() {
               key={d}
               type="button"
               onClick={() => setDay(d)}
-              className={cx("flex flex-col items-center gap-1 rounded-xl py-2 text-[12px] transition", on ? "bg-navy text-white shadow-[0_8px_18px_-10px_var(--color-navy)]" : "bg-raised text-cream hover:bg-raised-2")}
+              className={cx("flex flex-col items-center gap-1 rounded-xl py-2 text-[14px] transition", on ? "bg-navy text-white shadow-[0_8px_18px_-10px_var(--color-navy)]" : "bg-raised text-cream hover:bg-raised-2")}
               aria-pressed={on}
               aria-label={`${weekdayFull(d)} ${dayMonth(d)}: ${c} حجز`}
             >
               <span className="font-bold ltr">{d.slice(8)}</span>
-              <span className={cx("text-[10px]", on ? "opacity-80" : "text-muted")}>{weekdayShort(d)}</span>
+              <span className={cx("text-[12px]", on ? "opacity-80" : "text-muted")}>{weekdayShort(d)}</span>
               <span className="flex h-1.5 gap-0.5">
                 {Array.from({ length: Math.min(3, c) }, (_, i) => (
                   <span key={i} className={cx("size-1.5 rounded-full", on ? "bg-white/90" : ["bg-gold", "bg-navy-soft", "bg-mint"][i])} />
@@ -305,15 +305,15 @@ function TodayPanel() {
         {q.isPending ? (
           <div className="flex flex-col gap-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>
         ) : trips.length === 0 ? (
-          <p className="py-6 text-center text-[12px] text-muted">مفيش رحلات في اليوم ده.</p>
+          <p className="py-6 text-center text-[14px] text-muted">مفيش رحلات في اليوم ده.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {trips.slice(0, 4).map((b, i) => (
               <li key={b.id} className="flex items-center gap-3">
-                <span className="w-14 shrink-0 text-[11px] text-muted">{time12(b.startTime)}</span>
+                <span className="w-14 shrink-0 text-[13px] text-muted">{time12(b.startTime)}</span>
                 <Link to={`/day/${day}?booking=${b.id}`} className={cx("lift flex min-w-0 flex-1 flex-col rounded-xl px-3 py-2.5", SLOT_TONES[i % SLOT_TONES.length])}>
-                  <span className="truncate text-[12px] font-bold">{b.customer.name}</span>
-                  <span className="truncate text-[10px] opacity-85">
+                  <span className="truncate text-[14px] font-bold">{b.customer.name}</span>
+                  <span className="truncate text-[12px] opacity-85">
                     {b.vehicle.name} · {b.driver.fullName}
                   </span>
                 </Link>
@@ -321,7 +321,7 @@ function TodayPanel() {
             ))}
           </ul>
         )}
-        <button type="button" onClick={() => nav(`/day/${day}`)} className="mt-4 flex w-full items-center justify-center gap-1 text-[12px] font-bold text-gold hover:underline">
+        <button type="button" onClick={() => nav(`/day/${day}`)} className="mt-4 flex w-full items-center justify-center gap-1 text-[14px] font-bold text-gold hover:underline">
           {trips.length > 4 ? `كل الـ ${trips.length} رحلات` : "تفاصيل اليوم"} <ChevronLeft className="size-4" />
         </button>
       </div>
@@ -367,7 +367,7 @@ function CalendarPanel() {
     >
       <div className="grid grid-cols-7 gap-1.5 sm:gap-1.5">
         {days.slice(0, 7).map((d) => (
-          <div key={d} className="pb-1 text-center text-[10px] text-muted">
+          <div key={d} className="pb-1 text-center text-[12px] text-muted">
             {weekdayShort(d)}
           </div>
         ))}
@@ -381,7 +381,7 @@ function CalendarPanel() {
               type="button"
               onClick={() => nav(`/day/${d}`)}
               className={cx(
-                "relative flex aspect-square flex-col items-center justify-center rounded-xl text-[11px] transition hover:brightness-110",
+                "relative flex aspect-square flex-col items-center justify-center rounded-xl text-[13px] transition hover:brightness-110",
                 busy ? "bg-navy font-bold text-white shadow-[0_8px_18px_-10px_var(--color-navy)]" : c > 0 ? "border border-gold/50 bg-gold/12 font-bold text-gold" : "bg-raised text-muted",
                 past && "opacity-55",
                 d === today && "outline-2 outline-offset-2 outline-gold"
@@ -389,12 +389,12 @@ function CalendarPanel() {
               aria-label={`${dayMonth(d)}: ${c} حجز`}
             >
               {loading ? <Skeleton className="h-3 w-4" /> : <span className="ltr">{Number(d.slice(8))}</span>}
-              {c > 0 && <span className="text-[9px] font-normal">{c} حجز</span>}
+              {c > 0 && <span className="text-[11px] font-normal">{c} حجز</span>}
             </button>
           );
         })}
       </div>
-      <div className="mt-3.5 flex items-center gap-4 text-[10px] text-muted">
+      <div className="mt-3.5 flex items-center gap-4 text-[12px] text-muted">
         <span className="flex items-center gap-1.5">
           <span className="size-2 rounded-[2px] border border-gold/50 bg-gold/12" />
           حجوزات متوسطة
@@ -467,12 +467,12 @@ function DriversPanel() {
               <Link to={`/drivers/${d.id}`} className="flex items-center gap-3 border-b border-line py-3 last:border-b-0 hover:text-gold">
                 <Avatar text={initials(d.name)} tone={avatarTones[i % 3]} />
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-[13px] font-bold text-cream">{d.name}</span>
-                  <span className="text-[11px] text-muted">
+                  <span className="truncate text-[15px] font-bold text-cream">{d.name}</span>
+                  <span className="text-[13px] text-muted">
                     ⭐ {d.rating.toFixed(1)} · {num(d.monthTrips)} رحلة الشهر ده
                   </span>
                 </span>
-                <span className="text-[13px] font-bold text-cream ltr">{compact(d.monthRevenue)}</span>
+                <span className="text-[15px] font-bold text-cream ltr">{compact(d.monthRevenue)}</span>
               </Link>
             </li>
           ))}
@@ -489,8 +489,8 @@ export function DriverCard({ d, tone }: { d: DriverSummary; tone: (typeof avatar
       <div className="flex items-center gap-2.5">
         <Avatar text={initials(d.name)} tone={tone} />
         <div className="min-w-0">
-          <div className="truncate text-[13px] font-bold text-cream">{d.name}</div>
-          <div className="text-[11px] text-muted">
+          <div className="truncate text-[15px] font-bold text-cream">{d.name}</div>
+          <div className="text-[13px] text-muted">
             ⭐ {d.rating.toFixed(1)} · {st.label}
             {d.statusLocked && <span title="الحالة متحددة من الإدارة"> 🔒</span>}
           </div>
@@ -498,19 +498,19 @@ export function DriverCard({ d, tone }: { d: DriverSummary; tone: (typeof avatar
       </div>
       <div className="grid grid-cols-3 border-b border-line pb-2.5 text-center">
         <div>
-          <div className="text-[14px] font-bold text-gold">{num(d.totalTrips)}</div>
-          <div className="text-[9px] text-muted">رحلة</div>
+          <div className="text-[16px] font-bold text-gold">{num(d.totalTrips)}</div>
+          <div className="text-[11px] text-muted">رحلة</div>
         </div>
         <div>
-          <div className="text-[14px] font-bold text-cream">{num(d.monthTrips)}</div>
-          <div className="text-[9px] text-muted">رحلات الشهر</div>
+          <div className="text-[16px] font-bold text-cream">{num(d.monthTrips)}</div>
+          <div className="text-[11px] text-muted">رحلات الشهر</div>
         </div>
         <div>
-          <div className="text-[14px] font-bold text-rose ltr">{compact(d.monthRevenue)}</div>
-          <div className="text-[9px] text-muted">إجمالي ج.م</div>
+          <div className="text-[16px] font-bold text-rose ltr">{compact(d.monthRevenue)}</div>
+          <div className="text-[11px] text-muted">إجمالي ج.م</div>
         </div>
       </div>
-      <div className="flex items-center justify-between text-[10px]">
+      <div className="flex items-center justify-between text-[12px]">
         <span className="text-mint">
           تقييم العملاء له: {d.rating.toFixed(1)} ({d.reviewCount} تقييم)
         </span>

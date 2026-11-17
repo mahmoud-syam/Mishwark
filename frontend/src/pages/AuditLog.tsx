@@ -60,7 +60,7 @@ export default function AuditLog() {
       />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Chips label="نوع العملية" value={filter} onChange={setFilter} options={FILTERS} />
-        {total != null && <span className="text-[11px] text-muted">{total} عملية</span>}
+        {total != null && <span className="text-[13px] text-muted">{total} عملية</span>}
       </div>
 
       {exportError && <ErrorBox error={exportError} />}
@@ -97,7 +97,7 @@ export default function AuditLog() {
         )}
       </Panel>
 
-      <div className="rounded-xl border border-line bg-raised px-4 py-3 text-[11px] text-muted">
+      <div className="rounded-xl border border-line bg-raised px-4 py-3 text-[13px] text-muted">
         🔒 كل عملية حذف أو تعديل حساس في النظام بتتسجل هنا تلقائيًا ومايتشالش. ده بيحميك لو احتجت ترجع تتبع أي تغيير حصل.
       </div>
     </Page>

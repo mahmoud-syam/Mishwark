@@ -34,14 +34,14 @@ function DiscountCell({ pkg, canEdit }: { pkg: AdminPackage; canEdit: boolean })
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5">
         <input
-          className={`ltr w-16 rounded-lg border bg-raised px-2 py-1.5 text-right text-[12px] font-bold text-cream outline-none focus:border-gold/60 ${valid ? (dirty ? "border-gold/70" : "border-line") : "border-wine"}`}
+          className={`ltr w-16 rounded-lg border bg-raised px-2 py-1.5 text-right text-[14px] font-bold text-cream outline-none focus:border-gold/60 ${valid ? (dirty ? "border-gold/70" : "border-line") : "border-wine"}`}
           inputMode="decimal"
           value={value}
           aria-label={`خصم ${pkg.packageName}`}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && dirty && save.mutate()}
         />
-        <span className="text-[11px] text-muted">%</span>
+        <span className="text-[13px] text-muted">%</span>
         {dirty && (
           <Button size="sm" variant="primary" disabled={save.isPending} onClick={() => save.mutate()}>
             {save.isPending ? "…" : "حفظ"}
@@ -49,11 +49,11 @@ function DiscountCell({ pkg, canEdit }: { pkg: AdminPackage; canEdit: boolean })
         )}
       </div>
       {save.data && !dirty && (
-        <span className="fade-in text-[10px] text-mint">
+        <span className="fade-in text-[12px] text-mint">
           اتحفظ{save.data.repriced > 0 ? ` · اتعدّل سعر ${save.data.repriced} حجز` : ""}
         </span>
       )}
-      {save.error && <span className="text-[10px] text-rose">{errorMessage(save.error)}</span>}
+      {save.error && <span className="text-[12px] text-rose">{errorMessage(save.error)}</span>}
     </div>
   );
 }
@@ -89,7 +89,7 @@ export default function Packages() {
       />
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
       {needDiscount > 0 && (
-        <div className="rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-[12px] text-cream">
+        <div className="rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-[14px] text-cream">
           {needDiscount === 1 ? "باكدج واحدة" : `${needDiscount} باكدجات`} لسه من غير خصم. حدد النسبة من عمود "الخصم".
         </div>
       )}
@@ -105,20 +105,20 @@ export default function Packages() {
               <tr key={p.id}>
                 <Td>
                   <div className="font-bold">{p.packageName}</div>
-                  <div className="text-[10px] text-muted">{PACKAGE_TYPE[p.packageType] ?? p.packageType}</div>
+                  <div className="text-[12px] text-muted">{PACKAGE_TYPE[p.packageType] ?? p.packageType}</div>
                 </Td>
                 <Td>
                   <Link to={`/customers/${p.customer.id}`} className="font-bold hover:text-gold">
                     {p.customer.name}
                   </Link>
-                  <div className="ltr text-right text-[10px] text-muted">{maskPhone(p.customer.phoneNumber)}</div>
+                  <div className="ltr text-right text-[12px] text-muted">{maskPhone(p.customer.phoneNumber)}</div>
                 </Td>
                 <Td>
                   <DiscountCell key={p.id} pkg={p} canEdit={canEdit} />
                 </Td>
                 <Td>
                   {p.bookingsCount} حجز
-                  {p.unpaidBookings > 0 && <div className="text-[10px] text-muted">منهم {p.unpaidBookings} مش مدفوعين</div>}
+                  {p.unpaidBookings > 0 && <div className="text-[12px] text-muted">منهم {p.unpaidBookings} مش مدفوعين</div>}
                 </Td>
                 <Td>{egp(p.totalPrice)}</Td>
                 <Td className="text-mint">{p.discountGiven > 0 ? egp(p.discountGiven) : "—"}</Td>
@@ -130,7 +130,7 @@ export default function Packages() {
           </Table>
         )}
       </Panel>
-      <p className="text-[11px] leading-relaxed text-muted">
+      <p className="text-[13px] leading-relaxed text-muted">
         العميل بيعمل الباكدج من التطبيق، والخصم بتحدده إنت هنا. الحجوزات اللي اتدفع فيها عربون بتفضل بسعرها. كل تغيير بيتسجل في سجل التوثيق.
       </p>
     </Page>

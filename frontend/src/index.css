@@ -1,8 +1,9 @@
 @import "tailwindcss";
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-@import "@fontsource/ibm-plex-sans-arabic/400.css";
-@import "@fontsource/ibm-plex-sans-arabic/500.css";
-@import "@fontsource/ibm-plex-sans-arabic/700.css";
+@import "@fontsource/cairo/400.css";
+@import "@fontsource/cairo/500.css";
+@import "@fontsource/cairo/600.css";
+@import "@fontsource/cairo/700.css";
 @import "@fontsource/aref-ruqaa/700.css";
 
 /* Design tokens. Light is the default; [data-theme="dark"] on <html> switches.
@@ -29,8 +30,8 @@
   --color-on-accent: var(--c-on-accent); /* text on gold/coral fills */
   --color-mint: var(--c-success);
 
-  --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
-  --font-display: "Aref Ruqaa", "IBM Plex Sans Arabic", serif;
+  --font-sans: "Cairo", system-ui, sans-serif;
+  --font-display: "Aref Ruqaa", "Cairo", serif;
 
   --radius-card: 16px;
   --radius-panel: 18px;
@@ -116,7 +117,7 @@
 
 @layer components {
   .field-input {
-    @apply w-full rounded-xl border border-line bg-raised px-3 py-2.5 text-[13px] text-cream placeholder:text-muted/80 outline-none transition focus:border-gold/70;
+    @apply w-full rounded-xl border border-line bg-raised px-3 py-2.5 text-[15px] text-cream placeholder:text-muted/80 outline-none transition focus:border-gold/70;
   }
   .card {
     @apply rounded-[18px] border border-line bg-surface;

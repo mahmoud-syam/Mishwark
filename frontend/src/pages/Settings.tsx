@@ -159,7 +159,7 @@ export default function Settings() {
 
   const actions = canEdit && (
     <>
-      {saved && changeCount === 0 && <span className="fade-in text-[11px] text-mint">اتحفظ ✓</span>}
+      {saved && changeCount === 0 && <span className="fade-in text-[13px] text-mint">اتحفظ ✓</span>}
       {changeCount > 0 && (
         <Button variant="ghost" size="sm" onClick={discard} disabled={save.isPending}>
           إلغاء التغييرات
@@ -178,7 +178,7 @@ export default function Settings() {
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
       {save.error && <ErrorBox error={errorMessage(save.error)} />}
       {!canEdit && q.data && (
-        <div className="rounded-xl border border-line bg-raised px-4 py-3 text-[12px] text-muted">
+        <div className="rounded-xl border border-line bg-raised px-4 py-3 text-[14px] text-muted">
           للعرض بس. تعديل الإعدادات محتاج صلاحية <span dir="ltr">settings:manage</span> (الـ Super Admin عنده الصلاحية دي).
         </div>
       )}
@@ -214,10 +214,10 @@ export default function Settings() {
                             aria-invalid={!!errors[f.key]}
                             onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                           />
-                          <span className="shrink-0 text-[11px] text-muted">{f.unit}</span>
+                          <span className="shrink-0 text-[13px] text-muted">{f.unit}</span>
                         </span>
                       </Field>
-                      <p className="px-1 text-[10.5px] leading-relaxed text-muted">
+                      <p className="px-1 text-[12px] leading-relaxed text-muted">
                         {f.help} <span className="text-muted/70">الأصلي: {def.toLocaleString("en")}</span>
                       </p>
                     </div>
@@ -232,7 +232,7 @@ export default function Settings() {
               {Object.keys(rates).map((cat) => (
                 <tr key={cat}>
                   <Td className="font-bold">
-                    {VEHICLE_CATEGORY[cat] ?? cat} <span className="text-[10px] font-normal text-muted" dir="ltr">{cat}</span>
+                    {VEHICLE_CATEGORY[cat] ?? cat} <span className="text-[12px] font-normal text-muted" dir="ltr">{cat}</span>
                   </Td>
                   {RATE_FIELDS.map((rf) => {
                     const k = `${cat}.${rf.key}`;
@@ -241,7 +241,7 @@ export default function Settings() {
                     return (
                       <Td key={rf.key}>
                         <input
-                          className={`ltr w-24 rounded-lg border bg-raised px-2 py-1.5 text-right text-[12px] font-bold text-cream outline-none focus:border-gold/60 ${errors[k] ? "border-wine" : changed ? "border-gold/70" : "border-line"}`}
+                          className={`ltr w-24 rounded-lg border bg-raised px-2 py-1.5 text-right text-[14px] font-bold text-cream outline-none focus:border-gold/60 ${errors[k] ? "border-wine" : changed ? "border-gold/70" : "border-line"}`}
                           inputMode="decimal"
                           value={rates[cat][rf.key]}
                           disabled={!canEdit}
@@ -256,7 +256,7 @@ export default function Settings() {
             </Table>
           </Panel>
 
-          <p className="text-[11px] leading-relaxed text-muted">
+          <p className="text-[13px] leading-relaxed text-muted">
             التغيير بيسري على الحجوزات الجديدة بس. الحجوزات الموجودة بتفضل بسعرها وعربونها. كل تعديل بيتسجل في سجل التوثيق.
           </p>
         </>

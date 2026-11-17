@@ -70,9 +70,9 @@ export default function CustomerAnalytics() {
         actions={
           d && (
             <>
-              {d.customer.isVip && <Badge tone="mint" className="px-3 py-1.5 text-[11px]">⭐ عميل VIP</Badge>}
+              {d.customer.isVip && <Badge tone="mint" className="px-3 py-1.5 text-[13px]">⭐ عميل VIP</Badge>}
               {d.customer.phoneNumber && (
-                <a href={telHref(d.customer.phoneNumber)} className="ltr rounded-full border border-line bg-raised px-3 py-1.5 text-[11px] text-muted hover:text-cream">
+                <a href={telHref(d.customer.phoneNumber)} className="ltr rounded-full border border-line bg-raised px-3 py-1.5 text-[13px] text-muted hover:text-cream">
                   {maskPhone(d.customer.phoneNumber)}
                 </a>
               )}
