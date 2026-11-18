@@ -30,7 +30,7 @@ function readRouteFiles() {
     .readdirSync(ROUTES_DIR)
     .filter((f) => /\.(route|routes)\.ts$/.test(f));
   // order by the namespace used at mount time in src/v1/routes/index.ts
-  const MOUNT_ORDER = ["auth", "vehicles", "booking", "driver", "review", "payment", "waitlist", "package", "chat", "referral", "wallet", "notification", "admin"];
+  const MOUNT_ORDER = ["auth", "vehicles", "booking", "driver", "review", "payment", "waitlist", "package", "chat", "referral", "wallet", "notification", "admin", "places"];
   files.sort((a, b) => {
     const ma = MOUNT_ORDER.indexOf(a.replace(/\.(route|routes)\.ts$/, ""));
     const mb = MOUNT_ORDER.indexOf(b.replace(/\.(route|routes)\.ts$/, ""));
@@ -87,6 +87,7 @@ const MOUNTS = {
   wallet: "/wallet",
   notification: "/notifications",
   admin: "/admin",
+  places: "/places",
 };
 
 // ---------------------------------------------------------------
@@ -250,6 +251,9 @@ const BODY_EXAMPLES = {
 };
 
 const QUERY_EXAMPLES = {
+  "/places/search": [{ key: "q", value: "قاعة الماسة" }, { key: "lat", value: "30.0444" }, { key: "lng", value: "31.2357" }],
+  "/places/reverse": [{ key: "lat", value: "30.0749" }, { key: "lng", value: "31.3462" }],
+  "/admin/bookings/search": [{ key: "q", value: "" }, { key: "status", value: "" }, { key: "paymentStatus", value: "" }, { key: "scope", value: "upcoming" }, { key: "page", value: "1" }, { key: "limit", value: "25" }],
   "/vehicles": [{ key: "category", value: "VAN" }, { key: "status", value: "AVAILABLE" }],
   "/vehicles/{id}/availability": [{ key: "month", value: "2026-09" }],
   "/bookings/estimate-price": [],
@@ -314,6 +318,8 @@ const DESCRIPTIONS = {
   "/bookings/{id}/trip-status": "NOTSTARTED→INPROGRESS→ARRIVED→COMPLETED. Trip COMPLETED auto-completes the booking and releases the driver.",
   "/bookings/{id}": "Cancels a booking (DELETE). Settles the money paid by the cancellation policy (Settings `freeCancellationHours`, default 48): cancelled that long before the start, everything paid goes back to the customer's wallet; later, the deposit is kept and anything above it goes back. An admin may send `refundDeposit: true|false` to decide either way (ignored from a customer). The booking gets `cancelledAt`, `depositOutcome` (REFUNDED, KEPT or null when nothing was paid) and `depositRefunded`; the response also has `cancellation` (paid, refund, kept). Releases availability & driver and promotes waitlist position #1. Cancelling twice changes nothing.",
   "/bookings/{id}/cancellation": "What cancelling now would do to the money paid: `paid`, `refund` (to the wallet), `kept`, `outcome`, `freeUntil` (last moment for a full refund) and `freeCancellationHours`. Show it before the customer confirms. The booking's customer or an admin (404 otherwise).",
+  "/places/search": "PUBLIC. Place search for the booking map, anywhere in Egypt (OpenStreetMap through Photon). `q` (2-120 characters); optional `lat`/`lng` rank nearby places first (send the map's centre). Returns up to 8 `{ name, detail, label, latitude, longitude, kind }`; send `{ latitude, longitude, label }` as startPoint/endPoint. 502 when the provider is down (let the user drop a pin instead). Cached for a day; limited per IP (PLACES_RATE_LIMIT, default 300 per 15 minutes).",
+  "/places/reverse": "PUBLIC. The address at a pin (`lat`, `lng`, inside Egypt; 400 otherwise), from Nominatim with Photon as fallback, in Arabic. Same shape as a search result, with the pin's own coordinates. If both providers are down the label is the coordinates.",
   "/admin/bookings/search": "Dashboard bookings page. `q` matches a reference (MW-1A2B3C), the customer's name or phone (01…, +20… or 0020…). Filters: `status`, `paymentStatus`, `scope` (upcoming = today onwards, soonest first [default]; past = latest first; all), `from`/`to` (YYYY-MM-DD), `page`, `limit` (max 100). Returns `data` (same shape as a day's bookings, plus cancellation fields), `counts` per status for the same search, and `pagination`.",
   "/driver/{id}": "PUBLIC. Returns a driver's profile by id (rating included).",
   "/referrals/{id}/complete": "PUBLIC. Credits both referrer & referee wallets when the refereed user completes their first booking.",

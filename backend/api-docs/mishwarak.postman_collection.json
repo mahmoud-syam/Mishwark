@@ -4052,6 +4052,38 @@
                 "admin",
                 "bookings",
                 "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "paymentStatus",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "scope",
+                  "value": "upcoming",
+                  "disabled": false
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "25",
+                  "disabled": false
+                }
               ]
             },
             "description": "Dashboard bookings page. `q` matches a reference (MW-1A2B3C), the customer's name or phone (01…, +20… or 0020…). Filters: `status`, `paymentStatus`, `scope` (upcoming = today onwards, soonest first [default]; past = latest first; all), `from`/`to` (YYYY-MM-DD), `page`, `limit` (max 100). Returns `data` (same shape as a day's bookings, plus cancellation fields), `counts` per status for the same search, and `pagination`."
@@ -6086,6 +6118,82 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Placess",
+      "item": [
+        {
+          "name": "GET /places/search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/places/search",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "places",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "قاعة الماسة",
+                  "disabled": false
+                },
+                {
+                  "key": "lat",
+                  "value": "30.0444",
+                  "disabled": false
+                },
+                {
+                  "key": "lng",
+                  "value": "31.2357",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "PUBLIC. Place search for the booking map, anywhere in Egypt (OpenStreetMap through Photon). `q` (2-120 characters); optional `lat`/`lng` rank nearby places first (send the map's centre). Returns up to 8 `{ name, detail, label, latitude, longitude, kind }`; send `{ latitude, longitude, label }` as startPoint/endPoint. 502 when the provider is down (let the user drop a pin instead). Cached for a day; limited per IP (PLACES_RATE_LIMIT, default 300 per 15 minutes)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /places/reverse",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/places/reverse",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "places",
+                "reverse"
+              ],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "30.0749",
+                  "disabled": false
+                },
+                {
+                  "key": "lng",
+                  "value": "31.3462",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "PUBLIC. The address at a pin (`lat`, `lng`, inside Egypt; 400 otherwise), from Nominatim with Photon as fallback, in Arabic. Same shape as a search result, with the pin's own coordinates. If both providers are down the label is the coordinates."
+          },
+          "response": []
         }
       ]
     }
