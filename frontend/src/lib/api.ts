@@ -66,14 +66,15 @@ export const api = {
   put: <T>(path: string, body?: unknown) => request<Envelope<T>>("PUT", path, body ?? {}).then((r) => r.data),
   del: <T>(path: string) => request<Envelope<T>>("DELETE", path).then((r) => r.data),
   /** multipart/form-data (photos). The browser sets the boundary header itself. */
-  upload: async <T>(path: string, form: FormData): Promise<T> => {
-    const res = await fetch(API_BASE + path, { method: "POST", credentials: "include", body: form });
+  upload: async <T>(path: string, form: FormData, method: "POST" | "PUT" = "POST"): Promise<T> => {
+    const res = await fetch(API_BASE + path, { method, credentials: "include", body: form });
     const json = safeJson(await res.text());
     if (!res.ok) {
       if (res.status === 401) onUnauthorized?.();
       throw new ApiError(res.status, (json && json.message) || `HTTP ${res.status}`, json?.errorCode, json?.errors);
     }
-    return json.data as T;
+    // Most endpoints wrap the result in `data`; /auth/* replies are bare.
+    return (json && "data" in json ? json.data : json) as T;
   },
 };
 

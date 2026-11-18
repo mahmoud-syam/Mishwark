@@ -306,7 +306,20 @@ export function Chips<T extends string>({
 }
 
 // ---------------------------------------------------------------- avatars
-export function Avatar({ text, size = 36, tone = "wine" }: { text: string; size?: number; tone?: "wine" | "gold" | "plain" }) {
+export function Avatar({ text, size = 36, tone = "wine", src, alt = "" }: { text: string; size?: number; tone?: "wine" | "gold" | "plain"; src?: string | null; alt?: string }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [src]);
+  if (src && !broken) {
+    return (
+      <img
+        src={src}
+        alt={alt}
+        onError={() => setBroken(true)}
+        className="inline-block shrink-0 rounded-full bg-raised object-cover ring-1 ring-line"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   const bg =
     tone === "gold" ? "bg-linear-135 from-gold to-gold-deep text-on-accent" : tone === "plain" ? "bg-raised border border-line text-cream" : "bg-linear-135 from-navy to-navy-soft text-white";
   return (

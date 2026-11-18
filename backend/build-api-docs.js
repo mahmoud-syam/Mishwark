@@ -243,6 +243,8 @@ const BODY_EXAMPLES = {
   "PATCH /admin/destinations/{id}": { prices: { CLASSIC: 2600 }, includedKm: 200 },
   "/admin/vehicles/{id}/drivers": { driverIds: ["{{driverId}}"], primaryDriverId: "{{driverId}}" },
   "/admin/vehicles/{id}/images": { images: "" },
+  "/auth/me/photo": { photo: "" },
+  "/auth/me/password": { currentPassword: "secret123", newPassword: "a-new-password" },
   "POST /driver/documents": { type: "NATIONAL_ID_FRONT", file: "" },
   "/admin/driver-documents/{id}": { status: "REJECTED", note: "الصورة مش واضحة" },
   "/admin/vehicles/{id}/images/{imageId}/cover": {},
@@ -334,6 +336,9 @@ const DESCRIPTIONS = {
   "POST /admin/destinations": "Adds a private-trip destination (settings:manage). `prices` per car category; `includedKm` null = Settings.tripIncludedKm. Audit-logged.",
   "PATCH /admin/destinations/{id}": "Edits a destination (settings:manage). `prices` is merged per category (send only the ones that change). `active: false` hides it from booking. Audit-logged.",
   "DELETE /admin/destinations/{id}": "Deletes a destination nobody booked; one with bookings is switched off instead (`deactivated: true`) so history keeps it. settings:manage. Audit-logged.",
+  "PUT /auth/me/photo": "Sets the signed-in user's own photo: multipart/form-data, field `photo` (JPG, PNG or WEBP, checked by content; 5 MB, 413 above). Replaces the previous photo and deletes its file. Returns the same shape as GET /auth/me, with `pic` (a path such as /uploads/employees/pic-<uuid>.jpg).",
+  "DELETE /auth/me/photo": "Removes the signed-in user's own photo. Returns the same shape as GET /auth/me (`pic` is \"\").",
+  "/auth/me/password": "A dashboard account (Admin, Super Admin) changes its own password: `{ currentPassword, newPassword }` (8+ characters, different from the current one). A wrong current password is a 400 and counts toward the sign-in lockout. Other sessions are signed out; the response sets a fresh session cookie so this one carries on. 403 for app accounts (they sign in with a phone code).",
   "GET /driver/documents": "The signed-in driver's papers: every required type (NATIONAL_ID_FRONT, NATIONAL_ID_BACK, LICENSE_FRONT, LICENSE_BACK, CRIMINAL_RECORD) with `status` MISSING, PENDING, APPROVED or REJECTED (+ `reviewNote`, the reason to show), and `summary.state` (MISSING, PENDING, REJECTED, APPROVED). 403 for non-drivers.",
   "POST /driver/documents": "Uploads one paper as multipart/form-data: `type` + `file` (JPG, PNG, WEBP or PDF, checked by content; 10 MB, 413 above). Replaces an earlier one of that type and puts it back to review (PENDING). Stored privately, never at a public URL. 201 with the document.",
   "/driver/documents/{id}/file": "The driver's own paper (the dashboard team can open it too); 404 for anyone else. Sent inline with Cache-Control: private, no-store.",
@@ -948,10 +953,10 @@ const LOGIN_STEP_ROUTES = new Set(["/auth/login", "/auth/set-password"]);
 // /auth/signup is the only route mounted behind multer, so it is the only one
 // that must be described as multipart/form-data. Declaring it as JSON makes
 // multer skip req.body entirely, so every field arrives undefined.
-const MULTIPART_ROUTES = new Set(["/auth/signup", "/admin/vehicles/{id}/images", "POST /driver/documents", "/driver/documents"]);
+const MULTIPART_ROUTES = new Set(["/auth/me/photo", "/auth/signup", "/admin/vehicles/{id}/images", "POST /driver/documents", "/driver/documents"]);
 
 // File fields must be sent as multipart `file` parts, not text.
-const MULTIPART_FILE_FIELDS = { "/auth/signup": new Set(["pic", "nationalIdFront", "nationalIdBack", "licenseFront", "licenseBack", "criminalRecord"]), "/admin/vehicles/{id}/images": new Set(["images"]), "/driver/documents": new Set(["file"]) };
+const MULTIPART_FILE_FIELDS = { "/auth/me/photo": new Set(["photo"]), "/auth/signup": new Set(["pic", "nationalIdFront", "nationalIdBack", "licenseFront", "licenseBack", "criminalRecord"]), "/admin/vehicles/{id}/images": new Set(["images"]), "/driver/documents": new Set(["file"]) };
 
 // Shown in the Apidog sidebar next to each folder.
 const TAG_DESCRIPTIONS = {

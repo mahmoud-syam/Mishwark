@@ -26,7 +26,7 @@ import { useTheme } from "../lib/theme";
 import { initials } from "../lib/format";
 import { ROLE_LABEL } from "../lib/labels";
 import type { Overview } from "../lib/types";
-import { BrandMark, cx } from "./ui";
+import { Avatar, BrandMark, cx } from "./ui";
 
 type Item = { to: string; label: string; icon: ReactNode; end?: boolean; badge?: number; superOnly?: boolean };
 
@@ -177,17 +177,23 @@ function Sidebar({ onClose, onCollapse }: { onClose?: () => void; onCollapse?: (
           {theme === "dark" ? "الوضع الفاتح" : "الوضع الداكن"}
         </button>
 
-        <div className="mt-3 flex items-center gap-3 rounded-2xl bg-white/8 p-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-linear-135 from-gold to-gold-deep text-[14px] font-bold text-on-accent">
-            {initials(me?.name ?? "")}
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-[15px] font-bold">{me?.name}</span>
-            <span className="text-[12px] text-white/60" dir="ltr">
-              {ROLE_LABEL[me?.role?.name ?? ""] ?? ""}
+        <div className="mt-3 flex items-center gap-1 rounded-2xl bg-white/8 p-1.5">
+          <NavLink
+            to="/profile"
+            title="البروفايل بتاعي"
+            className={({ isActive }) =>
+              cx("flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1.5 transition hover:bg-white/8", isActive && "bg-white/10 ring-1 ring-gold/50")
+            }
+          >
+            <Avatar text={initials(me?.name ?? "")} src={me?.pic || null} size={36} tone="gold" />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-[15px] font-bold">{me?.name}</span>
+              <span className="text-[12px] text-white/60" dir="ltr">
+                {ROLE_LABEL[me?.role?.name ?? ""] ?? ""}
+              </span>
             </span>
-          </span>
-          <button type="button" onClick={logout} className="rounded-lg p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white" title="تسجيل الخروج" aria-label="تسجيل الخروج">
+          </NavLink>
+          <button type="button" onClick={logout} className="rounded-lg p-2 text-white/70 transition hover:bg-white/10 hover:text-white" title="تسجيل الخروج" aria-label="تسجيل الخروج">
             <LogOut className="size-[18px]" />
           </button>
         </div>
