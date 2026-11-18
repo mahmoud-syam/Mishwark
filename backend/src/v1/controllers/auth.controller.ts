@@ -12,7 +12,7 @@ import { randomInt } from "crypto";
 import SmsService from "../services/sms.service";
 import SettingsService from "../services/settings.service";
 import { ReferralStatus } from "../../../generated/prisma";
-import { authCookieOptions, clearAuthCookieOptions } from "../utils/authCookie";
+import { appSessionDays, authCookieOptions, clearAuthCookieOptions } from "../utils/authCookie";
 import fs from "fs";
 import { imageTypeOf } from "../middlewares/multer.middleware";
 
@@ -326,15 +326,64 @@ export const verify2FALogin = async (req: Request, res: Response, next: NextFunc
 };
 
 /** The signed-in user, as resolved by authMiddleware (role re-read from the DB). */
+const DASHBOARD_NO_OTP = "Dashboard accounts sign in with email, password and 2FA";
+
+/** A customer who signed up with the phone number only has it as their name. */
+const profileComplete = (u: { name: string; phoneNumber: string | null }) => !!u.name.trim() && u.name !== u.phoneNumber;
+
+const meShape = (u: { id: string; name: string; email: string | null; phoneNumber: string | null; preferredLanguage?: string }, role: unknown) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    phoneNumber: u.phoneNumber,
+    preferredLanguage: u.preferredLanguage ?? "ar",
+    role,
+    profileComplete: profileComplete(u),
+});
+
 export const me = async (req: Request, res: Response) => {
     const u = req.user!;
-    res.status(200).json({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        phoneNumber: u.phoneNumber,
-        role: u.role,
-    });
+    const row = await prismaClient.users.findUnique({ where: { id: u.id }, select: { preferredLanguage: true } });
+    res.status(200).json(meShape({ ...(u as any), preferredLanguage: row?.preferredLanguage }, u.role));
+};
+
+const UpdateMeSchema = z
+    .object({
+        name: z.string().trim().min(2, "Name is too short").max(80),
+        email: z.union([z.string().trim().toLowerCase().email("Invalid email"), z.null()]),
+        preferredLanguage: z.enum(["ar", "en"]),
+    })
+    .partial()
+    .strict();
+
+/**
+ * The signed-in customer or driver completes or edits their own details
+ * (name, email, language). The phone number can't change here: it is the
+ * sign-in. Dashboard accounts can't change their email (it is their sign-in;
+ * a Super Admin manages it).
+ */
+export const updateMe = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const input = UpdateMeSchema.parse(req.body ?? {});
+        const u = req.user!;
+        if (input.email !== undefined && isAdminRole(u.role?.name)) {
+            throw new ForbiddenException("Dashboard accounts can't change their email here");
+        }
+        if (input.email) {
+            const taken = await prismaClient.users.findFirst({ where: { email: input.email, id: { not: u.id } }, select: { id: true } });
+            if (taken) throw new ConflictException("This email is already used by another account");
+        }
+        const updated = await prismaClient.users.update({
+            where: { id: u.id },
+            data: input,
+            select: { id: true, name: true, email: true, phoneNumber: true, preferredLanguage: true },
+        });
+        // A driver's name shows on trips from the driver record too.
+        if (input.name) await prismaClient.drivers.updateMany({ where: { userId: u.id }, data: { fullName: input.name } });
+        res.status(200).json(meShape(updated, u.role));
+    } catch (error) {
+        next(error);
+    }
 };
 
 export const logout = async (req: Request, res: Response, next: NextFunction) => {
@@ -469,8 +518,13 @@ export const otpRequest = async (req: Request, res: Response, next: NextFunction
 
         const existingUser = await prismaClient.users.findUnique({
             where: { phoneNumber },
-            select: { id: true, otpSentAt: true },
+            select: { id: true, otpSentAt: true, role: { select: { name: true } } },
         });
+        // Dashboard accounts sign in with email + password + 2FA only. An SMS
+        // code used to sign them in too, skipping the password and the 2FA.
+        if (existingUser && isAdminRole(existingUser.role?.name)) {
+            throw new ForbiddenException(DASHBOARD_NO_OTP);
+        }
 
         if (existingUser?.otpSentAt && Date.now() - existingUser.otpSentAt.getTime() < OTP_RESEND_SECONDS * 1000) {
             return res.status(429).json({
@@ -594,6 +648,9 @@ export const otpVerify = async (req: Request, res: Response, next: NextFunction)
         if (user.disabledAt) {
             throw new ForbiddenException("This account is disabled. Contact your Super Admin");
         }
+        if (isAdminRole(user.role?.name)) {
+            throw new ForbiddenException(DASHBOARD_NO_OTP);
+        }
         SignInGuard.succeed(req, phoneNumber);
 
         const updatedUser = await prismaClient.users.update({
@@ -611,15 +668,19 @@ export const otpVerify = async (req: Request, res: Response, next: NextFunction)
         // Flatten permissions to names so requirePermission does not receive
         // raw Prisma Permission objects.
         const tokenUser = buildTokenUser(updatedUser);
-        const token = jwt.sign({ user: tokenUser }, process.env.JWT_SECRET as string, { expiresIn: "24h" });
+        const days = appSessionDays();
+        const token = jwt.sign({ user: tokenUser }, process.env.JWT_SECRET as string, { expiresIn: `${days}d` });
 
-        res.cookie("token", token, authCookieOptions());
+        res.cookie("token", token, authCookieOptions(days * 86_400_000));
 
         res.status(200).json({
             message: "OTP verified successfully",
             token,
             role: tokenUser.role?.name ?? null,
-            user: tokenUser
+            user: tokenUser,
+            // false while the customer hasn't given a name yet (signed up with
+            // the phone number only): ask for it when they book.
+            profileComplete: profileComplete(updatedUser),
         });
     } catch (error) {
         next(error);

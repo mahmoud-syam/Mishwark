@@ -246,7 +246,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Public. Sends a 4-digit OTP to the phone. 01…, +20… and 0020… are the same number (stored as +20…). In dev the code is returned as dev_otp.",
+        "summary": "Public. Sends a 4-digit OTP to the phone; only phoneNumber is required (a new customer can give the name later with PATCH /auth/me). 403 for dashboard accounts. 01…, +20… and 0020… are the same number (stored as +20…). In dev the code is returned as dev_otp.",
         "responses": {
           "200": {
             "description": "Success",
@@ -295,7 +295,7 @@
             }
           }
         },
-        "description": "Public. Sends a 4-digit OTP to the phone. 01…, +20… and 0020… are the same number (stored as +20…). In dev the code is returned as dev_otp.",
+        "description": "Public. Sends a 4-digit OTP to the phone; only phoneNumber is required (a new customer can give the name later with PATCH /auth/me). 403 for dashboard accounts. 01…, +20… and 0020… are the same number (stored as +20…). In dev the code is returned as dev_otp.",
         "operationId": "post_auth_otp_request"
       }
     },
@@ -304,7 +304,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Public. Verifies OTP and returns a JWT. Dev bypass code: 0000. Response drives role-based home screen.",
+        "summary": "Public. Verifies the OTP and returns a JWT valid for APP_SESSION_DAYS (default 30) plus `profileComplete`. Dashboard accounts get 403 (they sign in with email, password and 2FA). Dev bypass code: 0000. Response drives role-based home screen.",
         "responses": {
           "200": {
             "description": "Success",
@@ -352,7 +352,7 @@
             }
           }
         },
-        "description": "Public. Verifies OTP and returns a JWT. Dev bypass code: 0000. Response drives role-based home screen.",
+        "description": "Public. Verifies the OTP and returns a JWT valid for APP_SESSION_DAYS (default 30) plus `profileComplete`. Dashboard accounts get 403 (they sign in with email, password and 2FA). Dev bypass code: 0000. Response drives role-based home screen.",
         "operationId": "post_auth_otp_verify"
       }
     },
@@ -575,7 +575,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "The signed-in user and role (role re-read from the database).",
+        "summary": "The signed-in user: id, name, email, phoneNumber, preferredLanguage, role (re-read from the database) and `profileComplete` (false while a customer who signed up with the phone number only has no name yet).",
         "security": [
           {
             "bearerAuth": []
@@ -614,8 +614,54 @@
             "description": "Internal Server Error"
           }
         },
-        "description": "The signed-in user and role (role re-read from the database).",
+        "description": "The signed-in user: id, name, email, phoneNumber, preferredLanguage, role (re-read from the database) and `profileComplete` (false while a customer who signed up with the phone number only has no name yet).",
         "operationId": "get_auth_me"
+      },
+      "patch": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "The signed-in user completes or edits their own details: `name` (2-80), `email` (or null to clear; 409 if taken), `preferredLanguage` (ar|en). The phone number can't change here (422 for unknown fields). Dashboard accounts can't change their email here (403). Returns the GET /auth/me shape.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "The signed-in user completes or edits their own details: `name` (2-80), `email` (or null to clear; 409 if taken), `preferredLanguage` (ar|en). The phone number can't change here (422 for unknown fields). Dashboard accounts can't change their email here (403). Returns the GET /auth/me shape.",
+        "operationId": "patch_auth_me"
       }
     },
     "/auth/logout-all-devices": {

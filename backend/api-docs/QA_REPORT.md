@@ -19,7 +19,7 @@ The mobile apps are not in this repository, so both apps were simulated through 
 | API sweep (functional, ownership, no-auth, robustness) | 357 / 357 passing |
 | Bugs found and fixed | 17 |
 | Product decisions taken and implemented | 7 + SMS/OTP hardening |
-| Backend test suite | 342 / 342 passing |
+| Backend test suite | 349 / 349 passing |
 
 All dashboard numbers matched the database exactly at every step: revenue,
 pending bookings, live trips, payments, driver and customer analytics,
@@ -171,6 +171,13 @@ Found while testing them:
 | F-51 | Medium | The dashboard had no way to find, confirm or cancel a booking outside the day view. | New Bookings page (search by ref/name/phone, status tabs, payment filter) with confirm, complete, payments and cancel. |
 | F-52 | Low | An admin confirming or cancelling a booking wasn't in the audit log. | Logged with the old and new status, and the money settled on cancel. |
 | F-53 | Low | `HH:mm` accepted impossible times like 25:99. | Validated as 00:00 to 23:59. |
+
+### Easy sign-up for customers (2026-11-18)
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-54 | Critical | A dashboard account (Admin or Super Admin) could sign in with an SMS code to its phone number, skipping the password and 2FA. | OTP is refused for dashboard accounts, on request (no SMS sent) and on verify. |
+| F-55 | Medium | Customers had to request a new SMS code every 24 hours, and there was no way for them to give or change their name or email. | App sessions last 30 days (`APP_SESSION_DAYS`); `PATCH /auth/me`; `profileComplete` tells the app when to ask for the name. |
 
 New: Team page (Super Admin only) to create dashboard accounts with a
 temporary password (changed at first sign-in, then 2FA), reset 2FA or the

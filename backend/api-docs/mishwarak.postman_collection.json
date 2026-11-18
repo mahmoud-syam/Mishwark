@@ -266,7 +266,7 @@
                 }
               }
             },
-            "description": "Public. Sends a 4-digit OTP to the phone. 01…, +20… and 0020… are the same number (stored as +20…). In dev the code is returned as dev_otp."
+            "description": "Public. Sends a 4-digit OTP to the phone; only phoneNumber is required (a new customer can give the name later with PATCH /auth/me). 403 for dashboard accounts. 01…, +20… and 0020… are the same number (stored as +20…). In dev the code is returned as dev_otp."
           },
           "response": [
             {
@@ -327,7 +327,7 @@
                 }
               }
             },
-            "description": "Public. Verifies OTP and returns a JWT. Dev bypass code: 0000. Response drives role-based home screen."
+            "description": "Public. Verifies the OTP and returns a JWT valid for APP_SESSION_DAYS (default 30) plus `profileComplete`. Dashboard accounts get 403 (they sign in with email, password and 2FA). Dev bypass code: 0000. Response drives role-based home screen."
           },
           "response": [
             {
@@ -622,7 +622,47 @@
                 "me"
               ]
             },
-            "description": "The signed-in user and role (role re-read from the database)."
+            "description": "The signed-in user: id, name, email, phoneNumber, preferredLanguage, role (re-read from the database) and `profileComplete` (false while a customer who signed up with the phone number only has no name yet)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /auth/me",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "The signed-in user completes or edits their own details: `name` (2-80), `email` (or null to clear; 409 if taken), `preferredLanguage` (ar|en). The phone number can't change here (422 for unknown fields). Dashboard accounts can't change their email here (403). Returns the GET /auth/me shape."
           },
           "response": [],
           "event": [
