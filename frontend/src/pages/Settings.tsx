@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -238,7 +239,10 @@ export default function Settings() {
             ))}
           </div>
 
-          <Panel title="الأسعار حسب نوع العربية" tag="بالجنيه · لو العربية ليها سعر خاص بيها بيتحسب هو">
+          <div className="rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-[14px] text-cream">
+            أسعار الزفاف والمشاوير والـ VIP بقت في <Link to="/pricing" className="font-bold text-gold underline underline-offset-4">صفحة الأسعار</Link>. الجدول اللي تحت ده للتسعير القديم بالكيلو، وبيستخدمه بس أي نسخة قديمة من التطبيق لسه ما اتحدّثتش.
+          </div>
+          <Panel title="التسعير القديم بالكيلو (للنسخ القديمة من التطبيق)" tag="بالجنيه · لو العربية ليها سعر خاص بيها بيتحسب هو">
             <Table head={["النوع", ...RATE_FIELDS.map((r) => r.label)]}>
               {Object.keys(rates).map((cat) => (
                 <tr key={cat}>

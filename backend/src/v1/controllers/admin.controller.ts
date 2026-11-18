@@ -110,6 +110,24 @@ const SETTING_LABELS: Record<string, string> = {
   punctualityGraceMinutes: "سماحية التأخير في البدء (دقيقة)",
   complaintMaxRating: "تقييم الشكوى (أقل من أو يساوي)",
   maintenanceAlertDays: "تنبيه الصيانة (يوم)",
+  maxAdvanceBookingDays: "أقصى حجز مقدمًا (يوم)",
+  minTripMinutes: "أقل مدة للرحلة (دقيقة)",
+  overnightLatestEndHour: "آخر ساعة للرحلات بعد نص الليل",
+  freeCancellationHours: "الإلغاء المجاني قبلها بـ (ساعة)",
+  tempPasswordDays: "صلاحية الباسورد المؤقت (يوم)",
+  weddingDefaultPrice: "سعر الزفاف الافتراضي",
+  weddingIncludedHours: "ساعات الزفاف المشمولة",
+  weddingIncludedKm: "كيلومترات الزفاف المشمولة",
+  weddingExtraHourPrice: "سعر ساعة الزفاف الزيادة",
+  weddingExtraKmPrice: "سعر كيلو الزفاف الزيادة",
+  vipDefaultPrice: "سعر VIP الافتراضي",
+  vipIncludedHours: "ساعات VIP المشمولة",
+  vipIncludedKm: "كيلومترات VIP المشمولة",
+  vipExtraHourPrice: "سعر ساعة VIP الزيادة",
+  vipExtraKmPrice: "سعر كيلو VIP الزيادة",
+  tripIncludedKm: "كيلومترات المشوار المشمولة",
+  tripExtraKmPrice: "سعر كيلو المشوار الزيادة",
+  originLabel: "نقطة بداية المشاوير",
   performanceHistoryVisible: "performanceHistoryVisible",
   evaluationsVisible: "evaluationsVisible",
   selfAppraisalsVisible: "selfAppraisalsVisible",
@@ -126,6 +144,9 @@ const describeSettingsChange = (before: any, after: any): string => {
     for (const f of ["basePrice", "pricePerKm", "pricePerHour"]) {
       if (b[f] !== a[f]) parts.push(`سعر ${cat} ${f}: ${b[f]} → ${a[f]}`);
     }
+  }
+  for (const cat of Object.keys(after.tripOtherPrices ?? {})) {
+    if (before.tripOtherPrices?.[cat] !== after.tripOtherPrices[cat]) parts.push(`مشوار لوجهة تانية ${cat}: ${before.tripOtherPrices?.[cat]} → ${after.tripOtherPrices[cat]}`);
   }
   return parts.join(" · ");
 };

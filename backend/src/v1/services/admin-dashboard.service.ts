@@ -9,6 +9,7 @@ import {
   PaymentRecordStatus,
   PaymentStatus,
   Prisma,
+  ServiceType,
   ReferralStatus,
   ReviewerType,
   TripStatus,
@@ -80,6 +81,8 @@ const shapeBooking = (b: Prisma.BookingsGetPayload<{ include: typeof BOOKING_ROW
   cancelledAt: b.cancelledAt,
   depositOutcome: b.depositOutcome,
   depositRefunded: b.depositRefunded,
+  serviceType: b.serviceType,
+  priceLines: b.priceLines,
   customer: b.customer,
   vehicle: { ...b.vehicle, name: vehicleName(b.vehicle) },
   driver: b.driver,
@@ -137,6 +140,8 @@ export interface BookOnBehalfInput {
   endTime: string;
   startPoint?: any;
   endPoint?: any;
+  serviceType?: ServiceType;
+  destinationId?: string;
   eventType?: string;
   notes?: string;
   priceOverride?: number;
@@ -770,6 +775,8 @@ export class AdminDashboardService {
         endTime: input.endTime,
         startPoint: input.startPoint,
         endPoint: input.endPoint,
+        serviceType: input.serviceType,
+        destinationId: input.destinationId,
         eventType: input.eventType,
         notes: input.notes,
       },

@@ -68,6 +68,9 @@ export const vehicleCreateSchema = z
     basePrice: money.default(0),
     pricePerKm: money.default(0),
     pricePerHour: money.default(0),
+    /** Fixed wedding / VIP price for this car; null = the default on the Pricing page. */
+    weddingPrice: money.nullable().default(null),
+    vipPrice: money.nullable().default(null),
     description: z.string().trim().max(1000).default(""),
     luggage: z.number().int().min(0).max(30).default(0),
     features: features.default([]),
@@ -86,6 +89,8 @@ export const vehicleUpdateSchema = z
     basePrice: money,
     pricePerKm: money,
     pricePerHour: money,
+    weddingPrice: money.nullable(),
+    vipPrice: money.nullable(),
     description: z.string().trim().max(1000),
     luggage: z.number().int().min(0).max(30),
     features,
@@ -192,7 +197,7 @@ export class FleetService {
     });
     const ids = vehicles.map((v) => v.id);
     const today = dateKey();
-    const [statuses, upcoming, nextMaint, { categoryRates }] = await Promise.all([
+    const [statuses, upcoming, nextMaint, { categoryRates, weddingDefaultPrice, vipDefaultPrice }] = await Promise.all([
       this.statuses(ids, today),
       prismaClient.bookings.groupBy({
         by: ["vehicleId"],
@@ -230,6 +235,11 @@ export class FleetService {
           basePrice: v.basePrice,
           effectiveBasePrice: v.basePrice > 0 ? v.basePrice : rate.basePrice,
           usesTypePrices: v.basePrice === 0 && v.pricePerKm === 0 && v.pricePerHour === 0,
+          // Service prices: the car's own, or the default from the Pricing page.
+          weddingPrice: v.weddingPrice,
+          vipPrice: v.vipPrice,
+          effectiveWeddingPrice: v.weddingPrice ?? weddingDefaultPrice,
+          effectiveVipPrice: v.vipPrice ?? vipDefaultPrice,
           coverImage: v.images[0]?.imageUrl ?? null,
           imagesCount: v.images.length,
           features: v.features,
@@ -269,7 +279,7 @@ export class FleetService {
     });
     if (!v) throw new NotFoundException("Car not found");
     const today = dateKey();
-    const [status, upcoming, stats, { categoryRates }] = await Promise.all([
+    const [status, upcoming, stats, { categoryRates, weddingDefaultPrice, vipDefaultPrice }] = await Promise.all([
       this.statuses([id], today),
       prismaClient.bookings.findMany({
         where: { vehicleId: id, bookingDate: { gte: today }, status: { in: UPCOMING } },
@@ -290,6 +300,8 @@ export class FleetService {
       name: `${v.make} ${v.model}`.trim(),
       status: status.get(id) ?? "AVAILABLE",
       typePrices: categoryRates[v.category],
+      /** Defaults used when the car has no wedding / VIP price of its own. */
+      defaultServicePrices: { wedding: weddingDefaultPrice, vip: vipDefaultPrice },
       drivers: vehicleDrivers.map((vd) => ({ id: vd.driver.id, name: vd.driver.fullName, status: vd.driver.status, rating: vd.driver.rating, isPrimary: vd.isPrimary })),
       maintenance: maintenance.map((m) => ({
         id: m.id,

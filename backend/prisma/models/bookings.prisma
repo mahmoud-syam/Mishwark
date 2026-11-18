@@ -9,6 +9,14 @@ model Bookings {
   package        Packages? @relation(fields: [packageId], references: [id], onDelete: SetNull)
   packageId      String?
   eventType      String    @default("")
+  /// How the trip is priced: wedding, private trip (to a destination) or VIP.
+  /// Null = the older per-km pricing (bookings made before service types).
+  serviceType    ServiceType?
+  /// Private trip to a listed destination (null = another place).
+  destination    Destinations? @relation(fields: [destinationId], references: [id], onDelete: SetNull)
+  destinationId  String?
+  /// The price as itemised lines when booked ({ code, amount, quantity, unitPrice }).
+  priceLines     Json?
   startPoint     String    @default("")
   endPoint       String    @default("")
   routeWaypoints Json?
@@ -87,4 +95,21 @@ model TripLocations {
   longitude  Float
   speed      Float?
   recordedAt DateTime @default(now())
+}
+
+/// Private-trip destinations with a fixed price per car category (Pricing page).
+model Destinations {
+  id          String     @id @default(uuid())
+  name        String
+  latitude    Float
+  longitude   Float
+  /// Kilometres included in the price; null = Settings.tripIncludedKm.
+  includedKm  Int?
+  /// { "LUXURY": 2500, "VAN": 1800, ... }. A missing category uses Settings.tripOtherPrices.
+  prices      Json       @default("{}")
+  active      Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @default(now()) @updatedAt
+  bookings    Bookings[]
 }

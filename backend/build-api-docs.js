@@ -30,7 +30,7 @@ function readRouteFiles() {
     .readdirSync(ROUTES_DIR)
     .filter((f) => /\.(route|routes)\.ts$/.test(f));
   // order by the namespace used at mount time in src/v1/routes/index.ts
-  const MOUNT_ORDER = ["auth", "vehicles", "booking", "driver", "review", "payment", "waitlist", "package", "chat", "referral", "wallet", "notification", "admin", "places"];
+  const MOUNT_ORDER = ["auth", "vehicles", "booking", "driver", "review", "payment", "waitlist", "package", "chat", "referral", "wallet", "notification", "admin", "places", "pricing"];
   files.sort((a, b) => {
     const ma = MOUNT_ORDER.indexOf(a.replace(/\.(route|routes)\.ts$/, ""));
     const mb = MOUNT_ORDER.indexOf(b.replace(/\.(route|routes)\.ts$/, ""));
@@ -88,6 +88,7 @@ const MOUNTS = {
   notification: "/notifications",
   admin: "/admin",
   places: "/places",
+  pricing: "/pricing",
 };
 
 // ---------------------------------------------------------------
@@ -232,6 +233,8 @@ const BODY_EXAMPLES = {
   "/admin/vehicles/{id}": { basePrice: 1800, luggage: 3, features: ["تكييف", "مقاعد جلد"] },
   "/admin/vehicles/{id}/retire": { reason: "Sold" },
   "/admin/vehicles/{id}/reactivate": {},
+  "POST /admin/destinations": { name: "مطار القاهرة الدولي", latitude: 30.1219, longitude: 31.4056, includedKm: null, prices: { LUXURY: 2200, VAN: 1700 } },
+  "PATCH /admin/destinations/{id}": { prices: { CLASSIC: 2600 }, includedKm: 200 },
   "/admin/vehicles/{id}/drivers": { driverIds: ["{{driverId}}"], primaryDriverId: "{{driverId}}" },
   "/admin/vehicles/{id}/images": { images: "" },
   "/admin/vehicles/{id}/images/{imageId}/cover": {},
@@ -312,12 +315,17 @@ const DESCRIPTIONS = {
   "/admin/team/{id}/disable": "Disables a team account (someone left): signed out everywhere at once, can't sign in (403 \"This account is disabled\"), history and audit entries kept. Any account but your own, Super Admins included. Super Admin only. Audit-logged.",
   "/admin/team/{id}/enable": "Enables a disabled team account again; the member signs in as before (password + 2FA). Super Admin only. Audit-logged.",
   "/admin/team/{id}/role": "Changes a member's role (ADMIN or SUPER_ADMIN). Signs them out so the new permissions apply. Super Admin only; not on your own account. Audit-logged.",
-  "/bookings/estimate-price": "PUBLIC. Server-side price estimate. 400 for a retired car. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount.",
+  "/bookings/estimate-price": "PUBLIC. Server-side price. Send `serviceType` (WEDDING, TRIP, VIP) with `vehicleId`: WEDDING/VIP = the car's own fixed price (or the default) covering included hours and km, plus every started extra hour (send `startTime`/`endTime`) and every extra km; TRIP = from the company (Settings origin, unless startPoint is sent) to a listed `destinationId` (fixed price per car category) or to `endPoint` (the category's \"another place\" price), plus extra km beyond the included ones. The response adds `lines` (itemised: wedding|vip|trip|trip_other, extra_hours, extra_km, package_discount, referral_discount with quantity, unitPrice, included), `bookedMinutes`, `depositRate`, `destination`, the points used and `route` (source haversine = straight-line estimate). Without serviceType the older per-km price applies. 400 for a retired car or an inactive destination.",
   "/bookings/estimate-distance": "PUBLIC. Resolves startPoint/endPoint (coordinates or a place name) into distanceKm and durationMinutes. Coordinates are passed through; free text is geocoded via OpenRouteService. Without ORS_API_KEY the server falls back to a straight-line estimate and says so in `source` and `warning`.",
   "/bookings/{id}/status": "Transitions booking status. PENDING→CONFIRMED/CANCELLED, CONFIRMED→COMPLETED/CANCELLED.",
   "/bookings/{id}/trip-status": "NOTSTARTED→INPROGRESS→ARRIVED→COMPLETED. Trip COMPLETED auto-completes the booking and releases the driver.",
   "/bookings/{id}": "Cancels a booking (DELETE). Settles the money paid by the cancellation policy (Settings `freeCancellationHours`, default 48): cancelled that long before the start, everything paid goes back to the customer's wallet; later, the deposit is kept and anything above it goes back. An admin may send `refundDeposit: true|false` to decide either way (ignored from a customer). The booking gets `cancelledAt`, `depositOutcome` (REFUNDED, KEPT or null when nothing was paid) and `depositRefunded`; the response also has `cancellation` (paid, refund, kept). Releases availability & driver and promotes waitlist position #1. Cancelling twice changes nothing.",
   "/bookings/{id}/cancellation": "What cancelling now would do to the money paid: `paid`, `refund` (to the wallet), `kept`, `outcome`, `freeUntil` (last moment for a full refund) and `freeCancellationHours`. Show it before the customer confirms. The booking's customer or an admin (404 otherwise).",
+  "/pricing": "PUBLIC. Every price and rule the apps need before booking: `origin` (where private trips start), `depositRate`, `wedding` and `vip` ({ defaultPrice, includedHours, includedKm, extraHourPrice, extraKmPrice }; a car's own price is `weddingPrice` / `vipPrice` on the vehicle), `trip` ({ includedKm, extraKmPrice, otherPrices per car category }) and the active `destinations` with their price per category. The final price always comes from POST /bookings/estimate-price.",
+  "GET /admin/destinations": "Pricing page: every private-trip destination (inactive too) with the prices entered (`prices`), the prices each car category actually gets (`effectivePrices`: a missing category uses Settings.tripOtherPrices), `effectiveIncludedKm` and how many bookings use it.",
+  "POST /admin/destinations": "Adds a private-trip destination (settings:manage). `prices` per car category; `includedKm` null = Settings.tripIncludedKm. Audit-logged.",
+  "PATCH /admin/destinations/{id}": "Edits a destination (settings:manage). `prices` is merged per category (send only the ones that change). `active: false` hides it from booking. Audit-logged.",
+  "DELETE /admin/destinations/{id}": "Deletes a destination nobody booked; one with bookings is switched off instead (`deactivated: true`) so history keeps it. settings:manage. Audit-logged.",
   "/places/search": "PUBLIC. Place search for the booking map, anywhere in Egypt (OpenStreetMap through Photon). `q` (2-120 characters); optional `lat`/`lng` rank nearby places first (send the map's centre). Returns up to 8 `{ name, detail, label, latitude, longitude, kind }`; send `{ latitude, longitude, label }` as startPoint/endPoint. 502 when the provider is down (let the user drop a pin instead). Cached for a day; limited per IP (PLACES_RATE_LIMIT, default 300 per 15 minutes).",
   "/places/reverse": "PUBLIC. The address at a pin (`lat`, `lng`, inside Egypt; 400 otherwise), from Nominatim with Photon as fallback, in Arabic. Same shape as a search result, with the pin's own coordinates. If both providers are down the label is the coordinates.",
   "/admin/bookings/search": "Dashboard bookings page. `q` matches a reference (MW-1A2B3C), the customer's name or phone (01…, +20… or 0020…). Filters: `status`, `paymentStatus`, `scope` (upcoming = today onwards, soonest first [default]; past = latest first; all), `from`/`to` (YYYY-MM-DD), `page`, `limit` (max 100). Returns `data` (same shape as a day's bookings, plus cancellation fields), `counts` per status for the same search, and `pagination`.",
@@ -373,7 +381,7 @@ const DESCRIPTIONS = {
   "GET /vehicles/{id}": "One bookable car with photos (cover first), features and luggage. 404 if it doesn't exist, is retired or has no driver.",
   "POST /driver/vehicles": "Retired: always 403. Cars are assigned to drivers by the administration (PUT /admin/vehicles/{id}/drivers).",
   "DELETE /driver/vehicles/{vehicleId}": "Retired: always 403. Cars are assigned to drivers by the administration (PUT /admin/vehicles/{id}/drivers).",
-  "POST /bookings": "Creates a booking (PENDING). An endTime earlier than startTime means the trip ends the next morning (e.g. 22:00 to 01:00); it must end by Settings `overnightLatestEndHour` (default 06:00; 400 otherwise, and 0 turns trips past midnight off). Also 400 for a trip shorter than `minTripMinutes` (default 30), more than `maxAdvanceBookingDays` ahead (default 365), or a start more than 15 minutes in the past today. Clashes with the car, the driver or maintenance are checked across midnight. Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free.",
+  "POST /bookings": "Creates a booking (PENDING). Send `serviceType` (WEDDING, TRIP, VIP) and, for a trip, `destinationId` (then startPoint/endPoint are optional: the trip starts at the company and ends at the destination). Priced exactly like POST /bookings/estimate-price; the booking keeps `serviceType`, `destinationId` and `priceLines`. An endTime earlier than startTime means the trip ends the next morning (e.g. 22:00 to 01:00); it must end by Settings `overnightLatestEndHour` (default 06:00; 400 otherwise, and 0 turns trips past midnight off). Also 400 for a trip shorter than `minTripMinutes` (default 30), more than `maxAdvanceBookingDays` ahead (default 365), or a start more than 15 minutes in the past today. Clashes with the car, the driver or maintenance are checked across midnight. Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free.",
 };
 
 const SUCCESS_RESPONSES = {

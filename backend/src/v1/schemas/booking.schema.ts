@@ -1,6 +1,6 @@
 import { TIME_RE } from "../utils/slots";
 import { z } from "zod";
-import { VehicleCategory, BookingStatus, TripStatus } from "../../../generated/prisma";
+import { VehicleCategory, BookingStatus, TripStatus, ServiceType } from "../../../generated/prisma";
 
 const latitude = z.number().min(-90).max(90);
 const longitude = z.number().min(-180).max(180);
@@ -25,6 +25,18 @@ const routeFields = z.object({
   startPoint: locationInput.optional(),
   endPoint: locationInput.optional(),
 });
+
+/**
+ * How the booking is priced (wedding, private trip, VIP). A private trip to a
+ * listed destination needs no points: it starts at the company and ends at the
+ * destination. Without serviceType the older per-km price applies.
+ */
+const serviceFields = z.object({
+  serviceType: z.nativeEnum(ServiceType).optional(),
+  destinationId: z.string().min(1).optional(),
+});
+/** True when the points can be left out (a trip to a listed destination). */
+export const pointsOptional = (v: { serviceType?: ServiceType; destinationId?: string }) => v.serviceType === ServiceType.TRIP && !!v.destinationId;
 
 const hasEitherEndpoint = (value: { startPoint?: unknown; endPoint?: unknown }) =>
   value.startPoint != null || value.endPoint != null;
@@ -64,9 +76,22 @@ export const calculatePriceSchema = z
     customBasePrice: clientPriceOverride("customBasePrice").optional(),
     customPricePerKm: clientPriceOverride("customPricePerKm").optional(),
     customPricePerHour: clientPriceOverride("customPricePerHour").optional(),
+    /** With serviceType: the booked hours (wedding / VIP extra hours). */
+    startTime: z.string().regex(TIME_RE).optional(),
+    endTime: z.string().regex(TIME_RE).optional(),
   })
   .merge(routeFields)
+  .merge(serviceFields)
   .superRefine((value, ctx) => {
+    if (value.serviceType && !value.vehicleId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["vehicleId"], message: "vehicleId is required with serviceType" });
+    }
+    if (value.serviceType === ServiceType.TRIP) {
+      if (!value.destinationId && value.endPoint == null) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["destinationId"], message: "Choose a destination or send endPoint" });
+      }
+      return;
+    }
     if (!hasEitherEndpoint(value)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -94,6 +119,7 @@ export const createBookingSchema = z
     surgeMultiplier: z.number().min(0).max(10).optional(),
   })
   .merge(routeFields)
+  .merge(serviceFields)
   .superRefine((value, ctx) => {
     // An earlier end time means the trip ends the next morning (checked
     // against the overnight limit in Settings); the same time is no trip.
@@ -107,7 +133,9 @@ export const createBookingSchema = z
     // Without a resolvable route there is no trustworthy distance, and a
     // distance-less booking prices at base only - which is how the "confirm
     // booking" flow could be abused for free rides. Both endpoints are required.
-    if (value.startPoint == null || value.endPoint == null) {
+    if (value.serviceType === ServiceType.TRIP && !value.destinationId && value.endPoint == null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["destinationId"], message: "Choose a destination or send endPoint" });
+    } else if (!pointsOptional(value) && value.serviceType !== ServiceType.TRIP && (value.startPoint == null || value.endPoint == null)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: [value.startPoint == null ? "startPoint" : "endPoint"],

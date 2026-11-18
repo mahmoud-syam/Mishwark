@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { LoaderCircle, MapPin, Search, X } from "lucide-react";
+import { ExternalLink, LoaderCircle, MapPin, Search, X } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { SAVED_PLACES } from "../lib/places";
 import { Button, cx, fieldControl } from "./ui";
@@ -36,6 +36,16 @@ const pinIcon = (which: Which, faded = false) =>
       <svg width="34" height="44" viewBox="0 0 34 44" aria-hidden="true"><path d="M17 1C8.7 1 2 7.6 2 15.8 2 27 17 43 17 43s15-16 15-27.2C32 7.6 25.3 1 17 1z" fill="currentColor" stroke="white" stroke-width="2"/>
       <text x="17" y="20" text-anchor="middle" font-size="12" font-weight="700" fill="white" font-family="Cairo, sans-serif">${which === "from" ? "من" : "إلى"}</text></svg></div>`,
   });
+
+/** Straight-line distance in km between two points. */
+const straightKm = (a: PlacePoint, b: PlacePoint) => {
+  const R = 6371;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b.latitude - a.latitude);
+  const dLng = rad(b.longitude - a.longitude);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+};
 
 function useDebounced<T>(value: T, ms = 350) {
   const [v, setV] = useState(value);
@@ -163,7 +173,7 @@ export function PlacePickerDialog({
     dialog.current?.showModal();
     const m = L.map(mapEl.current!, {
       center: [center.lat, center.lng],
-      zoom: initial || other ? 14 : 11,
+      zoom: initial ? 16 : other ? 13 : 12,
       minZoom: 5,
       maxBounds: EGYPT_BOUNDS,
       maxBoundsViscosity: 0.8,
@@ -299,6 +309,25 @@ export function PlacePickerDialog({
             </div>
           )}
         </div>
+
+        {pin && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-raised px-3 py-2 text-[12px] text-muted">
+            {other && (
+              <span>
+                المسافة من {which === "from" ? "الوجهة" : "نقطة الانطلاق"} ≈{" "}
+                <b className="text-cream">{straightKm(pin, other).toLocaleString("ar-EG", { maximumFractionDigits: 1 })} كم</b> بخط مستقيم (على الطريق أطول)
+              </span>
+            )}
+            <a
+              href={`https://www.google.com/maps?q=${pin.latitude},${pin.longitude}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-gold hover:underline"
+            >
+              <ExternalLink className="size-3.5" /> اتأكد من المكان على Google Maps
+            </a>
+          </div>
+        )}
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <label className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-xl border border-line bg-raised px-3 pb-2.5 pt-2.5 focus-within:border-gold/60">

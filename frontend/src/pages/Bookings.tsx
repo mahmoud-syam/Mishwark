@@ -8,6 +8,7 @@ import { BOOKING_STATUS } from "../lib/labels";
 import { dayMonth, egp, monthName, num, relativeStamp, timeRange, todayKey, weekdayShort } from "../lib/format";
 import { Badge, Button, Chips, cx, Empty, ErrorBox, LinkButton, Page, PageHeader, Skeleton, Toggle } from "../components/ui";
 import PaymentDialog from "../components/PaymentDialog";
+import PriceLines, { SERVICE_LABEL } from "../components/PriceLines";
 
 const PAY = {
   PAID: { label: "مدفوع", tone: "mint" as const },
@@ -198,6 +199,7 @@ function BookingLine({ b, onOpen }: { b: BookingRow; onOpen: () => void }) {
             <span className="ltr text-[12px] font-normal text-muted">#{b.ref}</span>
           </div>
           <div className="mt-0.5 text-[13px] text-muted sm:truncate">
+            {b.serviceType && <span className="text-gold">{SERVICE_LABEL[b.serviceType]} · </span>}
             {timeRange(b.startTime, b.endTime)} · {b.vehicle.name} · {b.driver.fullName}
           </div>
         </div>
@@ -274,7 +276,7 @@ function BookingDialog({ b, onClose }: { b: BookingRow; onClose: () => void }) {
           <Info k="العميل" v={<Link to={`/customers/${b.customer.id}`} className="font-bold hover:text-gold">{b.customer.name}</Link>} sub={<span className="ltr">{b.customer.phoneNumber}</span>} />
           <Info k="العربية" v={<Link to={`/fleet/${b.vehicle.id}`} className="font-bold hover:text-gold">{b.vehicle.name}</Link>} sub={<span className="ltr">{b.vehicle.plateNumber}</span>} />
           <Info k="السائق" v={<Link to={`/drivers/${b.driver.id}`} className="font-bold hover:text-gold">{b.driver.fullName}</Link>} />
-          <Info k="المناسبة" v={b.eventType || "—"} sub={b.packageId ? "جزء من باقة" : undefined} />
+          <Info k="الخدمة" v={b.serviceType ? SERVICE_LABEL[b.serviceType] : "تسعير قديم بالكيلو"} sub={[b.eventType, b.packageId ? "جزء من باقة" : ""].filter(Boolean).join(" · ") || undefined} />
           <div className="col-span-2 rounded-xl border border-line bg-raised px-3 py-2.5">
             <div className="text-[12px] text-muted">الطريق</div>
             <div className="mt-0.5 font-bold">{b.startPoint} ← {b.endPoint}</div>
@@ -299,6 +301,15 @@ function BookingDialog({ b, onClose }: { b: BookingRow; onClose: () => void }) {
             </div>
           ))}
         </div>
+
+        {b.priceLines && b.priceLines.length > 0 && (
+          <details className="rounded-xl border border-line px-3 py-2">
+            <summary className="cursor-pointer text-[13px] text-muted">السعر بالتفصيل</summary>
+            <div className="mt-2">
+              <PriceLines lines={b.priceLines} total={b.totalPrice} deposit={b.depositRequired} />
+            </div>
+          </details>
+        )}
 
         {b.status === "CANCELLED" && b.cancelledAt && (
           <p className="rounded-xl border border-line bg-raised px-3 py-2.5 text-[13px] text-muted">

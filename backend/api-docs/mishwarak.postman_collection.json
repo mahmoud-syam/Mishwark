@@ -1088,7 +1088,7 @@
                 }
               }
             },
-            "description": "PUBLIC. Server-side price estimate. 400 for a retired car. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount."
+            "description": "PUBLIC. Server-side price. Send `serviceType` (WEDDING, TRIP, VIP) with `vehicleId`: WEDDING/VIP = the car's own fixed price (or the default) covering included hours and km, plus every started extra hour (send `startTime`/`endTime`) and every extra km; TRIP = from the company (Settings origin, unless startPoint is sent) to a listed `destinationId` (fixed price per car category) or to `endPoint` (the category's \"another place\" price), plus extra km beyond the included ones. The response adds `lines` (itemised: wedding|vip|trip|trip_other, extra_hours, extra_km, package_discount, referral_discount with quantity, unitPrice, included), `bookedMinutes`, `depositRate`, `destination`, the points used and `route` (source haversine = straight-line estimate). Without serviceType the older per-km price applies. 400 for a retired car or an inactive destination."
           },
           "response": [
             {
@@ -1211,7 +1211,7 @@
                 }
               }
             },
-            "description": "Creates a booking (PENDING). An endTime earlier than startTime means the trip ends the next morning (e.g. 22:00 to 01:00); it must end by Settings `overnightLatestEndHour` (default 06:00; 400 otherwise, and 0 turns trips past midnight off). Also 400 for a trip shorter than `minTripMinutes` (default 30), more than `maxAdvanceBookingDays` ahead (default 365), or a start more than 15 minutes in the past today. Clashes with the car, the driver or maintenance are checked across midnight. Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free."
+            "description": "Creates a booking (PENDING). Send `serviceType` (WEDDING, TRIP, VIP) and, for a trip, `destinationId` (then startPoint/endPoint are optional: the trip starts at the company and ends at the destination). Priced exactly like POST /bookings/estimate-price; the booking keeps `serviceType`, `destinationId` and `priceLines`. An endTime earlier than startTime means the trip ends the next morning (e.g. 22:00 to 01:00); it must end by Settings `overnightLatestEndHour` (default 06:00; 400 otherwise, and 0 turns trips past midnight off). Also 400 for a trip shorter than `minTripMinutes` (default 30), more than `maxAdvanceBookingDays` ahead (default 365), or a start more than 15 minutes in the past today. Clashes with the car, the driver or maintenance are checked across midnight. Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free."
           },
           "response": [
             {
@@ -6118,6 +6118,186 @@
               }
             }
           ]
+        },
+        {
+          "name": "GET /admin/destinations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/destinations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "destinations"
+              ]
+            },
+            "description": "Pricing page: every private-trip destination (inactive too) with the prices entered (`prices`), the prices each car category actually gets (`effectivePrices`: a missing category uses Settings.tripOtherPrices), `effectiveIncludedKm` and how many bookings use it."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/destinations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/destinations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "destinations"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"مطار القاهرة الدولي\",\n  \"latitude\": 30.1219,\n  \"longitude\": 31.4056,\n  \"includedKm\": null,\n  \"prices\": {\n    \"LUXURY\": 2200,\n    \"VAN\": 1700\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Adds a private-trip destination (settings:manage). `prices` per car category; `includedKm` null = Settings.tripIncludedKm. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /admin/destinations/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/destinations/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "destinations",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prices\": {\n    \"CLASSIC\": 2600\n  },\n  \"includedKm\": 200\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Edits a destination (settings:manage). `prices` is merged per category (send only the ones that change). `active: false` hides it from booking. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE /admin/destinations/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/destinations/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "destinations",
+                ":id"
+              ]
+            },
+            "description": "Deletes a destination nobody booked; one with bookings is switched off instead (`deactivated: true`) so history keeps it. settings:manage. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -6192,6 +6372,31 @@
               ]
             },
             "description": "PUBLIC. The address at a pin (`lat`, `lng`, inside Egypt; 400 otherwise), from Nominatim with Photon as fallback, in Arabic. Same shape as a search result, with the pin's own coordinates. If both providers are down the label is the coordinates."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Pricings",
+      "item": [
+        {
+          "name": "GET /pricing",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pricing"
+              ]
+            },
+            "description": "PUBLIC. Every price and rule the apps need before booking: `origin` (where private trips start), `depositRate`, `wedding` and `vip` ({ defaultPrice, includedHours, includedKm, extraHourPrice, extraKmPrice }; a car's own price is `weddingPrice` / `vipPrice` on the vehicle), `trip` ({ includedKm, extraKmPrice, otherPrices per car category }) and the active `destinations` with their price per category. The final price always comes from POST /bookings/estimate-price."
           },
           "response": []
         }
