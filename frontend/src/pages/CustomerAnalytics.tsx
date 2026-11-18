@@ -77,6 +77,7 @@ export default function CustomerAnalytics() {
                   {maskPhone(d.customer.phoneNumber)}
                 </a>
               )}
+              <LinkButton to={`/reviews?customer=${d.customer.id}&tab=all`}>تقييماته</LinkButton>
               <LinkButton to={`/book?customer=${d.customer.id}`} variant="primary">+ حجز جديد ليه</LinkButton>
             </>
           )

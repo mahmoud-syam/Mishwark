@@ -8017,6 +8017,168 @@
         "operationId": "patch_admin_driver_documents_id"
       }
     },
+    "/admin/reviews": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Reviews with who wrote them (`reviewer`), about whom (`reviewee`; `driverId` set when that person is a driver) and the trip (`booking.ref`, date, car). Query: `kind` complaints (default) or all; `state` open (default), handled or all (complaints only); `direction` CUSTOMER_TO_DRIVER or DRIVER_TO_CUSTOMER (with kind=all); `rating` 1-5; `driverId` (either side); `customerId` (either side); `q` (names, phone, MW- reference, comment); `page`, `limit`. A complaint is a customer's review of a driver at or below the `complaintMaxRating` setting. Also returns `counts` (openComplaints, handledComplaints, all, averageDriverRating) for the same driver/customer filter.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Reviews with who wrote them (`reviewer`), about whom (`reviewee`; `driverId` set when that person is a driver) and the trip (`booking.ref`, date, car). Query: `kind` complaints (default) or all; `state` open (default), handled or all (complaints only); `direction` CUSTOMER_TO_DRIVER or DRIVER_TO_CUSTOMER (with kind=all); `rating` 1-5; `driverId` (either side); `customerId` (either side); `q` (names, phone, MW- reference, comment); `page`, `limit`. A complaint is a customer's review of a driver at or below the `complaintMaxRating` setting. Also returns `counts` (openComplaints, handledComplaints, all, averageDriverRating) for the same driver/customer filter.",
+        "operationId": "get_admin_reviews"
+      }
+    },
+    "/admin/reviews/{id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "One review, same shape as the list.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "One review, same shape as the list.",
+        "operationId": "get_admin_reviews_id"
+      },
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Marks a complaint handled with what was done (`{ handled: true, note }`, note 3+ characters, 422 otherwise) or opens it again (`{ handled: false }`). 400 for a review that isn't a complaint. Open complaints feed the home alerts and `kpis.openComplaints`. Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Marks a complaint handled with what was done (`{ handled: true, note }`, note 3+ characters, 422 otherwise) or opens it again (`{ handled: false }`). 400 for a review that isn't a complaint. Open complaints feed the home alerts and `kpis.openComplaints`. Audit-logged.",
+        "operationId": "patch_admin_reviews_id"
+      }
+    },
     "/admin/destinations": {
       "get": {
         "tags": [

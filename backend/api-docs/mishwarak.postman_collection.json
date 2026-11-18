@@ -6558,6 +6558,137 @@
           ]
         },
         {
+          "name": "GET /admin/reviews",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "reviews"
+              ]
+            },
+            "description": "Reviews with who wrote them (`reviewer`), about whom (`reviewee`; `driverId` set when that person is a driver) and the trip (`booking.ref`, date, car). Query: `kind` complaints (default) or all; `state` open (default), handled or all (complaints only); `direction` CUSTOMER_TO_DRIVER or DRIVER_TO_CUSTOMER (with kind=all); `rating` 1-5; `driverId` (either side); `customerId` (either side); `q` (names, phone, MW- reference, comment); `page`, `limit`. A complaint is a customer's review of a driver at or below the `complaintMaxRating` setting. Also returns `counts` (openComplaints, handledComplaints, all, averageDriverRating) for the same driver/customer filter."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/reviews/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/reviews/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "reviews",
+                ":id"
+              ]
+            },
+            "description": "One review, same shape as the list."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /admin/reviews/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/reviews/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "reviews",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handled\": true,\n  \"note\": \"كلمنا العميل واعتذرنا، ونبّهنا على السواق\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Marks a complaint handled with what was done (`{ handled: true, note }`, note 3+ characters, 422 otherwise) or opens it again (`{ handled: false }`). 400 for a review that isn't a complaint. Open complaints feed the home alerts and `kpis.openComplaints`. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "GET /admin/destinations",
           "request": {
             "method": "GET",

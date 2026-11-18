@@ -13,6 +13,7 @@ import {
   Radio,
   Settings,
   ShieldCheck,
+  Star,
   Sun,
   CalendarPlus,
   CalendarDays,
@@ -115,6 +116,7 @@ function Sidebar({ onClose, onCollapse }: { onClose?: () => void; onCollapse?: (
   const overview = useQuery({ queryKey: ["overview"], queryFn: () => api.get<Overview>("/admin/overview"), refetchInterval: 60_000 });
   const live = overview.data?.kpis.liveTrips ?? 0;
   const alerts = overview.data?.alerts.length ?? 0;
+  const complaints = overview.data?.kpis.openComplaints ?? 0;
 
   const main: Item[] = [
     { to: "/", label: "الرئيسية", icon: <LayoutDashboard />, end: true, badge: alerts },
@@ -122,6 +124,7 @@ function Sidebar({ onClose, onCollapse }: { onClose?: () => void; onCollapse?: (
     { to: "/book", label: "احجز لعميل", icon: <CalendarPlus /> },
     { to: "/live", label: "الرحلات الجارية", icon: <Radio />, badge: live },
     { to: "/drivers", label: "السواقين", icon: <Users /> },
+    { to: "/reviews", label: "الشكاوى", icon: <Star />, badge: complaints },
     { to: "/fleet", label: "الأسطول", icon: <Car /> },
     { to: "/pricing", label: "الأسعار", icon: <BadgeDollarSign /> },
     { to: "/packages", label: "الباكدجات", icon: <Gift /> },
@@ -217,10 +220,21 @@ function NavItem({ item }: { item: Item }) {
           )
         }
       >
-        {item.icon}
-        <span className="flex-1">{item.label}</span>
-        {!!item.badge && (
-          <span className="flex min-w-5 items-center justify-center rounded-full bg-white/90 px-1.5 text-[12px] font-bold text-navy dark:bg-gold dark:text-on-accent">{item.badge}</span>
+        {({ isActive }) => (
+          <>
+            {item.icon}
+            <span className="flex-1">{item.label}</span>
+            {!!item.badge && (
+              <span
+                className={cx(
+                  "flex min-w-5 items-center justify-center rounded-full px-1.5 text-[12px] font-bold",
+                  isActive ? "bg-black/20 text-on-accent" : "bg-white/90 text-navy dark:bg-gold dark:text-on-accent"
+                )}
+              >
+                {item.badge}
+              </span>
+            )}
+          </>
         )}
       </NavLink>
     </li>

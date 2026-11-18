@@ -141,10 +141,11 @@ function AlertsStrip({ data }: { data?: OverviewData }) {
             <span>{a.vehicleName} من غير سواق: مش ظاهرة للعملاء. حدد لها سواق</span>
           </Link>
         ) : (
-          <Link key={i} to={`/drivers/${a.entityId}`} className={row}>
+          <Link key={i} to={`/reviews?id=${a.reviewId}`} className={row}>
             {icon("bg-wine/12 text-rose", <MessageSquareWarning />)}
-            <span>
-              {a.driverName} عنده شكوى جديدة محتاجة مراجعة <span className="text-rose">({a.rating}★)</span>
+            <span className="min-w-0">
+              {a.customerName} اشتكى من السواق {a.driverName} <span className="text-rose">({a.rating}★)</span>
+              {a.comment && <span className="block truncate text-[13px] text-muted">“{a.comment}”</span>}
             </span>
           </Link>
         )

@@ -365,26 +365,64 @@ async function main() {
     }
   }
 
-  // ---- reviews (a couple of recent complaints feed the alert strip)
+  // ---- reviews: customers rate drivers (a few low ones are complaints), drivers
+  // rate some customers. Older complaints are already handled by the office;
+  // the recent ones are open and feed the home alerts.
+  const COMMENTS: Record<number, string[]> = {
+    5: ["سواق محترم جدًا والعربية نضيفة", "وصل في ميعاده بالظبط، شكرًا", "تجربة ممتازة وهنكررها", "", "", ""],
+    4: ["كويس بس اتأخر عشر دقايق", "العربية حلوة والتكييف كان ضعيف شوية", "", ""],
+    3: ["السواق كان سايق بسرعة", "العربية مكانتش نضيفة من جوه"],
+    2: ["السواق اتأخر نص ساعة ومردش على التليفون", "اتعامل معانا بطريقة مش كويسة", "العربية مش زي اللي في الصور"],
+  };
+  const DRIVER_NOTES = ["عميل محترم والتزم بالمواعيد", "اتأخروا ساعة عن الميعاد", "", ""];
+  const oneOf = <T,>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
+  const complaintCutoff = addDays(today, -6);
   for (const c of created.filter((c) => c.spec.status === BookingStatus.COMPLETED)) {
     if (rnd() < 0.15) continue;
     const r = rnd();
     const rating = r < 0.7 ? 5 : r < 0.93 ? 4 : r < 0.97 ? 3 : 2;
+    const at = zonedToInstant(c.spec.date, "23:30");
+    const oldComplaint = rating <= 2 && c.spec.date < complaintCutoff;
     await prisma.reviews.create({
       data: {
         bookingId: c.id, reviewerId: c.spec.customer.id, revieweeId: drivers[c.spec.driverIdx].userId,
         reviewerType: ReviewerType.CUSTOMER_TO_DRIVER, overallRating: rating, vehicleRating: Math.min(5, rating + 1), punctualityRating: rating,
-        createdAt: zonedToInstant(c.spec.date, "23:30"),
+        comment: oneOf(COMMENTS[rating]) || null,
+        createdAt: at,
+        ...(oldComplaint && admin
+          ? { handledAt: new Date(at.getTime() + 86_400_000), handledById: admin.id, handlingNote: "كلمنا العميل واعتذرنا، ونبّهنا على السواق" }
+          : {}),
       },
     });
+    if (rnd() < 0.3) {
+      await prisma.reviews.create({
+        data: {
+          bookingId: c.id, reviewerId: drivers[c.spec.driverIdx].userId, revieweeId: c.spec.customer.id,
+          reviewerType: ReviewerType.DRIVER_TO_CUSTOMER, overallRating: rnd() < 0.85 ? 5 : 3,
+          comment: oneOf(DRIVER_NOTES) || null, createdAt: new Date(at.getTime() + 600_000),
+        },
+      });
+    }
   }
   const recentForRamadan = created.find((c) => c.spec.driverIdx === 1 && c.spec.status === BookingStatus.COMPLETED && c.spec.date >= addDays(today, -6));
   if (recentForRamadan) {
-    await prisma.reviews.deleteMany({ where: { bookingId: recentForRamadan.id } });
+    await prisma.reviews.deleteMany({ where: { bookingId: recentForRamadan.id, reviewerType: ReviewerType.CUSTOMER_TO_DRIVER } });
     await prisma.reviews.create({
       data: {
         bookingId: recentForRamadan.id, reviewerId: recentForRamadan.spec.customer.id, revieweeId: drivers[1].userId,
-        reviewerType: ReviewerType.CUSTOMER_TO_DRIVER, overallRating: 2, comment: "السائق اتأخر ومردش على التليفون", createdAt: new Date(),
+        reviewerType: ReviewerType.CUSTOMER_TO_DRIVER, overallRating: 2, vehicleRating: 4, punctualityRating: 1,
+        comment: "السائق اتأخر ومردش على التليفون", createdAt: new Date(),
+      },
+    });
+  }
+  const recentForAhmed = created.find((c) => c.spec.driverIdx === 0 && c.spec.status === BookingStatus.COMPLETED && c.spec.date >= addDays(today, -4));
+  if (recentForAhmed) {
+    await prisma.reviews.deleteMany({ where: { bookingId: recentForAhmed.id, reviewerType: ReviewerType.CUSTOMER_TO_DRIVER } });
+    await prisma.reviews.create({
+      data: {
+        bookingId: recentForAhmed.id, reviewerId: recentForAhmed.spec.customer.id, revieweeId: drivers[0].userId,
+        reviewerType: ReviewerType.CUSTOMER_TO_DRIVER, overallRating: 1, vehicleRating: 2, punctualityRating: 3,
+        comment: "العربية كانت ريحتها سجاير والسواق رفض يقفل الشباك", createdAt: new Date(Date.now() - 3 * 3_600_000),
       },
     });
   }

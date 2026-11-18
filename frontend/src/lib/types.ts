@@ -17,7 +17,17 @@ export interface Me {
 
 export type Alert =
   | { type: "maintenance"; severity: "warning"; entityId: string; vehicleName: string; maintenanceType: string; daysUntil: number }
-  | { type: "complaint"; severity: "danger"; entityId: string; driverName: string; rating: number; bookingId: string }
+  | {
+      type: "complaint";
+      severity: "danger";
+      entityId: string;
+      reviewId: string;
+      driverName: string;
+      customerName: string;
+      rating: number;
+      comment: string;
+      bookingId: string;
+    }
   | { type: "no_driver"; severity: "warning"; entityId: string; vehicleName: string }
   | { type: "driver_unavailable"; severity: "danger"; entityId: string; driverName: string; driverStatus: DriverStatus; trips: number; firstDate: string }
   | { type: "documents_pending"; severity: "warning"; entityId: string; driverName: string; documents: number };
@@ -36,6 +46,8 @@ export interface Overview {
     occupancyRate: number;
     liveTrips: number;
     pendingBookings: number;
+    /** Complaints not marked handled yet. */
+    openComplaints: number;
   };
   weeklyRevenue: { date: string; revenue: number }[];
   alerts: Alert[];
@@ -380,4 +392,43 @@ export interface PricingCatalog {
   origin: { label: string; latitude: number; longitude: number };
   depositRate: number;
   destinations: { id: string; name: string; latitude: number; longitude: number; prices: Record<VehicleCategory, number>; includedKm: number }[];
+}
+
+// ------------------------------------------------------------- reviews
+export type ReviewDirection = "CUSTOMER_TO_DRIVER" | "DRIVER_TO_CUSTOMER";
+export interface ReviewPerson {
+  userId: string;
+  /** Set when this person is a driver (open /drivers/:driverId); otherwise a customer (/customers/:userId). */
+  driverId: string | null;
+  name: string;
+  phone: string | null;
+  deleted: boolean;
+}
+export interface ReviewRow {
+  id: string;
+  direction: ReviewDirection;
+  overallRating: number;
+  vehicleRating: number | null;
+  punctualityRating: number | null;
+  comment: string;
+  createdAt: string;
+  isComplaint: boolean;
+  handled: { at: string; by: { id: string; name: string } | null; note: string } | null;
+  reviewer: ReviewPerson;
+  reviewee: ReviewPerson;
+  booking: {
+    id: string;
+    ref: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    serviceType: ServiceType | null;
+    vehicle: { id: string; name: string; plate: string } | null;
+  } | null;
+}
+export interface ReviewCounts {
+  openComplaints: number;
+  handledComplaints: number;
+  all: number;
+  averageDriverRating: number | null;
 }
