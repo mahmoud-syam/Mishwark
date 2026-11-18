@@ -126,6 +126,10 @@ if (fs.existsSync(DASHBOARD_DIST)) {
             'upgrade-insecure-requests': isProduction ? [] : null,
         },
     }));
+    // OpenStreetMap refuses map tiles without a Referer (tile usage policy), and
+    // helmet's default no-referrer hides it. The dashboard sends only its
+    // origin to other sites, never the path.
+    app.use('/dashboard', helmet.referrerPolicy({ policy: 'strict-origin-when-cross-origin' }));
     app.use('/dashboard', express.static(DASHBOARD_DIST, { index: false, maxAge: '1h' }));
     app.get(/^\/dashboard(\/.*)?$/, (_req, res) => {
         res.sendFile(path.join(DASHBOARD_DIST, 'index.html'));
