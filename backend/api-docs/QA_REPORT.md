@@ -19,7 +19,7 @@ The mobile apps are not in this repository, so both apps were simulated through 
 | API sweep (functional, ownership, no-auth, robustness) | 357 / 357 passing |
 | Bugs found and fixed | 17 |
 | Product decisions taken and implemented | 7 + SMS/OTP hardening |
-| Backend test suite | 354 / 354 passing |
+| Backend test suite | 364 / 364 passing |
 
 All dashboard numbers matched the database exactly at every step: revenue,
 pending bookings, live trips, payments, driver and customer analytics,
@@ -178,6 +178,25 @@ Found while testing them:
 |---|---|---|---|
 | F-54 | Critical | A dashboard account (Admin or Super Admin) could sign in with an SMS code to its phone number, skipping the password and 2FA. | OTP is refused for dashboard accounts, on request (no SMS sent) and on verify. |
 | F-55 | Medium | Customers had to request a new SMS code every 24 hours, and there was no way for them to give or change their name or email. | App sessions last 30 days (`APP_SESSION_DAYS`); `PATCH /auth/me`; `profileComplete` tells the app when to ask for the name. |
+
+### Pricing by service type (2026-11-18)
+
+The price was base + km × rate + **driving** time × rate: a 7 pm to 1 am wedding
+was charged for the 30 minutes of driving, not the six hours booked, and the
+breakdown showed bare numbers. Replaced with the owner's model, all editable on
+a new Pricing page:
+
+- Wedding: a fixed price per car (or the default), covering hours and km; each
+  started extra hour and each extra km is charged.
+- Private trip: from the company in Sharqia to a listed destination at a fixed
+  price per car category, or anywhere else at the category's price; km beyond
+  the included ones (150 by default) are extra.
+- VIP: a fixed price per occasion, like a wedding with its own prices.
+
+The quote and the booking show the price as itemised lines (what the price
+covers, the extras with quantity × unit price, discounts, deposit). Requests
+without a service type keep the older per-km price for app versions that
+aren't updated.
 
 ### Booking map (2026-11-18)
 

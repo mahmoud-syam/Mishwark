@@ -24,6 +24,16 @@ export const DEFAULT_CATEGORY_RATES: CategoryRates = {
   [VehicleCategory.LUXURY]: { basePrice: 350, pricePerKm: 30, pricePerHour: 75 },
 };
 
+/** Trip to a place that isn't on the destinations list, per category (Pricing page). */
+export const DEFAULT_TRIP_OTHER_PRICES: Record<VehicleCategory, number> = {
+  [VehicleCategory.CAR]: 1000,
+  [VehicleCategory.VAN]: 1500,
+  [VehicleCategory.BUS]: 2500,
+  [VehicleCategory.TRUCK]: 2000,
+  [VehicleCategory.CLASSIC]: 2000,
+  [VehicleCategory.LUXURY]: 2500,
+};
+
 export interface BusinessSettings {
   depositRate: number;
   bookingBufferMinutes: number;
@@ -33,6 +43,24 @@ export interface BusinessSettings {
   overnightLatestEndHour: number;
   freeCancellationHours: number;
   tempPasswordDays: number;
+  weddingDefaultPrice: number;
+  weddingIncludedHours: number;
+  weddingIncludedKm: number;
+  weddingExtraHourPrice: number;
+  weddingExtraKmPrice: number;
+  vipDefaultPrice: number;
+  vipIncludedHours: number;
+  vipIncludedKm: number;
+  vipExtraHourPrice: number;
+  vipExtraKmPrice: number;
+  tripIncludedKm: number;
+  tripExtraKmPrice: number;
+  originLat: number;
+  originLng: number;
+  /** Price of a trip to a place not on the destinations list, per car category. */
+  tripOtherPrices: Record<VehicleCategory, number>;
+  /** Where private trips start. */
+  originLabel: string;
   defaultCommissionRate: number;
   referralRewardAmount: number;
   referredDiscountAmount: number;
@@ -55,6 +83,22 @@ export const DEFAULT_SETTINGS: BusinessSettings = {
   overnightLatestEndHour: 6,
   freeCancellationHours: 48,
   tempPasswordDays: 7,
+  weddingDefaultPrice: 1500,
+  weddingIncludedHours: 4,
+  weddingIncludedKm: 50,
+  weddingExtraHourPrice: 300,
+  weddingExtraKmPrice: 50,
+  vipDefaultPrice: 3000,
+  vipIncludedHours: 4,
+  vipIncludedKm: 50,
+  vipExtraHourPrice: 500,
+  vipExtraKmPrice: 75,
+  tripIncludedKm: 150,
+  tripExtraKmPrice: 50,
+  originLat: 30.5877,
+  originLng: 31.502,
+  tripOtherPrices: DEFAULT_TRIP_OTHER_PRICES,
+  originLabel: "الزقازيق، الشرقية",
   defaultCommissionRate: 20,
   referralRewardAmount: 25,
   referredDiscountAmount: 25,
@@ -76,6 +120,20 @@ export const SETTING_KEYS = [
   "overnightLatestEndHour",
   "freeCancellationHours",
   "tempPasswordDays",
+  "weddingDefaultPrice",
+  "weddingIncludedHours",
+  "weddingIncludedKm",
+  "weddingExtraHourPrice",
+  "weddingExtraKmPrice",
+  "vipDefaultPrice",
+  "vipIncludedHours",
+  "vipIncludedKm",
+  "vipExtraHourPrice",
+  "vipExtraKmPrice",
+  "tripIncludedKm",
+  "tripExtraKmPrice",
+  "originLat",
+  "originLng",
   "defaultCommissionRate",
   "referralRewardAmount",
   "referredDiscountAmount",
@@ -101,6 +159,22 @@ export const updateSettingsSchema = z
     overnightLatestEndHour: z.number().int().min(0).max(12),
     freeCancellationHours: z.number().int().min(0).max(720),
     tempPasswordDays: z.number().int().min(1).max(90),
+    weddingDefaultPrice: money,
+    weddingIncludedHours: z.number().int().min(0).max(24),
+    weddingIncludedKm: z.number().int().min(0).max(2000),
+    weddingExtraHourPrice: money,
+    weddingExtraKmPrice: money,
+    vipDefaultPrice: money,
+    vipIncludedHours: z.number().int().min(0).max(24),
+    vipIncludedKm: z.number().int().min(0).max(2000),
+    vipExtraHourPrice: money,
+    vipExtraKmPrice: money,
+    tripIncludedKm: z.number().int().min(0).max(2000),
+    tripExtraKmPrice: money,
+    originLat: z.number().min(21.9).max(31.8),
+    originLng: z.number().min(24.6).max(37.1),
+    tripOtherPrices: z.partialRecord(z.nativeEnum(VehicleCategory), money),
+    originLabel: z.string().trim().min(2).max(200),
     defaultCommissionRate: z.number().min(0).max(100),
     referralRewardAmount: money,
     referredDiscountAmount: money,
@@ -136,12 +210,26 @@ const mergeRates = (stored: unknown): CategoryRates => {
   return merged;
 };
 
+/** A { CATEGORY: price } map over defaults, ignoring anything that isn't a price. */
+export const mergeCategoryPrices = (stored: unknown, defaults: Record<VehicleCategory, number>): Record<VehicleCategory, number> => {
+  const out = { ...defaults };
+  if (stored && typeof stored === "object") {
+    for (const cat of Object.values(VehicleCategory)) {
+      const v = (stored as Record<string, unknown>)[cat];
+      if (typeof v === "number" && Number.isFinite(v) && v >= 0) out[cat] = v;
+    }
+  }
+  return out;
+};
+
 const toBusiness = (row: any): BusinessSettings => {
   const out: any = { ...DEFAULT_SETTINGS };
   for (const key of SETTING_KEYS) {
     if (typeof row?.[key] === "number" && Number.isFinite(row[key])) out[key] = row[key];
   }
   out.categoryRates = mergeRates(row?.categoryRates);
+  out.tripOtherPrices = mergeCategoryPrices(row?.tripOtherPrices, DEFAULT_TRIP_OTHER_PRICES);
+  if (typeof row?.originLabel === "string" && row.originLabel.trim()) out.originLabel = row.originLabel;
   return out;
 };
 
@@ -187,6 +275,10 @@ export class SettingsService {
       // A partial map updates only the categories sent.
       const current = mergeRates((await this.getRow()).categoryRates);
       data.categoryRates = { ...current, ...input.categoryRates };
+    }
+    if (input.tripOtherPrices) {
+      const current = mergeCategoryPrices((await this.getRow()).tripOtherPrices, DEFAULT_TRIP_OTHER_PRICES);
+      data.tripOtherPrices = { ...current, ...input.tripOtherPrices };
     }
     await prismaClient.systemSettings.upsert({
       where: { id: "global" },

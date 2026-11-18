@@ -13,6 +13,7 @@ import walletRouter from "./wallet.routes";
 import notificationRouter from "./notification.routes";
 import adminRouter from "./admin.routes";
 import placesRouter from "./places.routes";
+import pricingRouter from "./pricing.routes";
 
 const rootRouterV1: Router = Router();
 
@@ -30,5 +31,6 @@ rootRouterV1.use("/wallet", walletRouter);
 rootRouterV1.use("/notifications", notificationRouter);
 rootRouterV1.use("/admin", adminRouter);
 rootRouterV1.use("/places", placesRouter);
+rootRouterV1.use("/pricing", pricingRouter);
 
 export default rootRouterV1;

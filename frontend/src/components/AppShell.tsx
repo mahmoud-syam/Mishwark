@@ -15,6 +15,7 @@ import {
   Sun,
   CalendarPlus,
   CalendarDays,
+  BadgeDollarSign,
   Users,
   X,
 } from "lucide-react";
@@ -85,6 +86,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
     { to: "/live", label: "الرحلات الجارية", icon: <Radio />, badge: live },
     { to: "/drivers", label: "السواقين", icon: <Users /> },
     { to: "/fleet", label: "الأسطول", icon: <Car /> },
+    { to: "/pricing", label: "الأسعار", icon: <BadgeDollarSign /> },
     { to: "/packages", label: "الباكدجات", icon: <Gift /> },
     { to: "/audit", label: "سجل التوثيق", icon: <ClipboardList /> },
   ];

@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, clashBookings, errorMessage, type ClashBooking } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { dayMonth, egp, time12, todayKey } from "../lib/format";
+import { dayMonth, egp, num, time12, todayKey } from "../lib/format";
 import { FLEET_STATUS, MAINTENANCE_STATE, MAINTENANCE_TYPES, VEHICLE_CATEGORY } from "../lib/labels";
 import type { DriverSummary, FleetDetail, VehicleCategory } from "../lib/types";
 import { Badge, Button, cx, Empty, ErrorBox, Field, fieldControl, Page, PageHeader, Panel, Skeleton } from "../components/ui";
@@ -70,21 +70,26 @@ const invalidateFleet = (qc: ReturnType<typeof useQueryClient>, id?: string) => 
 type Form = {
   make: string; model: string; year: string; plateNumber: string; color: string; capacity: string; category: VehicleCategory;
   basePrice: string; pricePerKm: string; pricePerHour: string; luggage: string; description: string; features: string[];
+  /** "" = use the default price from the Pricing page. */
+  weddingPrice: string; vipPrice: string;
 };
 const EMPTY: Form = {
   make: "", model: "", year: String(new Date().getFullYear()), plateNumber: "", color: "", capacity: "4", category: "LUXURY",
-  basePrice: "0", pricePerKm: "0", pricePerHour: "0", luggage: "3", description: "", features: [],
+  basePrice: "0", pricePerKm: "0", pricePerHour: "0", luggage: "3", description: "", features: [], weddingPrice: "", vipPrice: "",
 };
 const fromCar = (c: FleetDetail): Form => ({
   make: c.make, model: c.model, year: String(c.year), plateNumber: c.plateNumber, color: c.color, capacity: String(c.capacity), category: c.category,
   basePrice: String(c.basePrice), pricePerKm: String(c.pricePerKm), pricePerHour: String(c.pricePerHour), luggage: String(c.luggage),
   description: c.description.replace(/^\[demo\]\s*/, ""), features: c.features,
+  weddingPrice: c.weddingPrice == null ? "" : String(c.weddingPrice), vipPrice: c.vipPrice == null ? "" : String(c.vipPrice),
 });
 const NUM_FIELDS = ["year", "capacity", "basePrice", "pricePerKm", "pricePerHour", "luggage"] as const;
 const toBody = (f: Form) => ({
   ...f,
   ...Object.fromEntries(NUM_FIELDS.map((k) => [k, Number(f[k])])),
   make: f.make.trim(), model: f.model.trim(), plateNumber: f.plateNumber.trim(), color: f.color.trim(), description: f.description.trim(),
+  weddingPrice: f.weddingPrice.trim() === "" ? null : Number(f.weddingPrice),
+  vipPrice: f.vipPrice.trim() === "" ? null : Number(f.vipPrice),
 });
 
 function validate(f: Form): Record<string, string> {
@@ -101,6 +106,10 @@ function validate(f: Form): Record<string, string> {
   for (const k of ["basePrice", "pricePerKm", "pricePerHour"] as const) {
     const n = Number(f[k]);
     if (f[k].trim() === "" || !Number.isFinite(n) || n < 0) e[k] = "رقم موجب";
+  }
+  for (const k of ["weddingPrice", "vipPrice"] as const) {
+    const n = Number(f[k]);
+    if (f[k].trim() !== "" && (!Number.isFinite(n) || n < 0)) e[k] = "رقم موجب أو سيبها فاضية";
   }
   return e;
 }
@@ -228,10 +237,20 @@ function DetailsForm({ car, canEdit, onCreated }: { car?: FleetDetail; canEdit: 
         {input("luggage", "عدد الشنط", { numeric: true })}
       </Panel>
 
-      <Panel title="الأسعار" tag="0 = سعر النوع من الإعدادات" bodyClassName="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {input("basePrice", "سعر فتح الرحلة (ج.م)", { numeric: true, hint: typePrices && Number(f.basePrice) === 0 ? `هيتحسب ${egp(typePrices.basePrice)}` : undefined })}
-        {input("pricePerKm", "سعر الكيلو (ج.م)", { numeric: true, hint: typePrices && Number(f.pricePerKm) === 0 ? `هيتحسب ${egp(typePrices.pricePerKm)}` : undefined })}
-        {input("pricePerHour", "سعر الساعة (ج.م)", { numeric: true, hint: typePrices && Number(f.pricePerHour) === 0 ? `هيتحسب ${egp(typePrices.pricePerHour)}` : undefined })}
+      <Panel title="أسعار الخدمات" tag="فاضية = السعر العام من صفحة الأسعار" bodyClassName="flex flex-col gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {input("weddingPrice", "سعر الزفاف للعربية دي (ج.م)", { numeric: true, placeholder: car ? `العام: ${num(car.defaultServicePrices.wedding)}` : "السعر العام", hint: f.weddingPrice.trim() === "" && car ? `هيتحسب ${egp(car.defaultServicePrices.wedding)}` : undefined })}
+          {input("vipPrice", "سعر VIP للعربية دي (ج.م)", { numeric: true, placeholder: car ? `العام: ${num(car.defaultServicePrices.vip)}` : "السعر العام", hint: f.vipPrice.trim() === "" && car ? `هيتحسب ${egp(car.defaultServicePrices.vip)}` : undefined })}
+        </div>
+        <p className="text-[12px] text-muted">المشاوير الخاصة بتتسعّر حسب نوع العربية والوجهة من صفحة الأسعار. الساعات والكيلومترات المشمولة والزيادة عليها من نفس الصفحة.</p>
+        <details className="rounded-xl border border-line px-3 py-2">
+          <summary className="cursor-pointer text-[13px] text-muted">التسعير القديم بالكيلو (للنسخ القديمة من التطبيق بس)</summary>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {input("basePrice", "سعر فتح الرحلة (ج.م)", { numeric: true, hint: typePrices && Number(f.basePrice) === 0 ? `هيتحسب ${egp(typePrices.basePrice)}` : undefined })}
+            {input("pricePerKm", "سعر الكيلو (ج.م)", { numeric: true, hint: typePrices && Number(f.pricePerKm) === 0 ? `هيتحسب ${egp(typePrices.pricePerKm)}` : undefined })}
+            {input("pricePerHour", "سعر الساعة (ج.م)", { numeric: true, hint: typePrices && Number(f.pricePerHour) === 0 ? `هيتحسب ${egp(typePrices.pricePerHour)}` : undefined })}
+          </div>
+        </details>
       </Panel>
 
       <Panel title="اللي بيظهر للعميل في التطبيق" bodyClassName="flex flex-col gap-3">

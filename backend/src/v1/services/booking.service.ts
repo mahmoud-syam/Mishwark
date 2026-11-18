@@ -13,8 +13,11 @@ import {
   PaymentStatus,
   DepositOutcome,
   WalletTransactionType,
+  ServiceType,
+  Prisma,
 } from "../../../generated/prisma";
 import { bookingRef } from "../utils/bookingRef";
+import ServicePricing, { priceService } from "./service-pricing.service";
 import {
   BadRequestException,
   ConflictException,
@@ -89,6 +92,9 @@ export interface CreateBookingDTO {
   eventType?: string;
   isPeakHour?: boolean;
   surgeMultiplier?: number;
+  /** Wedding / private trip / VIP pricing. Absent = the older per-km price. */
+  serviceType?: ServiceType;
+  destinationId?: string;
 }
 
 /**
@@ -243,6 +249,12 @@ export class BookingService {
       if (vehicle.retiredAt) {
         throw new BadRequestException("This car is no longer available");
       }
+      // Service pricing decides the default points too (a trip starts at the company).
+      const service = data.serviceType
+        ? await ServicePricing.resolve(tx, { serviceType: data.serviceType, vehicleId: data.vehicleId, destinationId: data.destinationId, startPoint: data.startPoint, endPoint: data.endPoint }, settings)
+        : null;
+      const startPoint = service ? service.startPoint : data.startPoint;
+      const endPoint = service ? service.endPoint : data.endPoint;
       if (
         (await FleetService.maintenanceOn(tx, vehicle.id, data.bookingDate)) ||
         (overnight && (await FleetService.maintenanceOn(tx, vehicle.id, addDays(data.bookingDate, 1))))
@@ -317,15 +329,25 @@ export class BookingService {
       // price, so a client could book a 400 km trip for the base fee. It is now
       // always recomputed from the endpoints; the client's figure is only kept
       // alongside it for auditing.
-      const route = await MapsService.route(data.startPoint, data.endPoint);
+      const route = await MapsService.route(startPoint, endPoint);
 
       // 6. Discounts: the customer's own active package (% set by an admin) and
       // the referral discount on a referred customer's first booking.
       const pkg = await DiscountService.resolvePackage(tx, data.packageId, customerId, true);
       const referralDiscount = await DiscountService.referralDiscount(tx, customerId);
 
-      // 7. Calculate price estimate from the server-computed distance
-      const priceEstimate = calculateEstimatedPrice({
+      // 7. Price: by service type (fixed prices, itemised), or the older per-km formula.
+      const servicePrice = service
+        ? priceService({
+            ...service.input,
+            bookedMinutes: tripMinutes(data.startTime, data.endTime),
+            distanceKm: route.distanceKm,
+            packageDiscountPercent: pkg?.discountPercentage ?? 0,
+            referralDiscount,
+            depositRate: settings.depositRate,
+          })
+        : null;
+      const priceEstimate = servicePrice ? { ...servicePrice.breakdown, depositPaid: servicePrice.depositRequired } : calculateEstimatedPrice({
         packageDiscountPercent: pkg?.discountPercentage ?? 0,
         referralDiscount,
         vehicleCategory: vehicle.category,
@@ -349,8 +371,11 @@ export class BookingService {
           driverId: driverId,
           packageId: data.packageId || null,
           eventType: data.eventType || "",
-          startPoint: describePoint(data.startPoint),
-          endPoint: describePoint(data.endPoint),
+          startPoint: describePoint(startPoint),
+          endPoint: describePoint(endPoint),
+          serviceType: data.serviceType ?? null,
+          destinationId: service?.destination?.id ?? null,
+          priceLines: servicePrice ? (servicePrice.lines as unknown as Prisma.InputJsonValue) : undefined,
           distanceKm: route.distanceKm,
           durationMinutes: route.durationMinutes,
           startLat: route.start.latitude,

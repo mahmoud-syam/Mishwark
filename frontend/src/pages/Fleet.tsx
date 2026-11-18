@@ -54,7 +54,7 @@ function CarCard({ v }: { v: FleetItem }) {
           </div>
           <span className="shrink-0 rounded-md border border-line px-2 py-0.5 text-[13px] text-cream">{v.plateNumber.replace(/·D$/, "")}</span>
         </div>
-        <div className="text-[14px] text-gold">يبدأ من {egp(v.effectiveBasePrice)}</div>
+        <div className="text-[14px] text-gold">زفاف {egp(v.effectiveWeddingPrice)}{v.weddingPrice == null && <span className="text-[12px] text-muted"> (السعر العام)</span>}</div>
         <div className="mt-auto flex flex-col gap-1 border-t border-line pt-2 text-[13px]">
           {v.status !== "RETIRED" &&
             (primary ? (

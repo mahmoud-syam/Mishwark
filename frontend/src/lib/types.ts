@@ -99,6 +99,8 @@ export interface DayDetails {
     cancelledAt: string | null;
     depositOutcome: "REFUNDED" | "KEPT" | null;
     depositRefunded: number;
+    serviceType?: "WEDDING" | "TRIP" | "VIP" | null;
+    priceLines?: PriceLine[] | null;
     customer: { id: string; name: string; phoneNumber: string | null };
     vehicle: { id: string; name: string; plateNumber: string };
     driver: { id: string; fullName: string };
@@ -185,6 +187,22 @@ export interface BusinessSettings {
   bookingBufferMinutes: number;
   tripEarlyStartMinutes: number;
   maxAdvanceBookingDays: number;
+  weddingDefaultPrice: number;
+  weddingIncludedHours: number;
+  weddingIncludedKm: number;
+  weddingExtraHourPrice: number;
+  weddingExtraKmPrice: number;
+  vipDefaultPrice: number;
+  vipIncludedHours: number;
+  vipIncludedKm: number;
+  vipExtraHourPrice: number;
+  vipExtraKmPrice: number;
+  tripIncludedKm: number;
+  tripExtraKmPrice: number;
+  tripOtherPrices: Record<VehicleCategory, number>;
+  originLabel: string;
+  originLat: number;
+  originLng: number;
   minTripMinutes: number;
   overnightLatestEndHour: number;
   freeCancellationHours: number;
@@ -239,6 +257,10 @@ export interface FleetItem {
   basePrice: number;
   effectiveBasePrice: number;
   usesTypePrices: boolean;
+  weddingPrice: number | null;
+  vipPrice: number | null;
+  effectiveWeddingPrice: number;
+  effectiveVipPrice: number;
   coverImage: string | null;
   imagesCount: number;
   features: string[];
@@ -278,6 +300,9 @@ export interface FleetDetail {
   retiredAt: string | null;
   retiredReason: string | null;
   typePrices: { basePrice: number; pricePerKm: number; pricePerHour: number };
+  weddingPrice: number | null;
+  vipPrice: number | null;
+  defaultServicePrices: { wedding: number; vip: number };
   images: { id: string; imageUrl: string; isCover: boolean }[];
   drivers: { id: string; name: string; status: DriverStatus; rating: number; isPrimary: boolean }[];
   maintenance: { id: string; type: string; startDate: string; endDate: string; cost: number; notes: string | null; completedAt: string | null; state: MaintenanceState }[];
@@ -317,4 +342,37 @@ export interface CancellationTerms {
   freeUntil: string;
   freeCancellationHours: number;
   overridden: boolean;
+}
+
+export type ServiceType = "WEDDING" | "TRIP" | "VIP";
+
+export interface Destination {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  active: boolean;
+  sortOrder: number;
+  prices: Partial<Record<VehicleCategory, number>>;
+  effectivePrices: Record<VehicleCategory, number>;
+  includedKm: number | null;
+  effectiveIncludedKm: number;
+  bookings: number;
+}
+
+export interface PriceLine {
+  code: "wedding" | "vip" | "trip" | "trip_other" | "extra_hours" | "extra_km" | "package_discount" | "referral_discount";
+  amount: number;
+  quantity?: number;
+  unitPrice?: number;
+  included?: number;
+  name?: string;
+  includedHours?: number;
+  includedKm?: number;
+}
+
+export interface PricingCatalog {
+  origin: { label: string; latitude: number; longitude: number };
+  depositRate: number;
+  destinations: { id: string; name: string; latitude: number; longitude: number; prices: Record<VehicleCategory, number>; includedKm: number }[];
 }

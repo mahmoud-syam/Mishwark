@@ -397,6 +397,44 @@ if sent — pricing is server-authoritative. Distance and duration are always
 recomputed server-side. Any `distanceKm` you send is only echoed back under
 `comparison` and never priced, so don't bother computing it client-side.
 
+### Prices: wedding, private trip, VIP
+
+Every booking has a **service type**, and each type has its own pricing (all
+of it is edited by the owner on the dashboard's Pricing page):
+
+| `serviceType` | Price | Extras |
+|---|---|---|
+| `WEDDING` | The car's own fixed price (`weddingPrice` on the vehicle), or the default | Covers N hours and N km; each started extra hour and each extra km is charged |
+| `TRIP` | From the company (Sharqia) to a listed destination: fixed price per car category. Any other place: the category's "another place" price | Covers N km (150 by default); each extra km is charged |
+| `VIP` | The car's own VIP price, or the VIP default | Like a wedding, with its own prices |
+
+`GET /pricing` (public) returns the rules, the start point and the destinations
+with their prices per category, so the app can show "from …" prices. The exact
+price always comes from the API:
+
+```http
+POST /bookings/estimate-price
+{ "serviceType": "WEDDING", "vehicleId": "…", "startPoint": {…}, "endPoint": {…},
+  "startTime": "19:00", "endTime": "01:00" }
+
+{ "serviceType": "TRIP", "vehicleId": "…", "destinationId": "…" }   // no points needed
+
+→ { "data": { "totalPrice": 2200, "depositRequired": 440, … },
+    "lines": [
+      { "code": "wedding", "amount": 1600, "includedHours": 4, "includedKm": 50 },
+      { "code": "extra_hours", "quantity": 2, "unitPrice": 300, "included": 4, "amount": 600 }
+    ],
+    "bookedMinutes": 360, "depositRate": 20, "route": { "distanceKm": 4.1, "source": "haversine" } }
+```
+
+Show `lines` as the price breakdown (codes: `wedding`, `vip`, `trip` (with
+`name`), `trip_other`, `extra_hours`, `extra_km`, `package_discount`,
+`referral_discount`; negative amounts are discounts), then the total and the
+deposit. `route.source: "haversine"` means the distance is an estimate. Send the
+same `serviceType` / `destinationId` to `POST /bookings`; the booking keeps them
+with `priceLines`. Without `serviceType` the older per-km price still applies
+(for app versions that aren't updated yet).
+
 ### Choosing places on a map
 
 `startPoint` / `endPoint` should be exact coordinates with a name:

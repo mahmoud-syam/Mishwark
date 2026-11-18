@@ -143,6 +143,9 @@ async function main() {
       await prisma.vehicles.create({
         data: {
           make, model, category, year, capacity, color, basePrice, pricePerKm, pricePerHour: 0,
+          // Wedding price per car (the cheaper ones keep the default from the Pricing page).
+          weddingPrice: basePrice >= 1700 ? Math.round(basePrice * 0.9 / 50) * 50 : null,
+          vipPrice: basePrice >= 2000 ? Math.round(basePrice * 1.6 / 50) * 50 : null,
           plateNumber: `${plates[i]} ${123 + i * 111}·D`,
           description: `${DEMO_TAG} عربية ${category === VehicleCategory.CLASSIC ? "كلاسيك" : "لوكس"} مجهزة للمناسبات`,
           status: VehicleStatus.AVAILABLE,
@@ -154,6 +157,16 @@ async function main() {
         },
       })
     );
+  }
+
+  // ---- private-trip destinations (from the company in Sharqia)
+  for (const [name, latitude, longitude, includedKm, luxury, van, classic] of [
+    ["مطار القاهرة الدولي", 30.1219, 31.4056, null, 2200, 1700, 2600],
+    ["القاهرة (وسط البلد)", 30.0444, 31.2357, null, 1800, 1400, 2200],
+    ["الإسكندرية", 31.2001, 29.9187, 300, 4500, 3500, 5200],
+  ] as [string, number, number, number | null, number, number, number][]) {
+    if (await prisma.destinations.findFirst({ where: { name } })) continue;
+    await prisma.destinations.create({ data: { name, latitude, longitude, includedKm, prices: { LUXURY: luxury, VAN: van, CLASSIC: classic } } });
   }
 
   // ---- drivers

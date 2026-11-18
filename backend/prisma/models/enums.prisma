@@ -161,3 +161,10 @@ enum DepositOutcome {
   REFUNDED
   KEPT
 }
+
+/// How a booking is priced.
+enum ServiceType {
+  WEDDING
+  TRIP
+  VIP
+}
