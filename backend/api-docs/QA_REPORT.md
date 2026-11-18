@@ -19,7 +19,7 @@ The mobile apps are not in this repository, so both apps were simulated through 
 | API sweep (functional, ownership, no-auth, robustness) | 357 / 357 passing |
 | Bugs found and fixed | 17 |
 | Product decisions taken and implemented | 7 + SMS/OTP hardening |
-| Backend test suite | 370 / 370 passing |
+| Backend test suite | 379 / 379 passing |
 
 All dashboard numbers matched the database exactly at every step: revenue,
 pending bookings, live trips, payments, driver and customer analytics,
@@ -178,6 +178,12 @@ Found while testing them:
 |---|---|---|---|
 | F-54 | Critical | A dashboard account (Admin or Super Admin) could sign in with an SMS code to its phone number, skipping the password and 2FA. | OTP is refused for dashboard accounts, on request (no SMS sent) and on verify. |
 | F-55 | Medium | Customers had to request a new SMS code every 24 hours, and there was no way for them to give or change their name or email. | App sessions last 30 days (`APP_SESSION_DAYS`); `PATCH /auth/me`; `profileComplete` tells the app when to ask for the name. |
+
+### Team profile (2026-11-18)
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-57 | Medium | A team member couldn't change their own name, photo or password; only a Super Admin could reset a password, and that endpoint didn't ask for the current one. | Profile page (click your name in the side menu): name, photo (`PUT/DELETE /auth/me/photo`, real-image check, random file name, old file deleted unless another account uses it) and password (`POST /auth/me/password`: current password required and counted toward the lockout, other sessions signed out, this one kept). Photos show in the side menu and on the Team page. |
 
 ### Driver documents (2026-11-18)
 

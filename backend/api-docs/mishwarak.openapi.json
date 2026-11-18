@@ -702,6 +702,148 @@
         "operationId": "patch_auth_me"
       }
     },
+    "/auth/me/photo": {
+      "put": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Sets the signed-in user's own photo: multipart/form-data, field `photo` (JPG, PNG or WEBP, checked by content; 5 MB, 413 above). Replaces the previous photo and deletes its file. Returns the same shape as GET /auth/me, with `pic` (a path such as /uploads/employees/pic-<uuid>.jpg).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Sets the signed-in user's own photo: multipart/form-data, field `photo` (JPG, PNG or WEBP, checked by content; 5 MB, 413 above). Replaces the previous photo and deletes its file. Returns the same shape as GET /auth/me, with `pic` (a path such as /uploads/employees/pic-<uuid>.jpg).",
+        "operationId": "put_auth_me_photo"
+      },
+      "delete": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Removes the signed-in user's own photo. Returns the same shape as GET /auth/me (`pic` is \"\").",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Removes the signed-in user's own photo. Returns the same shape as GET /auth/me (`pic` is \"\").",
+        "operationId": "delete_auth_me_photo"
+      }
+    },
+    "/auth/me/password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "A dashboard account (Admin, Super Admin) changes its own password: `{ currentPassword, newPassword }` (8+ characters, different from the current one). A wrong current password is a 400 and counts toward the sign-in lockout. Other sessions are signed out; the response sets a fresh session cookie so this one carries on. 403 for app accounts (they sign in with a phone code).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "A dashboard account (Admin, Super Admin) changes its own password: `{ currentPassword, newPassword }` (8+ characters, different from the current one). A wrong current password is a 400 and counts toward the sign-in lockout. Other sessions are signed out; the response sets a fresh session cookie so this one carries on. 403 for app accounts (they sign in with a phone code).",
+        "operationId": "post_auth_me_password"
+      }
+    },
     "/auth/logout-all-devices": {
       "post": {
         "tags": [

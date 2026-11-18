@@ -40,6 +40,7 @@ const memberSelect = {
   id: true,
   name: true,
   email: true,
+  pic: true,
   twoFactorEnabled: true,
   mustChangePassword: true,
   tempPasswordExpiresAt: true,
@@ -53,6 +54,7 @@ type MemberRow = {
   id: string;
   name: string;
   email: string | null;
+  pic: string;
   twoFactorEnabled: boolean;
   mustChangePassword: boolean;
   tempPasswordExpiresAt: Date | null;
@@ -66,6 +68,7 @@ const shape = (m: MemberRow) => ({
   id: m.id,
   name: m.name,
   email: m.email,
+  pic: m.pic,
   role: m.role.name as TeamRole,
   twoFactorEnabled: m.twoFactorEnabled,
   mustChangePassword: m.mustChangePassword,
