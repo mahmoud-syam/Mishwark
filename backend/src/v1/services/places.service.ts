@@ -162,9 +162,12 @@ export class PlacesService {
     if (query.length < 2) return [];
     if (query.length > 120) throw new BadRequestException("Search text is too long");
     const bias = near && inEgypt(near.lat, near.lng) ? `&lat=${near.lat.toFixed(3)}&lon=${near.lng.toFixed(3)}` : "";
-    const key = `s|${query.toLowerCase()}|${bias}`;
+    // Arabic text: local names (Arabic in Egypt). Otherwise English names,
+    // which match English queries far better ("Cairo Tower").
+    const lang = /[\u0600-\u06FF]/.test(query) ? "default" : "en";
+    const key = `s|${lang}|${query.toLowerCase()}|${bias}`;
     return cached(key, async () => {
-      const url = `${PHOTON_URL()}/api/?q=${encodeURIComponent(query)}&limit=8&bbox=${EGYPT_BBOX.join(",")}${bias}`;
+      const url = `${PHOTON_URL()}/api/?q=${encodeURIComponent(query)}&limit=8&lang=${lang}&bbox=${EGYPT_BBOX.join(",")}${bias}`;
       const json = await getJson<{ features?: PhotonFeature[] }>(url);
       const seen = new Set<string>();
       const out: Place[] = [];

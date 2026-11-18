@@ -80,6 +80,10 @@ describe('Tier 2: place search and reverse geocoding for the booking map', () =>
     expect(res.body.data[1].name).toBe('شارع التسعين 12');
     // Limited to Egypt and sent with an identifying User-Agent.
     expect(calls.some((c) => c.includes('bbox=24.6,21.9,37.1,31.8'))).toBe(true);
+    // Arabic search asks for the local (Arabic) names; English for English ones.
+    expect(calls.some((c) => c.includes('lang=default'))).toBe(true);
+    await ctx.api.get('/places/search?q=Cairo%20Tower');
+    expect(calls.some((c) => c.includes('lang=en') && c.includes('Cairo'))).toBe(true);
     expect(String(ctx.lastUA).startsWith('Mishwark/')).toBe(true);
   });
 
