@@ -20,6 +20,8 @@ model Reviews {
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @default(now()) @updatedAt
 
+  // One review per trip in each direction (the customer's, the driver's).
+  @@unique([bookingId, reviewerType])
   @@index([reviewerType, overallRating, handledAt])
   @@index([createdAt])
 }

@@ -47,6 +47,11 @@ export const errorMiddleware = (error: any, req: Request, res: Response, _next: 
         return res.status(tooBig ? 413 : 400).json({ message, errorCode: ErrorCodes.UNPROCESSABLE_ENTITY, errors: null });
     }
 
+    // Body over the size limit (express.json: 100 KB)
+    if (error?.type === "entity.too.large") {
+        return res.status(413).json({ message: "The request is too large", errorCode: ErrorCodes.UNPROCESSABLE_ENTITY, errors: null });
+    }
+
     // Malformed JSON body
     if (error?.type === "entity.parse.failed") {
         return res.status(400).json({ message: "Malformed JSON body", errorCode: ErrorCodes.UNPROCESSABLE_ENTITY, errors: null });

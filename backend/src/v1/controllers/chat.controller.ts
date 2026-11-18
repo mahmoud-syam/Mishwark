@@ -1,3 +1,4 @@
+import { sendMessageSchema } from "../schemas/chat.schema";
 import { Request, Response } from "express";
 import ChatService from "../services/chat.service";
 import { SenderType } from "../../../generated/prisma";
@@ -39,12 +40,13 @@ export const sendMessage = async (req: Request, res: Response) => {
     ? SenderType.DRIVER
     : SenderType.CUSTOMER;
 
+  const { content, messageType } = sendMessageSchema.parse(req.body ?? {});
   const message = await ChatService.sendMessage(
     paramStr(req.params.conversationId),
     userId,
     senderType,
-    req.body.content,
-    req.body.messageType
+    content,
+    messageType
   );
   res.status(201).json({ success: true, data: message });
 };

@@ -856,6 +856,25 @@ is a 400.
 
 **Page size**: every `?limit=` is capped at 100; read `pagination.limit` back.
 
+**Limits and answers to handle** (from the 19 Nov review):
+- Two bookings for overlapping times sent at the same moment: one gets 201,
+  the other **409**. Show the 409; don't retry.
+- Cancelling an already-cancelled booking returns 200 and changes nothing (no
+  second refund).
+- A review comment is up to **1000** characters; a chat message 1 to **2000**
+  (blank is refused). Both answer **422** otherwise. One review per trip per
+  side: a second one is **409**.
+- A JSON body over 100 KB is **413**.
+- `POST /waitlist`: `requestedDate` from today up to the booking limit
+  (365 days), `requestedTime` as `HH:mm`; otherwise **400**.
+- `PUT /driver/profile` takes `fullName`, `licenseNumber`, `licenseExpiry`
+  (`YYYY-MM-DD`); other fields are ignored. The photo is `PUT /auth/me/photo`.
+  `PATCH /driver/status` with an unknown status is **400**.
+- `POST /bookings/estimate-price` and `/estimate-distance` allow 300 requests per
+  15 minutes per IP (**429** above).
+- In production without an SMS provider, `POST /auth/otp/request` is **503** and
+  never returns `dev_otp` (the code `0000` doesn't work there either).
+
 **Caching**: no `Cache-Control` headers are set. `GET /vehicles` is safe to
 cache client-side for a session. Availability and booking lists are not —
 availability changes the moment someone books.

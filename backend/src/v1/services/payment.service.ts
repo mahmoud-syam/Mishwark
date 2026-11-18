@@ -1,4 +1,5 @@
 import prismaClient from "../utils/prismaClientHelper";
+import { lockKeys } from "../utils/locks";
 import {
   BookingStatus,
   PaymentMethod,
@@ -58,22 +59,41 @@ export class PaymentService {
     status: PaymentRecordStatus,
     transactionRef?: string
   ) {
-    const payment = await prismaClient.payments.findUnique({
-      where: { id: paymentId },
+    const updatedPayment = await prismaClient.$transaction(async (tx) => {
+      const found = await tx.payments.findUnique({ where: { id: paymentId }, select: { bookingId: true } });
+      if (!found) {
+        throw new NotFoundException(`Payment with ID ${paymentId} not found`);
+      }
+      // One confirmation at a time per booking, then check against what is
+      // already confirmed: several pending payments (each within the balance
+      // when created) could all be confirmed and the booking paid twice over.
+      await lockKeys(tx, [`booking-money:${found.bookingId}`]);
+      const payment = await tx.payments.findUniqueOrThrow({ where: { id: paymentId } });
+      if (status === PaymentRecordStatus.SUCCESS && payment.status !== PaymentRecordStatus.SUCCESS) {
+        const booking = await tx.bookings.findUniqueOrThrow({ where: { id: payment.bookingId }, select: { totalPrice: true, status: true } });
+        if (booking.status === BookingStatus.CANCELLED) {
+          throw new BadRequestException("This booking is cancelled; the payment can't be confirmed");
+        }
+        const confirmed = await tx.payments.aggregate({
+          where: { bookingId: payment.bookingId, status: PaymentRecordStatus.SUCCESS },
+          _sum: { amount: true },
+        });
+        const already = confirmed._sum.amount ?? 0;
+        if (already + payment.amount > booking.totalPrice + 0.001) {
+          const left = Math.max(0, Math.round((booking.totalPrice - already) * 100) / 100);
+          throw new BadRequestException(`This payment would go over the booking's price: ${left} left to pay`);
+        }
+      }
+      return tx.payments.update({
+        where: { id: paymentId },
+        data: {
+          status,
+          ...(transactionRef && { transactionRef }),
+          ...(status === PaymentRecordStatus.SUCCESS && { paidAt: new Date() }),
+        },
+      });
     });
-
-    if (!payment) {
-      throw new NotFoundException(`Payment with ID ${paymentId} not found`);
-    }
-
-    const updatedPayment = await prismaClient.payments.update({
-      where: { id: paymentId },
-      data: {
-        status,
-        ...(transactionRef && { transactionRef }),
-        ...(status === PaymentRecordStatus.SUCCESS && { paidAt: new Date() }),
-      },
-    });
+    const payment = updatedPayment;
 
     await this.recalculateBookingPaymentStatus(payment.bookingId);
 

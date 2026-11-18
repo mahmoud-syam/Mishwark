@@ -7,7 +7,7 @@ export const createReviewSchema = z.object({
   overallRating: z.number().int().min(1).max(5),
   vehicleRating: z.number().int().min(1).max(5).optional(),
   punctualityRating: z.number().int().min(1).max(5).optional(),
-  comment: z.string().optional(),
+  comment: z.string().trim().max(1000, "The comment is too long (1000 characters at most)").optional(),
 });
 
 export const reviewIdParamSchema = z.object({
