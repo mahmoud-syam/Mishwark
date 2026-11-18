@@ -12,6 +12,14 @@ model Reviews {
   punctualityRating Int?
   comment           String?
   visibleAt         DateTime?
+  // A complaint the office has dealt with (who, when, what was done).
+  handledAt         DateTime?
+  handledBy         Users?       @relation("ReviewsHandled", fields: [handledById], references: [id])
+  handledById       String?
+  handlingNote      String?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @default(now()) @updatedAt
+
+  @@index([reviewerType, overallRating, handledAt])
+  @@index([createdAt])
 }

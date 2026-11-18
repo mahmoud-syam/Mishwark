@@ -54,6 +54,7 @@ import {
 } from "../controllers/fleet.controller";
 import { PERMISSIONS } from "../constants/roles";
 import { adminDocumentFile, adminDriverDocuments, reviewDocument } from "../controllers/driver-document.controller";
+import { getReview, handleReview, listReviews } from "../controllers/review-admin.controller";
 import { createDestination, deleteDestination, listDestinations, updateDestination } from "../controllers/destination.controller";
 import { createTeamMember, disableTeamMember, enableTeamMember, listTeam, requireSuperAdmin, resetTeamMember2FA, resetTeamMemberPassword, setTeamMemberRole } from "../controllers/team.controller";
 
@@ -122,6 +123,11 @@ adminRouter.put("/settings", requirePermission(PERMISSIONS.SETTINGS_MANAGE), err
 adminRouter.get("/drivers/:id/documents", errorHandler(adminDriverDocuments));
 adminRouter.get("/driver-documents/:id/file", errorHandler(adminDocumentFile));
 adminRouter.patch("/driver-documents/:id", errorHandler(reviewDocument));
+
+// Reviews and complaints (who wrote them, about whom, handled or open).
+adminRouter.get("/reviews", errorHandler(listReviews));
+adminRouter.get("/reviews/:id", errorHandler(getReview));
+adminRouter.patch("/reviews/:id", errorHandler(handleReview));
 // Private-trip destinations and their prices (Pricing page).
 adminRouter.get("/destinations", errorHandler(listDestinations));
 adminRouter.post("/destinations", requirePermission(PERMISSIONS.SETTINGS_MANAGE), errorHandler(createDestination));
