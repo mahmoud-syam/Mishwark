@@ -91,10 +91,22 @@ they set a cookie. Plan your auth state machine around this.
 
 ### 1. OTP (simplest, recommended for mobile)
 
+**Recommended customer flow (easy sign-up):** let people browse with no
+account (`GET /vehicles`, `GET /vehicles/:id`, `POST /bookings/estimate-price`
+are public). Ask for the phone number only when they tap "book", keep their
+choices (car, date, times, places) in the app while they enter the code, then
+go straight back to the booking confirmation. If `profileComplete` is false,
+ask for the name on that confirmation screen and save it with `PATCH /auth/me`
+before `POST /bookings`. No email or password for customers.
+
 ```http
 POST /auth/otp/request
+{ "phoneNumber": "+201001234567" }              // name and role are optional
 { "phoneNumber": "+201001234567", "role": "customer", "name": "Ahmed" }
 ```
+
+Dashboard accounts (Admin, Super Admin) can't use OTP: **403** "Dashboard
+accounts sign in with email, password and 2FA", on request and on verify.
 
 Phone numbers are stored as `+20…`. `01001234567`, `+20 100 123 4567` and
 `00201001234567` all reach the same account, on request and verify alike.
@@ -119,9 +131,30 @@ POST /auth/otp/verify
   "message": "OTP verified successfully",
   "token": "<JWT>",
   "role": "CUSTOMER",
-  "user": { "id": "...", "name": "...", "email": null, "tokenVersion": 0, "role": { "id": "...", "name": "CUSTOMER", "permissions": [] } }
+  "user": { "id": "...", "name": "...", "email": null, "tokenVersion": 0, "role": { "id": "...", "name": "CUSTOMER", "permissions": [] } },
+  "profileComplete": false
 }
 ```
+
+The token lasts **30 days** (server setting `APP_SESSION_DAYS`), so customers
+and drivers don't need a new code every day. Logout, signing in on another
+device, or a disabled account still end it at once (401: sign in again).
+`profileComplete` is false while the account has no name yet (signed up with
+the phone number only).
+
+**Profile.** `GET /auth/me` returns `{ id, name, email, phoneNumber,
+preferredLanguage, role, profileComplete }`. The signed-in user updates their
+own details with:
+
+```http
+PATCH /auth/me
+{ "name": "Mona Adel", "email": "mona@example.com", "preferredLanguage": "ar" }
+```
+
+All fields optional; `email: null` clears it. Name 2 to 80 characters (422),
+an email already used by another account is **409**, unknown fields (like
+`phoneNumber`, which is the sign-in and can't change here) are **422**.
+Returns the same shape as `GET /auth/me`.
 
 This is the **only** flow that returns the JWT in the body. The code `0000` is
 accepted as a testing bypass outside production only (or when the server sets

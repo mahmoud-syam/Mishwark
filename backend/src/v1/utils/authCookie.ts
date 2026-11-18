@@ -29,7 +29,18 @@ const baseOptions = (): CookieOptions => ({
     path: "/",
 });
 
-export const authCookieOptions = (): CookieOptions => ({ ...baseOptions(), maxAge: TOKEN_TTL_MS });
+export const authCookieOptions = (ttlMs: number = TOKEN_TTL_MS): CookieOptions => ({ ...baseOptions(), maxAge: ttlMs });
+
+/**
+ * Customers and drivers (OTP sign-in in the apps) stay signed in for
+ * APP_SESSION_DAYS (default 30): asking for an SMS code every day drives
+ * people away. Logout, a new sign-in or a disabled account still end the
+ * session at once (tokenVersion). Dashboard accounts keep 24 hours.
+ */
+export const appSessionDays = (): number => {
+    const n = Number(process.env.APP_SESSION_DAYS);
+    return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : 30;
+};
 
 /** Must match the options the cookie was set with, or browsers keep it. */
 export const clearAuthCookieOptions = (): CookieOptions => baseOptions();
