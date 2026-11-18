@@ -1,4 +1,6 @@
+import DriverDocumentsPanel from "../components/DriverDocuments";
 import { useState, type FormEvent } from "react";
+import { Coins, Percent, Route, Wallet } from "lucide-react";
 import { Link, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
@@ -85,10 +87,10 @@ export default function DriverAnalytics() {
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
 
       <StatGrid>
-        <StatCard loading={q.isPending} label={`رحلات ${word}`} value={d ? num(d.periodStats.trips) : ""} />
-        <StatCard loading={q.isPending} label={`دخل السائق ${word}`} tone="cream" value={d ? num(d.periodStats.driverIncome) : ""} delta="ج.م" />
-        <StatCard loading={q.isPending} label={`نسبتك (${rate}%)`} value={d ? num(d.periodStats.companyShare) : ""} delta="ج.م" />
-        <StatCard loading={q.isPending} label="صافي السائق بعد النسبة" tone="rose" value={d ? num(d.periodStats.driverNet) : ""} delta={`ج.م ${word}`} />
+        <StatCard icon={<Route />} loading={q.isPending} label={`رحلات ${word}`} value={d ? num(d.periodStats.trips) : ""} />
+        <StatCard icon={<Wallet />} loading={q.isPending} label={`دخل السائق ${word}`} tone="cream" value={d ? num(d.periodStats.driverIncome) : ""} delta="ج.م" />
+        <StatCard icon={<Percent />} loading={q.isPending} label={`نسبتك (${rate}%)`} value={d ? num(d.periodStats.companyShare) : ""} delta="ج.م" />
+        <StatCard icon={<Coins />} loading={q.isPending} label="صافي السائق بعد النسبة" tone="rose" value={d ? num(d.periodStats.driverNet) : ""} delta={`ج.م ${word}`} />
       </StatGrid>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
@@ -103,7 +105,7 @@ export default function DriverAnalytics() {
                   format={compact}
                   data={d.chart.map((c) => ({ label: chartLabel(period, c.key), value: c.income, overlay: c.share, title: `الدخل ${egp(c.income)} · نسبتك ${egp(c.share)}` }))}
                 />
-                <div className="mt-3 flex gap-4 text-[10px] text-muted">
+                <div className="mt-3 flex gap-4 text-[12px] text-muted">
                   <span className="flex items-center gap-1.5">
                     <span className="size-2 rounded-[2px] bg-gold" />
                     دخل السائق
@@ -145,6 +147,7 @@ export default function DriverAnalytics() {
         </div>
 
         <div className="flex min-w-0 flex-col gap-6">
+          {id && <DriverDocumentsPanel driverId={id} />}
           <Panel title="ملخص شامل">
             {!d ? (
               <Skeleton className="h-40" />
@@ -164,7 +167,7 @@ export default function DriverAnalytics() {
               <>
                 <KeyValue
                   label="تقييم العملاء له"
-                  value={d.quality.rating != null ? `${d.quality.rating.toFixed(1)} ⭐ (${d.quality.reviewCount})` : "لسه مفيش تقييمات"}
+                  value={d.quality.rating != null ? `${d.quality.rating.toFixed(1)} ★ (${d.quality.reviewCount})` : "لسه مفيش تقييمات"}
                   tone={d.quality.rating != null && d.quality.rating < 4 ? "gold" : "mint"}
                 />
                 <KeyValue label="عدد الشكاوى" value={num(d.quality.complaints)} tone={d.quality.complaints > 0 ? "rose" : "mint"} />
@@ -206,7 +209,7 @@ function CommissionControl({ driverId, rate }: { driverId: string; rate: number 
   if (!editing) {
     return (
       <>
-        <span className="rounded-full border border-gold bg-gold/15 px-3 py-1.5 text-[11px] text-gold">نسبتك {rate}%</span>
+        <span className="rounded-full border border-gold bg-gold/15 px-3 py-1.5 text-[13px] text-gold">نسبتك {rate}%</span>
         <Button size="sm" onClick={() => { setValue(String(rate)); setEditing(true); }}>
           تعديل النسبة
         </Button>
@@ -224,10 +227,10 @@ function CommissionControl({ driverId, rate }: { driverId: string; rate: number 
           step={0.5}
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          className="ltr w-14 bg-transparent text-center text-[12px] font-bold text-cream outline-none"
+          className="ltr w-14 bg-transparent text-center text-[14px] font-bold text-cream outline-none"
           aria-label="نسبة الشركة بالمية"
         />
-        <span className="text-[11px] text-muted">%</span>
+        <span className="text-[13px] text-muted">%</span>
       </label>
       <Button size="sm" variant="primary" type="submit" disabled={!valid || save.isPending}>
         {save.isPending ? "…" : "حفظ"}
@@ -235,7 +238,7 @@ function CommissionControl({ driverId, rate }: { driverId: string; rate: number 
       <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
         إلغاء
       </Button>
-      {save.error && <span className="text-[11px] text-rose">{errorMessage(save.error)}</span>}
+      {save.error && <span className="text-[13px] text-rose">{errorMessage(save.error)}</span>}
     </form>
   );
 }

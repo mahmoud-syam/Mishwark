@@ -15,11 +15,11 @@ The mobile apps are not in this repository, so both apps were simulated through 
 
 | | Count |
 |---|---|
-| End-to-end checks (final run) | 103 / 103 passing |
-| API sweep (98 operations: functional, ownership, no-auth, robustness) | 289 / 289 passing |
+| End-to-end checks (final run) | 106 / 106 + 47 / 47 passing |
+| API sweep (functional, ownership, no-auth, robustness) | 357 / 357 passing |
 | Bugs found and fixed | 17 |
 | Product decisions taken and implemented | 7 + SMS/OTP hardening |
-| Backend test suite | 272 / 272 passing (+26 new tests) |
+| Backend test suite | 370 / 370 passing |
 
 All dashboard numbers matched the database exactly at every step: revenue,
 pending bookings, live trips, payments, driver and customer analytics,
@@ -132,6 +132,87 @@ Deploying behind Cloudflare Tunnel needs nothing more (`TRUST_PROXY=loopback`,
 the default). Behind another proxy set `TRUST_PROXY`, or every visitor shares
 the proxy's address and the per-IP limits hit everyone at once. Counters are
 in memory: right for one API instance.
+
+### Review of the whole cycle (2026-11-17)
+
+A second pass that acted as a tester across admin, customer and driver flows
+(`probe` script, 16 exploratory checks). Fixed:
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-40 | High | Driver and employee documents (national ID, licence, criminal record) were downloadable by anyone with the link. | Only profile pictures and car photos are public. Signup keeps only the profile picture, refuses a fake image, and deletes every other uploaded file. |
+| F-41 | High | `010…`, `+2010…` and `0020…` were three different accounts for the same phone. | Every phone is stored as `+20…` (OTP sign-in, customers added from the dashboard). Existing numbers were converted by a migration when that caused no clash. |
+| F-42 | High | A booking could be made today for a time that had already passed. | Refused when the start is more than 15 minutes in the past (Cairo time). |
+| F-43 | High | Removing a driver from a car left that car's upcoming trips with a driver who no longer drives it. | 409 that lists the trips; move them first. |
+| F-44 | High | Putting a driver on leave (or off) gave no sign of the trips they still hold. | New overview alert `driver_unavailable` with the number of trips and the first date. |
+| F-45 | Medium | A driver whose licence had expired could be assigned. | Skipped by auto-assignment; refused (400) when chosen by hand. |
+| F-46 | Medium | `?limit=` had no ceiling (`limit=100000` returned everything). | Every list caps the page at 100. |
+| F-47 | Medium | 2FA could be turned off with just a session. | Needs the current 6-digit code. |
+| F-48 | Medium | Logout only cleared the cookie; a copied token kept working until it expired. | Logout revokes the token (one session per account, so nothing else is signed out). |
+| F-49 | Low | Price estimate worked for a retired car; a malformed 2FA secret gave a 500; a missing or short `JWT_SECRET` was only found on the first sign-in. | 400 for both; the API refuses to start without `JWT_SECRET` (32+ characters in production). |
+
+### Booking policies (2026-11-18)
+
+The four open product questions, implemented with defaults that can all be
+changed on the Settings page (for the owner to review):
+
+| Question | Default |
+|---|---|
+| Trips past midnight | Allowed; must end by 06:00 (0 turns them off). Clash checks cover the day before and after. |
+| Booking horizon / shortest trip | 365 days ahead, at least 30 minutes. |
+| Deposit on cancellation | Cancelled 48 h+ before: everything paid back to the wallet. Later: deposit kept, the rest back. An admin can decide either way. |
+| Temporary password expiry | 7 days. |
+
+Found while testing them:
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-50 | High | A cancelled booking kept its slot: the same car couldn't be booked again that day at the same start time (unique index counted cancelled bookings). | Partial unique index on active bookings only. |
+| F-51 | Medium | The dashboard had no way to find, confirm or cancel a booking outside the day view. | New Bookings page (search by ref/name/phone, status tabs, payment filter) with confirm, complete, payments and cancel. |
+| F-52 | Low | An admin confirming or cancelling a booking wasn't in the audit log. | Logged with the old and new status, and the money settled on cancel. |
+| F-53 | Low | `HH:mm` accepted impossible times like 25:99. | Validated as 00:00 to 23:59. |
+
+### Easy sign-up for customers (2026-11-18)
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-54 | Critical | A dashboard account (Admin or Super Admin) could sign in with an SMS code to its phone number, skipping the password and 2FA. | OTP is refused for dashboard accounts, on request (no SMS sent) and on verify. |
+| F-55 | Medium | Customers had to request a new SMS code every 24 hours, and there was no way for them to give or change their name or email. | App sessions last 30 days (`APP_SESSION_DAYS`); `PATCH /auth/me`; `profileComplete` tells the app when to ask for the name. |
+
+### Driver documents (2026-11-18)
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-56 | High | Drivers' papers sent at signup were never linked to the driver (and, before F-40, sat in a public folder). The office had no way to see or check them. | Private storage (`DRIVER_DOCUMENTS_DIR`, outside every public folder), uploads at signup or later (`POST /driver/documents`), real-type check, downloads only for the driver and the dashboard, review with a reason the driver sees, a home alert and a status on every driver card. |
+
+### Pricing by service type (2026-11-18)
+
+The price was base + km × rate + **driving** time × rate: a 7 pm to 1 am wedding
+was charged for the 30 minutes of driving, not the six hours booked, and the
+breakdown showed bare numbers. Replaced with the owner's model, all editable on
+a new Pricing page:
+
+- Wedding: a fixed price per car (or the default), covering hours and km; each
+  started extra hour and each extra km is charged.
+- Private trip: from the company in Sharqia to a listed destination at a fixed
+  price per car category, or anywhere else at the category's price; km beyond
+  the included ones (150 by default) are extra.
+- VIP: a fixed price per occasion, like a wedding with its own prices.
+
+The quote and the booking show the price as itemised lines (what the price
+covers, the extras with quantity × unit price, discounts, deposit). Requests
+without a service type keep the older per-km price for app versions that
+aren't updated.
+
+### Booking map (2026-11-18)
+
+Book on behalf used a fixed list of 11 places (plus free text the server had
+to guess). It now opens a map of Egypt: search any place, or click / drag a
+pin; the address fills in by itself and can be edited, and the booking stores
+the exact coordinates. Built on OpenStreetMap (free, no account): Photon for
+search as you type, Nominatim for pin-to-address, both through the API
+(`/places/search`, `/places/reverse`) with a day's cache and a per-IP limit.
+The mobile apps can use the same endpoints.
 
 New: Team page (Super Admin only) to create dashboard accounts with a
 temporary password (changed at first sign-in, then 2FA), reset 2FA or the

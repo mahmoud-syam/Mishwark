@@ -7,8 +7,8 @@ export { cx };
 
 // ------------------------------------------------------------------ layout
 export function Page({ children, width = "wide" }: { children: ReactNode; width?: "wide" | "narrow" | "medium" }) {
-  const max = width === "narrow" ? "max-w-[680px]" : width === "medium" ? "max-w-[740px]" : "max-w-[1160px]";
-  return <main className={cx("page-enter mx-auto flex w-full flex-col gap-[22px] px-4 py-10", max)}>{children}</main>;
+  const max = width === "narrow" ? "max-w-[680px]" : width === "medium" ? "max-w-[760px]" : "max-w-[1240px]";
+  return <div className={cx("page-enter mx-auto flex w-full flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8", max)}>{children}</div>;
 }
 
 // ------------------------------------------------------------------ motion
@@ -67,7 +67,7 @@ export function CountUp({ text, duration = 750 }: { text: string; duration?: num
 export function BrandMark({ size = 30 }: { size?: number }) {
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center rounded-lg bg-linear-135 from-gold to-gold-deep font-display text-ink"
+      className="inline-flex shrink-0 items-center justify-center rounded-xl bg-linear-135 from-gold to-gold-deep font-display text-on-accent shadow-[0_6px_16px_-6px_var(--color-gold)]"
       style={{ width: size, height: size, fontSize: size * 0.53 }}
       aria-hidden
     >
@@ -80,7 +80,7 @@ export function Brand() {
   return (
     <Link to="/" className="flex items-center gap-2" aria-label="Mishwark — الرئيسية">
       <BrandMark />
-      <span className="font-display text-[17px] text-cream" dir="ltr">
+      <span className="text-[19px] font-bold text-white" dir="ltr">
         Mishwark
       </span>
     </Link>
@@ -93,7 +93,7 @@ export function BackButton({ to }: { to?: string }) {
     <button
       type="button"
       onClick={() => (to ? nav(to) : window.history.length > 1 ? nav(-1) : nav("/"))}
-      className="flex size-8 shrink-0 items-center justify-center rounded-full border border-line bg-raised text-[14px] text-cream transition hover:border-gold/60"
+      className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-[16px] text-cream shadow-[var(--shadow-card)] transition hover:border-gold/60"
       aria-label="رجوع"
     >
       ←
@@ -119,9 +119,9 @@ export function PageHeader({
       <div className="flex items-center gap-3">
         {back && <BackButton to={typeof back === "string" ? back : undefined} />}
         {leading}
-        <div className="flex flex-col gap-1.5">
-          {eyebrow && <div className="text-[12px] uppercase tracking-[2px] text-gold">{eyebrow}</div>}
-          <h1 className="font-display text-[30px] leading-tight text-cream">{title}</h1>
+        <div className="flex flex-col gap-1">
+          {eyebrow && <div className="text-[14px] text-muted">{eyebrow}</div>}
+          <h1 className="text-[27px] font-bold leading-tight text-cream">{title}</h1>
         </div>
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -144,11 +144,11 @@ export function Panel({
   bodyClassName?: string;
 }) {
   return (
-    <section className={cx("flex flex-col rounded-[18px] border border-line bg-surface p-[22px]", className)}>
+    <section className={cx("card flex flex-col p-[22px]", className)}>
       {(title || tag) && (
         <div className="flex items-center justify-between gap-3 pb-4">
-          <h2 className="text-[15px] font-bold text-cream">{title}</h2>
-          {tag && <span className="text-[11px] text-muted">{tag}</span>}
+          <h2 className="text-[18px] font-bold text-cream">{title}</h2>
+          {tag && <span className="text-[13px] text-muted">{tag}</span>}
         </div>
       )}
       <div className={bodyClassName}>{children}</div>
@@ -169,7 +169,8 @@ export function StatCard({
   value,
   delta,
   deltaTone = "muted",
-  tone = "gold",
+  tone = "cream",
+  icon,
   loading,
 }: {
   label: ReactNode;
@@ -177,43 +178,56 @@ export function StatCard({
   delta?: ReactNode;
   deltaTone?: Tone;
   tone?: Tone | "cream";
+  /** Shown in a navy circle, like the design's KPI cards. */
+  icon?: ReactNode;
   loading?: boolean;
 }) {
   return (
-    <div className="lift relative flex min-w-0 flex-col gap-1.5 overflow-hidden rounded-2xl border border-line bg-surface p-5 hover:border-gold/40">
-      <div className="text-[12px] text-muted">{label}</div>
+    <div className="card lift relative flex min-w-0 flex-col items-start gap-3 p-4 hover:border-gold/40 sm:flex-row sm:items-center sm:gap-4 sm:p-5">
+      {icon && (
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-navy text-white shadow-[0_8px_18px_-8px_var(--color-navy)] sm:size-12 [&_svg]:size-5" aria-hidden>
+          {icon}
+        </span>
+      )}
+      <div className="flex min-w-0 flex-col gap-0.5">
+      <div className="text-[14px] text-muted">{label}</div>
       {loading ? (
-        <Skeleton className="my-2 h-9 w-24" />
+        <Skeleton className="my-1.5 h-8 w-24" />
       ) : (
-        <div className={cx("font-display text-[30px] leading-[1.45]", valueTone[tone])}>
+        <div className={cx("text-[25px] font-bold leading-[1.35] sm:text-[29px]", valueTone[tone])}>
           {/* Numeric values ("9 / 14", "72%") must stay LTR inside RTL text; Arabic values flow naturally. */}
           <span className={typeof value === "string" && /[\u0600-\u06FF]/.test(value) ? undefined : "ltr"}>
             {typeof value === "string" || typeof value === "number" ? <CountUp text={String(value)} /> : value}
           </span>
         </div>
       )}
-      <div className={cx("min-h-[17px] text-[11px]", valueTone[deltaTone])}>{loading ? "" : delta}</div>
-      <div className="absolute inset-x-0 bottom-0 h-[3px] bg-linear-to-r from-gold to-gold/0" />
+      <div className={cx("min-h-[17px] text-[13px]", valueTone[deltaTone])}>{loading ? "" : delta}</div>
+      </div>
     </div>
   );
 }
 
 export function StatGrid({ children }: { children: ReactNode }) {
-  return <div className="stagger grid grid-cols-2 gap-[18px] lg:grid-cols-4">{children}</div>;
+  // Columns follow the space the grid actually has (narrow pages stay at 2), not the window.
+  return (
+    <div className="@container">
+      <div className="stagger grid grid-cols-2 gap-3 sm:gap-4 @3xl:grid-cols-4">{children}</div>
+    </div>
+  );
 }
 
 // ------------------------------------------------------------------ badges
 const badgeTone: Record<Tone, { bg: string; text: string; dot: string }> = {
   mint: { bg: "bg-mint/15", text: "text-mint", dot: "bg-mint" },
-  gold: { bg: "bg-gold/15", text: "text-gold", dot: "bg-gold" },
-  rose: { bg: "bg-wine/25", text: "text-rose", dot: "bg-rose" },
+  gold: { bg: "bg-amber/15", text: "text-amber", dot: "bg-amber" },
+  rose: { bg: "bg-wine/15", text: "text-rose", dot: "bg-rose" },
   muted: { bg: "bg-muted/15", text: "text-muted", dot: "bg-muted" },
 };
 
 export function Badge({ tone, children, dot, className }: { tone: Tone; children: ReactNode; dot?: boolean; className?: string }) {
   const t = badgeTone[tone];
   return (
-    <span className={cx("inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full text-[10px]", dot ? "px-2 py-[3px]" : "px-2.5 py-1", t.bg, t.text, className)}>
+    <span className={cx("inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full text-[12px]", dot ? "px-2 py-[3px]" : "px-2.5 py-1", t.bg, t.text, className)}>
       {children}
       {dot && <span className={cx("size-1.5 rounded-[3px]", t.dot)} />}
     </span>
@@ -223,9 +237,9 @@ export function Badge({ tone, children, dot, className }: { tone: Tone; children
 // ----------------------------------------------------------------- buttons
 type Variant = "primary" | "secondary" | "danger" | "ghost";
 const btnVariant: Record<Variant, string> = {
-  primary: "bg-gold text-ink hover:brightness-110 border border-gold",
-  secondary: "bg-raised text-cream border border-line hover:border-gold/60",
-  danger: "bg-wine/20 text-blush border border-wine hover:bg-wine/30",
+  primary: "bg-linear-to-l from-gold to-gold-deep dark:to-gold text-on-accent border border-gold shadow-[0_8px_18px_-10px_var(--color-gold)] hover:brightness-105",
+  secondary: "bg-surface text-cream border border-line hover:border-gold/60",
+  danger: "bg-wine/10 text-blush border border-wine/60 hover:bg-wine/20",
   ghost: "text-muted hover:text-cream border border-transparent",
 };
 
@@ -236,7 +250,7 @@ export function Button({
   children,
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: "sm" | "md" | "lg" }) {
-  const sizing = size === "sm" ? "px-4 py-[9px] text-[11px] rounded-[9px]" : size === "lg" ? "px-6 py-3.5 text-[13px] rounded-xl" : "px-4 py-2.5 text-[12px] rounded-xl";
+  const sizing = size === "sm" ? "px-4 py-[9px] text-[13px] rounded-[9px]" : size === "lg" ? "px-6 py-3.5 text-[15px] rounded-xl" : "px-4 py-2.5 text-[14px] rounded-xl";
   return (
     <button
       type="button"
@@ -250,7 +264,7 @@ export function Button({
 
 export function LinkButton({ to, variant = "secondary", children, className }: { to: string; variant?: Variant; children: ReactNode; className?: string }) {
   return (
-    <Link to={to} className={cx("inline-flex items-center justify-center gap-1.5 rounded-[9px] px-4 py-[9px] text-[11px] font-bold transition", btnVariant[variant], className)}>
+    <Link to={to} className={cx("inline-flex items-center justify-center gap-1.5 rounded-[9px] px-4 py-[9px] text-[13px] font-bold transition", btnVariant[variant], className)}>
       {children}
     </Link>
   );
@@ -279,8 +293,8 @@ export function Chips<T extends string>({
             aria-checked={active}
             onClick={() => onChange(o.value)}
             className={cx(
-              "rounded-full border px-[15px] py-[7px] text-[11px] transition",
-              active ? "border-gold bg-gold/15 text-gold" : "border-line bg-raised text-muted hover:text-cream"
+              "rounded-full border px-[15px] py-[7px] text-[13px] transition",
+              active ? "border-gold bg-gold/12 font-bold text-gold" : "border-line bg-surface text-muted hover:text-cream"
             )}
           >
             {o.label}
@@ -294,7 +308,7 @@ export function Chips<T extends string>({
 // ---------------------------------------------------------------- avatars
 export function Avatar({ text, size = 36, tone = "wine" }: { text: string; size?: number; tone?: "wine" | "gold" | "plain" }) {
   const bg =
-    tone === "gold" ? "bg-linear-135 from-gold to-gold-deep text-ink" : tone === "plain" ? "bg-raised border border-line text-cream" : "bg-linear-135 from-wine to-wine-deep text-cream";
+    tone === "gold" ? "bg-linear-135 from-gold to-gold-deep text-on-accent" : tone === "plain" ? "bg-raised border border-line text-cream" : "bg-linear-135 from-navy to-navy-soft text-white";
   return (
     <span className={cx("inline-flex shrink-0 items-center justify-center rounded-full font-bold", bg)} style={{ width: size, height: size, fontSize: size * 0.36 }}>
       {text}
@@ -305,42 +319,79 @@ export function Avatar({ text, size = 36, tone = "wine" }: { text: string; size?
 // ------------------------------------------------------------------ charts
 export function BarChart({
   data,
-  height = 117,
+  height = 160,
   format,
   overlay,
+  highlight,
 }: {
-  data: { label: string; value: number; overlay?: number; title?: string }[];
+  data: { label: string; value: number; overlay?: number; title?: string; caption?: string }[];
   height?: number;
   format?: (n: number) => string;
   overlay?: boolean;
+  /** Index of the bar drawn darker with its value box always shown (e.g. today). */
+  highlight?: number;
 }) {
   const max = Math.max(1, ...data.map((d) => d.value));
+  const top = niceCeil(max);
+  const ticks = [1, 0.75, 0.5, 0.25, 0].map((t) => t * top);
   return (
-    <div className="flex items-end gap-2.5" style={{ height: height + 23 }}>
-      {data.map((d, i) => {
-        const h = Math.max(d.value > 0 ? 4 : 2, (d.value / max) * height);
-        return (
-          <div key={i} className="group flex min-w-0 flex-1 flex-col items-center gap-2">
-            <div className="relative flex w-full items-end" style={{ height }}>
-              <span className="pointer-events-none absolute inset-x-0 -top-0.5 text-center text-[10px] text-cream opacity-0 transition group-hover:opacity-100 ltr" style={{ bottom: h + 4, top: "auto" }}>
-                {format ? format(d.value) : d.value}
-              </span>
-              <div
-                className={cx("bar relative w-full overflow-hidden rounded-t-md", d.value > 0 ? "bg-linear-to-b from-gold to-gold-deep" : "bg-raised")}
-                style={{ height: h, animationDelay: `${i * 45}ms` }}
-                title={d.title}
-              >
-                {overlay && d.overlay != null && d.value > 0 && (
-                  <div className="absolute inset-x-0 bottom-0 bg-wine/80" style={{ height: `${(d.overlay / d.value) * 100}%` }} />
-                )}
+    // Top padding keeps the value box of the tallest bar inside the chart.
+    <div className="flex gap-3 pt-12">
+      <div className="flex shrink-0 flex-col justify-between pb-6 text-[12px] text-muted ltr" style={{ height: height + 24 }} aria-hidden>
+        {ticks.map((t) => (
+          <span key={t} className="leading-none">{format ? format(t) : t}</span>
+        ))}
+      </div>
+      <div className="relative min-w-0 flex-1">
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col justify-between" style={{ height }} aria-hidden>
+          {ticks.map((t) => (
+            <span key={t} className="h-px w-full border-t border-dashed border-line" />
+          ))}
+        </div>
+        <div className="relative flex items-end gap-1 sm:gap-2" style={{ height: height + 24 }}>
+          {data.map((d, i) => {
+            const h = Math.max(d.value > 0 ? 6 : 3, (d.value / top) * height);
+            const hot = i === highlight;
+            return (
+              <div key={i} className="group flex min-w-0 flex-1 flex-col items-center gap-2" title={d.title}>
+                <div className="relative flex w-full items-end justify-center" style={{ height }}>
+                  <span
+                    className={cx(
+                      "pointer-events-none absolute z-10 flex flex-col items-center whitespace-nowrap rounded-lg bg-navy px-2.5 py-1.5 text-center text-white shadow-lg transition",
+                      hot ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    )}
+                    style={{ bottom: h + 8 }}
+                  >
+                    {d.caption && <span className="text-[11px] opacity-80">{d.caption}</span>}
+                    <span className="text-[14px] font-bold ltr">{format ? format(d.value) : d.value}</span>
+                  </span>
+                  <div
+                    className={cx(
+                      "bar relative w-[clamp(10px,45%,22px)] overflow-hidden rounded-t-full",
+                      d.value <= 0 ? "bg-raised-2" : hot ? "bg-navy" : "bg-linear-to-b from-navy-soft to-navy-soft/35 group-hover:from-navy group-hover:to-navy/60"
+                    )}
+                    style={{ height: h, animationDelay: `${i * 45}ms` }}
+                  >
+                    {overlay && d.overlay != null && d.value > 0 && (
+                      <div className="absolute inset-x-0 bottom-0 bg-gold/80" style={{ height: `${(d.overlay / d.value) * 100}%` }} />
+                    )}
+                  </div>
+                </div>
+                <span className={cx("truncate text-[12px]", hot ? "font-bold text-cream" : "text-muted")}>{d.label}</span>
               </div>
-            </div>
-            <span className="truncate text-[10px] text-muted">{d.label}</span>
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
+}
+
+/** A round axis maximum whose quarters are round too (24K → 6K, 12K, 18K). */
+function niceCeil(n: number) {
+  const p = Math.pow(10, Math.floor(Math.log10(n)));
+  for (const m of [1, 1.2, 1.6, 2, 2.4, 3.2, 4, 6, 8, 10]) if (m * p >= n) return m * p;
+  return 10 * p;
 }
 
 export function ProgressBar({ value, tone = "gold" }: { value: number; tone?: "gold" | "rose" }) {
@@ -359,7 +410,7 @@ export function Table({ head, children }: { head: ReactNode[]; children: ReactNo
         <thead>
           <tr>
             {head.map((h, i) => (
-              <th key={i} className="border-b border-line px-1.5 py-2 text-[11px] font-normal text-muted">
+              <th key={i} className="border-b border-line px-1.5 py-2 text-[13px] font-normal text-muted">
                 {h}
               </th>
             ))}
@@ -371,15 +422,15 @@ export function Table({ head, children }: { head: ReactNode[]; children: ReactNo
   );
 }
 export const Td = ({ children, className }: { children: ReactNode; className?: string }) => (
-  <td className={cx("border-b border-line px-1.5 py-2.5 text-[12px] text-cream", className)}>{children}</td>
+  <td className={cx("border-b border-line px-1.5 py-2.5 text-[14px] text-cream", className)}>{children}</td>
 );
 
 // ---------------------------------------------------------- list rows (kv)
 export function KeyValue({ label, value, tone = "cream" }: { label: ReactNode; value: ReactNode; tone?: Tone | "cream" }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-line py-3 last:border-b-0">
-      <span className="text-[12px] font-bold text-cream">{label}</span>
-      <span className={cx("text-[14px] font-bold", valueTone[tone])}>{value}</span>
+      <span className="text-[14px] font-bold text-cream">{label}</span>
+      <span className={cx("text-[16px] font-bold", valueTone[tone])}>{value}</span>
     </div>
   );
 }
@@ -390,12 +441,12 @@ export function Skeleton({ className }: { className?: string }) {
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-[12px] text-muted">{children}</div>;
+  return <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-[14px] text-muted">{children}</div>;
 }
 
 export function ErrorBox({ error, onRetry }: { error: string; onRetry?: () => void }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-wine bg-wine/15 px-4 py-3 text-[12px] text-blush" role="alert">
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-wine bg-wine/15 px-4 py-3 text-[14px] text-blush" role="alert">
       <span>{error}</span>
       {onRetry && (
         <button type="button" onClick={onRetry} className="font-bold underline underline-offset-4">
@@ -409,20 +460,20 @@ export function ErrorBox({ error, onRetry }: { error: string; onRetry?: () => vo
 export function Field({ label, children, hint }: { label: ReactNode; children: ReactNode; hint?: ReactNode }) {
   return (
     <label className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-line bg-raised px-3 pb-2.5 pt-2.5 focus-within:border-gold/60">
-      <span className="text-[10px] text-muted">{label}</span>
+      <span className="text-[12px] text-muted">{label}</span>
       {children}
-      {hint && <span className="text-[10px] text-gold">{hint}</span>}
+      {hint && <span className="text-[12px] text-gold">{hint}</span>}
     </label>
   );
 }
 
 /** Bare input that sits inside a <Field>. */
-export const fieldControl = "w-full bg-transparent text-[13px] font-bold text-cream outline-none placeholder:font-normal placeholder:text-muted/70";
+export const fieldControl = "w-full bg-transparent text-[15px] font-bold text-cream outline-none placeholder:font-normal placeholder:text-muted/70";
 
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode }) {
   return (
     <label className="flex cursor-pointer items-center justify-between gap-3 py-1">
-      <span className="text-[12px] font-bold text-cream">{label}</span>
+      <span className="text-[14px] font-bold text-cream">{label}</span>
       <button
         type="button"
         role="switch"

@@ -27,6 +27,10 @@ import {
   PackageType,
 } from "../../generated/prisma";
 import prisma from "../../src/v1/utils/prismaClientHelper";
+import fs from "fs";
+import path from "path";
+import zlib from "zlib";
+import { DOCUMENTS_DIR, REQUIRED_DOCUMENTS } from "../../src/v1/services/driver-document.service";
 import { addDays, dateKey, zonedToInstant } from "../../src/v1/utils/businessTime";
 
 if (process.env.NODE_ENV === "production") {
@@ -103,6 +107,8 @@ async function cleanup() {
   await prisma.vehicleDrivers.deleteMany({ where: { OR: [{ vehicleId: { in: vehicleIds } }, { driverId: { in: driverIds } }] } });
   await prisma.vehicles.deleteMany({ where: { id: { in: vehicleIds } } });
   await prisma.phoneNumbers.deleteMany({ where: { OR: [{ userId: { in: userIds } }, { driversId: { in: driverIds } }] } });
+  await prisma.driverDocuments.deleteMany({ where: { driverId: { in: driverIds } } });
+  for (const id of driverIds) fs.rmSync(path.join(DOCUMENTS_DIR, id), { recursive: true, force: true });
   await prisma.drivers.deleteMany({ where: { id: { in: driverIds } } });
   await prisma.packages.deleteMany({ where: { customerId: { in: userIds } } });
   await prisma.users.updateMany({ where: { referredById: { in: userIds } }, data: { referredById: null } });
@@ -143,6 +149,9 @@ async function main() {
       await prisma.vehicles.create({
         data: {
           make, model, category, year, capacity, color, basePrice, pricePerKm, pricePerHour: 0,
+          // Wedding price per car (the cheaper ones keep the default from the Pricing page).
+          weddingPrice: basePrice >= 1700 ? Math.round(basePrice * 0.9 / 50) * 50 : null,
+          vipPrice: basePrice >= 2000 ? Math.round(basePrice * 1.6 / 50) * 50 : null,
           plateNumber: `${plates[i]} ${123 + i * 111}·D`,
           description: `${DEMO_TAG} عربية ${category === VehicleCategory.CLASSIC ? "كلاسيك" : "لوكس"} مجهزة للمناسبات`,
           status: VehicleStatus.AVAILABLE,
@@ -154,6 +163,16 @@ async function main() {
         },
       })
     );
+  }
+
+  // ---- private-trip destinations (from the company in Sharqia)
+  for (const [name, latitude, longitude, includedKm, luxury, van, classic] of [
+    ["مطار القاهرة الدولي", 30.1219, 31.4056, null, 2200, 1700, 2600],
+    ["القاهرة (وسط البلد)", 30.0444, 31.2357, null, 1800, 1400, 2200],
+    ["الإسكندرية", 31.2001, 29.9187, 300, 4500, 3500, 5200],
+  ] as [string, number, number, number | null, number, number, number][]) {
+    if (await prisma.destinations.findFirst({ where: { name } })) continue;
+    await prisma.destinations.create({ data: { name, latitude, longitude, includedKm, prices: { LUXURY: luxury, VAN: van, CLASSIC: classic } } });
   }
 
   // ---- drivers
@@ -177,6 +196,34 @@ async function main() {
   }
   for (let i = 0; i < vehicles.length; i++) {
     await prisma.vehicleDrivers.create({ data: { vehicleId: vehicles[i].id, driverId: drivers[i % drivers.length].id, isPrimary: true } });
+  }
+
+  // ---- driver papers: plain sample images (no real data). The first driver's
+  // wait for review, the second's are approved, the rest uploaded nothing yet.
+  const samplePng = (r: number, g: number, b: number) => {
+    const w = 240, h = 150;
+    const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+    const crc = (buf: Buffer) => { let c = 0xffffffff; for (const x of buf) c = crcTable[(c ^ x) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+    const chunk = (type: string, data: Buffer) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+    const rows = Buffer.alloc((w * 3 + 1) * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const o = y * (w * 3 + 1) + 1 + x * 3;
+      const band = y > 20 && y < 40 ? 0.7 : x > 20 && x < 80 && y > 55 && y < 125 ? 0.8 : 1;
+      rows[o] = r * band; rows[o + 1] = g * band; rows[o + 2] = b * band;
+    }
+    return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
+  };
+  for (const [i, status] of [[0, "PENDING"], [1, "APPROVED"]] as const) {
+    const d = drivers[i];
+    if (!d) continue;
+    fs.mkdirSync(path.join(DOCUMENTS_DIR, d.id), { recursive: true });
+    for (const [k, type] of REQUIRED_DOCUMENTS.entries()) {
+      const fileName = `${d.id}/${type.toLowerCase()}-demo.png`;
+      const png = samplePng(200 + k * 8, 215, 230 - k * 10);
+      fs.writeFileSync(path.join(DOCUMENTS_DIR, fileName), png);
+      await prisma.driverDocuments.create({ data: { driverId: d.id, type, fileName, mimeType: "image/png", size: png.length, status, reviewedAt: status === "APPROVED" ? new Date() : null } });
+    }
   }
 
   // ---- customers
@@ -392,12 +439,22 @@ async function main() {
   });
 
   // ---- packages: one waiting for an admin to set its discount, one at 10%
-  const upcomingPending = (customerId: string) =>
-    prisma.bookings.findMany({
+  // Unpaid pending trips first; the random data doesn't always give a customer
+  // two, so fall back to their other upcoming trips (never an empty package).
+  const upcomingPending = async (customerId: string) => {
+    const pending = await prisma.bookings.findMany({
       where: { customerId, status: BookingStatus.PENDING, depositPaid: 0, bookingDate: { gt: today } },
       orderBy: { bookingDate: "asc" },
       take: 2,
     });
+    if (pending.length >= 2) return pending;
+    const more = await prisma.bookings.findMany({
+      where: { customerId, status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] }, bookingDate: { gt: today }, id: { notIn: pending.map((b) => b.id) } },
+      orderBy: { bookingDate: "asc" },
+      take: 2 - pending.length,
+    });
+    return [...pending, ...more];
+  };
   const demoPackages = [
     { customer: customers[1], name: "زفة فرح — 3 عربيات", type: PackageType.MULTI_CAR, pct: 0 },
     { customer: customers[6], name: "خطوبة وكتب كتاب", type: PackageType.MULTI_EVENT, pct: 10 },

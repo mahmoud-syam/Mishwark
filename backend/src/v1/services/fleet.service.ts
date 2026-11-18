@@ -12,6 +12,8 @@ import {
 import { BadRequestException, ConflictException, NotFoundException } from "../utils/errors";
 import { addDays, dateKey, diffDays, isDateKey } from "../utils/businessTime";
 import SettingsService from "./settings.service";
+import { isOvernight, nearbyDays } from "../utils/slots";
+import { bookingRef } from "../utils/bookingRef";
 import { imageTypeOf } from "../middlewares/multer.middleware";
 
 /**
@@ -39,7 +41,6 @@ export const VEHICLE_UPLOAD_DIR = path.join(process.cwd(), "uploads", "vehicles"
 const dayStart = (key: string) => new Date(`${key}T00:00:00.000Z`);
 const keyOf = (d: Date) => d.toISOString().slice(0, 10);
 const blockReason = (type: string, id: string) => `صيانة (${type}) #${id}`;
-const bookingRef = (id: string) => `MW-${id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
 
 // ------------------------------------------------------------------ input
 const text = (max: number) => z.string().trim().min(1).max(max);
@@ -67,6 +68,9 @@ export const vehicleCreateSchema = z
     basePrice: money.default(0),
     pricePerKm: money.default(0),
     pricePerHour: money.default(0),
+    /** Fixed wedding / VIP price for this car; null = the default on the Pricing page. */
+    weddingPrice: money.nullable().default(null),
+    vipPrice: money.nullable().default(null),
     description: z.string().trim().max(1000).default(""),
     luggage: z.number().int().min(0).max(30).default(0),
     features: features.default([]),
@@ -85,6 +89,8 @@ export const vehicleUpdateSchema = z
     basePrice: money,
     pricePerKm: money,
     pricePerHour: money,
+    weddingPrice: money.nullable(),
+    vipPrice: money.nullable(),
     description: z.string().trim().max(1000),
     luggage: z.number().int().min(0).max(30),
     features,
@@ -191,7 +197,7 @@ export class FleetService {
     });
     const ids = vehicles.map((v) => v.id);
     const today = dateKey();
-    const [statuses, upcoming, nextMaint, { categoryRates }] = await Promise.all([
+    const [statuses, upcoming, nextMaint, { categoryRates, weddingDefaultPrice, vipDefaultPrice }] = await Promise.all([
       this.statuses(ids, today),
       prismaClient.bookings.groupBy({
         by: ["vehicleId"],
@@ -229,6 +235,11 @@ export class FleetService {
           basePrice: v.basePrice,
           effectiveBasePrice: v.basePrice > 0 ? v.basePrice : rate.basePrice,
           usesTypePrices: v.basePrice === 0 && v.pricePerKm === 0 && v.pricePerHour === 0,
+          // Service prices: the car's own, or the default from the Pricing page.
+          weddingPrice: v.weddingPrice,
+          vipPrice: v.vipPrice,
+          effectiveWeddingPrice: v.weddingPrice ?? weddingDefaultPrice,
+          effectiveVipPrice: v.vipPrice ?? vipDefaultPrice,
           coverImage: v.images[0]?.imageUrl ?? null,
           imagesCount: v.images.length,
           features: v.features,
@@ -268,7 +279,7 @@ export class FleetService {
     });
     if (!v) throw new NotFoundException("Car not found");
     const today = dateKey();
-    const [status, upcoming, stats, { categoryRates }] = await Promise.all([
+    const [status, upcoming, stats, { categoryRates, weddingDefaultPrice, vipDefaultPrice }] = await Promise.all([
       this.statuses([id], today),
       prismaClient.bookings.findMany({
         where: { vehicleId: id, bookingDate: { gte: today }, status: { in: UPCOMING } },
@@ -289,6 +300,8 @@ export class FleetService {
       name: `${v.make} ${v.model}`.trim(),
       status: status.get(id) ?? "AVAILABLE",
       typePrices: categoryRates[v.category],
+      /** Defaults used when the car has no wedding / VIP price of its own. */
+      defaultServicePrices: { wedding: weddingDefaultPrice, vip: vipDefaultPrice },
       drivers: vehicleDrivers.map((vd) => ({ id: vd.driver.id, name: vd.driver.fullName, status: vd.driver.status, rating: vd.driver.rating, isPrimary: vd.isPrimary })),
       maintenance: maintenance.map((m) => ({
         id: m.id,
@@ -327,12 +340,16 @@ export class FleetService {
   }
 
   /** Upcoming (today onwards), non-cancelled bookings of a car. */
-  private static async upcomingBookings(vehicleId: string, from = dateKey(), to?: string) {
-    const rows = await prismaClient.bookings.findMany({
-      where: { vehicleId, status: { in: UPCOMING }, bookingDate: to ? { gte: from, lte: to } : { gte: from } },
-      orderBy: [{ bookingDate: "asc" }, { startTime: "asc" }],
-      select: { id: true, bookingDate: true, startTime: true, endTime: true, customer: { select: { name: true } } },
-    });
+  private static async upcomingBookings(vehicleId: string, from = dateKey(), to?: string, driverIds?: string[]) {
+    // The day before is read too: a trip that runs past midnight reaches `from`.
+    const before = addDays(from, -1);
+    const rows = (
+      await prismaClient.bookings.findMany({
+        where: { vehicleId, status: { in: UPCOMING }, bookingDate: to ? { gte: before, lte: to } : { gte: before }, ...(driverIds && { driverId: { in: driverIds } }) },
+        orderBy: [{ bookingDate: "asc" }, { startTime: "asc" }],
+        select: { id: true, bookingDate: true, startTime: true, endTime: true, customer: { select: { name: true } } },
+      })
+    ).filter((b) => b.bookingDate >= from || isOvernight(b.startTime, b.endTime));
     return rows.map((b) => ({ id: b.id, ref: bookingRef(b.id), date: b.bookingDate, startTime: b.startTime, endTime: b.endTime, customer: b.customer?.name ?? "" }));
   }
 
@@ -364,6 +381,14 @@ export class FleetService {
     if (driverIds.length && !driverIds.includes(primary)) throw new BadRequestException("The main driver must be one of the car's drivers");
 
     const before = await prismaClient.vehicleDrivers.findMany({ where: { vehicleId: id }, include: { driver: { select: { fullName: true } } } });
+    // A driver taken off the car can't keep its upcoming trips: move them first.
+    const removed = before.map((b) => b.driverId).filter((d) => !driverIds.includes(d));
+    if (removed.length) {
+      const stranded = await this.upcomingBookings(id, dateKey(), undefined, removed);
+      if (stranded.length) {
+        throw new ConflictException("These upcoming trips are with a driver you're removing. Move them to another driver first", undefined, { bookings: stranded });
+      }
+    }
     await prismaClient.$transaction([
       prismaClient.vehicleDrivers.deleteMany({ where: { vehicleId: id } }),
       ...driverIds.map((driverId) => prismaClient.vehicleDrivers.create({ data: { vehicleId: id, driverId, isPrimary: driverId === primary } })),
@@ -511,29 +536,32 @@ export class FleetService {
    */
   public static async pickDriver(
     tx: Prisma.TransactionClient,
-    params: { vehicleId: string; driverId?: string; bookingDate: string; startTime: string; endTime: string; overlaps: (s: string, e: string) => boolean }
+    params: { vehicleId: string; driverId?: string; bookingDate: string; startTime: string; endTime: string; overlaps: (t: { bookingDate: string; startTime: string; endTime: string }) => boolean }
   ) {
     const assigned = await tx.vehicleDrivers.findMany({
       where: { vehicleId: params.vehicleId },
       orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
-      include: { driver: { select: { id: true, status: true } } },
+      include: { driver: { select: { id: true, status: true, licenseExpiry: true } } },
     });
     if (!assigned.length) throw new BadRequestException("This car has no driver assigned yet");
     const unavailable = (s: DriverStatus) => s === DriverStatus.OFF || s === DriverStatus.ONLEAVE;
+    // A licence that has expired by the trip's day rules the driver out.
+    const expired = (d: { licenseExpiry: Date | null }) => !!d.licenseExpiry && dateKey(d.licenseExpiry) < params.bookingDate;
 
     if (params.driverId) {
       const a = assigned.find((x) => x.driver.id === params.driverId);
       if (!a) throw new BadRequestException("This driver isn't assigned to this car");
       if (unavailable(a.driver.status)) throw new BadRequestException("Assigned driver is currently OFF or ON LEAVE");
+      if (expired(a.driver)) throw new BadRequestException("This driver's licence has expired");
       return a.driver.id;
     }
     for (const a of assigned) {
-      if (unavailable(a.driver.status)) continue;
+      if (unavailable(a.driver.status) || expired(a.driver)) continue;
       const busy = await tx.bookings.findMany({
-        where: { driverId: a.driver.id, bookingDate: params.bookingDate, status: { not: BookingStatus.CANCELLED } },
-        select: { startTime: true, endTime: true },
+        where: { driverId: a.driver.id, bookingDate: { in: nearbyDays(params.bookingDate) }, status: { not: BookingStatus.CANCELLED } },
+        select: { bookingDate: true, startTime: true, endTime: true },
       });
-      if (!busy.some((b) => params.overlaps(b.startTime, b.endTime))) return a.driver.id;
+      if (!busy.some(params.overlaps)) return a.driver.id;
     }
     throw new ConflictException("No driver of this car is free at this time");
   }

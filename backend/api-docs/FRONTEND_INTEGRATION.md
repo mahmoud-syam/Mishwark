@@ -91,10 +91,25 @@ they set a cookie. Plan your auth state machine around this.
 
 ### 1. OTP (simplest, recommended for mobile)
 
+**Recommended customer flow (easy sign-up):** let people browse with no
+account (`GET /vehicles`, `GET /vehicles/:id`, `POST /bookings/estimate-price`
+are public). Ask for the phone number only when they tap "book", keep their
+choices (car, date, times, places) in the app while they enter the code, then
+go straight back to the booking confirmation. If `profileComplete` is false,
+ask for the name on that confirmation screen and save it with `PATCH /auth/me`
+before `POST /bookings`. No email or password for customers.
+
 ```http
 POST /auth/otp/request
+{ "phoneNumber": "+201001234567" }              // name and role are optional
 { "phoneNumber": "+201001234567", "role": "customer", "name": "Ahmed" }
 ```
+
+Dashboard accounts (Admin, Super Admin) can't use OTP: **403** "Dashboard
+accounts sign in with email, password and 2FA", on request and on verify.
+
+Phone numbers are stored as `+20…`. `01001234567`, `+20 100 123 4567` and
+`00201001234567` all reach the same account, on request and verify alike.
 
 `role` is `customer` (default) or `driver`. Only used when the phone number is
 new; for an existing phone the account's role is untouched. Drivers must send
@@ -116,9 +131,30 @@ POST /auth/otp/verify
   "message": "OTP verified successfully",
   "token": "<JWT>",
   "role": "CUSTOMER",
-  "user": { "id": "...", "name": "...", "email": null, "tokenVersion": 0, "role": { "id": "...", "name": "CUSTOMER", "permissions": [] } }
+  "user": { "id": "...", "name": "...", "email": null, "tokenVersion": 0, "role": { "id": "...", "name": "CUSTOMER", "permissions": [] } },
+  "profileComplete": false
 }
 ```
+
+The token lasts **30 days** (server setting `APP_SESSION_DAYS`), so customers
+and drivers don't need a new code every day. Logout, signing in on another
+device, or a disabled account still end it at once (401: sign in again).
+`profileComplete` is false while the account has no name yet (signed up with
+the phone number only).
+
+**Profile.** `GET /auth/me` returns `{ id, name, email, phoneNumber,
+preferredLanguage, role, profileComplete }`. The signed-in user updates their
+own details with:
+
+```http
+PATCH /auth/me
+{ "name": "Mona Adel", "email": "mona@example.com", "preferredLanguage": "ar" }
+```
+
+All fields optional; `email: null` clears it. Name 2 to 80 characters (422),
+an email already used by another account is **409**, unknown fields (like
+`phoneNumber`, which is the sign-in and can't change here) are **422**.
+Returns the same shape as `GET /auth/me`.
 
 This is the **only** flow that returns the JWT in the body. The code `0000` is
 accepted as a testing bypass outside production only (or when the server sets
@@ -194,6 +230,9 @@ array in a text part, e.g. `[{"number":"+201001234567"}]`), `pic` (file part),
 `licenseNumber` + `licenseExpiry` (required when `role=driver`), optional
 `referralCode`.
 
+Only `pic` is kept, and it must be a real JPG, PNG or WEBP (400 otherwise);
+any other uploaded file is discarded. Driver documents are not public.
+
 Password min 8 characters. Admin roles cannot be self-assigned — that requires
 `PATCH /admin/users/role`. Signup does not return a token.
 
@@ -213,18 +252,23 @@ list.
 The role is re-read from the database on every authenticated request, so a role
 change takes effect immediately. A `tokenVersion` bump invalidates every
 existing session. That happens on OTP verification, 2FA login, admin password
-change, and 2FA reset — so all of these sign the target user out everywhere.
+change, 2FA reset and logout — so all of these sign the target user out
+everywhere. After `POST /auth/logout` the same token gets 401; drop it locally.
 
 ### 2FA management (authenticated)
 
 ```http
 GET  /auth/2fa/setup    → { "secret": "BASE32", "qrCodeDataURL": "data:image/png;base64,..." }
 POST /auth/2fa/verify   → { "token": "123456", "secret": "BASE32" }  // both required
-POST /auth/2fa/disable  → no body
+POST /auth/2fa/disable  → { "token": "123456" }  // current code, required while 2FA is on
 ```
 
 `/auth/2fa/verify` stores the secret and flips `twoFactorEnabled`. Missing
-`token` or `secret` is a 400, not a 500.
+`token` or `secret`, or a malformed secret, is a 400, not a 500.
+
+Temporary passwords for dashboard accounts (Team page) expire after
+`tempPasswordDays` (7 by default): signing in with one after that is **403**
+"This temporary password has expired"; a Super Admin issues a new one.
 
 ### Admin credential management
 
@@ -240,6 +284,34 @@ Dashboard accounts (Admin, Super Admin) can only be reset by a Super Admin
 characters (422 otherwise).
 
 ---
+
+### Driver documents (ID, licence, criminal record)
+
+A driver uploads five papers: `NATIONAL_ID_FRONT`, `NATIONAL_ID_BACK`,
+`LICENSE_FRONT`, `LICENSE_BACK`, `CRIMINAL_RECORD`. JPG, PNG, WEBP or PDF, up to
+10 MB, checked by the file's content (a renamed file is a 400). They are stored
+privately: no public URL, only the driver and the dashboard team can open them.
+
+Two ways, use either:
+
+1. **With signup** (`POST /auth/signup`, role `driver`): file fields
+   `nationalIdFront`, `nationalIdBack`, `licenseFront`, `licenseBack`,
+   `criminalRecord`. The response lists them in `documents`
+   (`[{ field, status: "PENDING" }]`, or `"FAILED"` with `error`); a bad file
+   doesn't undo the signup, upload it again with option 2.
+2. **After signing in** (the OTP flow): one paper per request.
+
+```http
+POST /driver/documents          multipart/form-data: type=LICENSE_FRONT, file=<photo>
+GET  /driver/documents          → { documents: [{ type, status, reviewNote, uploadedAt, id }], summary: { state } }
+GET  /driver/documents/:id/file → the paper itself (driver's own only)
+```
+
+`status` per paper: `MISSING`, `PENDING` (waiting for the office), `APPROVED`,
+`REJECTED` with `reviewNote` (show it: "الصورة مش واضحة"). Uploading the same
+type again replaces it and sends it back to review. `summary.state` is the
+overall picture for a "your papers" screen: `MISSING` → `PENDING` → `APPROVED`,
+or `REJECTED` when one needs re-uploading.
 
 ## Roles and permissions
 
@@ -353,6 +425,67 @@ if sent — pricing is server-authoritative. Distance and duration are always
 recomputed server-side. Any `distanceKm` you send is only echoed back under
 `comparison` and never priced, so don't bother computing it client-side.
 
+### Prices: wedding, private trip, VIP
+
+Every booking has a **service type**, and each type has its own pricing (all
+of it is edited by the owner on the dashboard's Pricing page):
+
+| `serviceType` | Price | Extras |
+|---|---|---|
+| `WEDDING` | The car's own fixed price (`weddingPrice` on the vehicle), or the default | Covers N hours and N km; each started extra hour and each extra km is charged |
+| `TRIP` | From the company (Sharqia) to a listed destination: fixed price per car category. Any other place: the category's "another place" price | Covers N km (150 by default); each extra km is charged |
+| `VIP` | The car's own VIP price, or the VIP default | Like a wedding, with its own prices |
+
+`GET /pricing` (public) returns the rules, the start point and the destinations
+with their prices per category, so the app can show "from …" prices. The exact
+price always comes from the API:
+
+```http
+POST /bookings/estimate-price
+{ "serviceType": "WEDDING", "vehicleId": "…", "startPoint": {…}, "endPoint": {…},
+  "startTime": "19:00", "endTime": "01:00" }
+
+{ "serviceType": "TRIP", "vehicleId": "…", "destinationId": "…" }   // no points needed
+
+→ { "data": { "totalPrice": 2200, "depositRequired": 440, … },
+    "lines": [
+      { "code": "wedding", "amount": 1600, "includedHours": 4, "includedKm": 50 },
+      { "code": "extra_hours", "quantity": 2, "unitPrice": 300, "included": 4, "amount": 600 }
+    ],
+    "bookedMinutes": 360, "depositRate": 20, "route": { "distanceKm": 4.1, "source": "haversine" } }
+```
+
+Show `lines` as the price breakdown (codes: `wedding`, `vip`, `trip` (with
+`name`), `trip_other`, `extra_hours`, `extra_km`, `package_discount`,
+`referral_discount`; negative amounts are discounts), then the total and the
+deposit. `route.source: "haversine"` means the distance is an estimate. Send the
+same `serviceType` / `destinationId` to `POST /bookings`; the booking keeps them
+with `priceLines`. Without `serviceType` the older per-km price still applies
+(for app versions that aren't updated yet).
+
+### Choosing places on a map
+
+`startPoint` / `endPoint` should be exact coordinates with a name:
+`{ "latitude": 30.0749, "longitude": 31.3462, "label": "قاعة الماسة، مدينة نصر" }`.
+The API offers place search and pin-to-address on OpenStreetMap data, no key
+needed on your side (no account required either):
+
+```http
+GET /places/search?q=قاعة الماسة&lat=30.04&lng=31.23   // lat/lng = map centre, optional
+→ [{ "name": "قاعة الماسة", "detail": "مدينة نصر، القاهرة", "label": "قاعة الماسة، مدينة نصر، القاهرة",
+     "latitude": 30.0749, "longitude": 31.3462, "kind": "amenity:events_venue" }]
+
+GET /places/reverse?lat=30.07212&lng=31.33181      // after the user drops or drags a pin
+→ { "name": "...", "detail": "...", "label": "...", "latitude": 30.07212, "longitude": 31.33181 }
+```
+
+Search as the user types (debounce ~350 ms, at least 2 characters). Egypt
+only. Search returns **502** when the provider is down: let the user drop a pin
+instead. Reverse never fails for a point in Egypt (worst case the label is the
+coordinates); let the user edit the label ("البوابة 2"). For the map itself use
+OpenStreetMap tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png` with the
+"© OpenStreetMap" credit) or any map SDK; only the coordinates matter to the API.
+
 ### Creating a booking
 
 ```http
@@ -369,8 +502,16 @@ POST /bookings
 Returns 201 with `{ success: true, data: Booking }`, status `PENDING`.
 
 Rules:
-- `startTime` must be earlier than `endTime`, both `HH:mm`.
-- `bookingDate` is `YYYY-MM-DD` and cannot be in the past.
+- Both times are `HH:mm` (00:00 to 23:59) and can't be equal. An `endTime`
+  **earlier** than `startTime` means the trip ends the next morning (a wedding
+  from `22:00` to `01:00`). It must end by the hour set in the dashboard
+  Settings (06:00 by default): otherwise **400** "A trip can run past midnight
+  but must end by 06:00". Show "ends the next day" in your UI when end < start.
+- `bookingDate` is `YYYY-MM-DD`, can't be in the past, and at most
+  `maxAdvanceBookingDays` ahead (365 by default): **400** "Trips can be booked
+  up to 365 days ahead".
+- A trip shorter than the minimum in Settings (30 minutes by default):
+  **400** "A trip must be at least 30 minutes long".
 - **Both** `startPoint` and `endPoint` are required. A distance-less booking
   prices at base only, which would otherwise allow free rides.
 - Only the car's own drivers can drive it (the admin assigns them on the fleet
@@ -389,9 +530,12 @@ Rules:
 - A new booking is `PENDING` with `depositRequired` (20% of the price) and
   `depositPaid: 0`. It becomes `CONFIRMED` automatically once confirmed payments
   cover the deposit, or when the driver/admin confirms it.
-- A unique DB constraint on `[vehicleId, bookingDate, startTime]` returns
-  **409** on a double-book. Surface it as "that slot was just taken", not a
-  generic error.
+- A unique DB constraint on `[vehicleId, bookingDate, startTime]` (active
+  bookings only, so a cancelled booking frees its slot) returns **409** on a
+  double-book. Surface it as "that slot was just taken", not a generic error.
+- Gaps and clashes are checked across midnight: a 22:00 to 01:00 trip blocks
+  the same car and driver until 02:00 the next day (with the default 60-minute
+  gap), and maintenance on the next day blocks it.
 
 ### Status transitions
 
@@ -414,6 +558,24 @@ auto-completes the booking and releases the driver.
 `DELETE /bookings/:id` cancels: it releases vehicle availability and the
 driver, and promotes waitlist position #1. Only `PENDING` and `CONFIRMED`
 bookings can be cancelled.
+
+**Cancellation and the deposit.** Before the customer confirms, show what
+happens to their money:
+
+```http
+GET /bookings/:id/cancellation
+→ { "paid": 1390, "refund": 0, "kept": 1390, "outcome": "KEPT",
+    "freeUntil": "2026-11-16T19:00:00.000Z", "freeCancellationHours": 48 }
+```
+
+Cancelled at least `freeCancellationHours` (48 by default) before the start:
+everything paid goes back to the customer's **wallet**. Later: the deposit is
+kept and anything paid above it goes back. Nothing paid: nothing to settle
+(`outcome: null`). The cancelled booking carries `cancelledAt`,
+`depositOutcome` (`REFUNDED` | `KEPT` | null) and `depositRefunded`; the
+DELETE response also has `cancellation` with the same numbers. An admin can
+send `{ "refundDeposit": true }` (or `false`) to decide either way; a customer
+sending it is ignored.
 
 ### Who can act on a booking
 
@@ -658,6 +820,10 @@ The web dashboard's fleet page uses `GET/POST /admin/vehicles`,
 `GET/PATCH /admin/vehicles/:id`, `.../retire`, `.../reactivate`,
 `PUT .../drivers`, photo upload/cover/delete and maintenance endpoints (all
 changes need `vehicle:manage`). The apps don't call these; see the API docs.
+`PUT .../drivers` returns 409 with `errors.bookings` when a driver being
+removed still has upcoming trips on that car. `GET /admin/overview` alerts
+include `driver_unavailable` (a driver who is off or on leave but still holds
+upcoming trips).
 
 ---
 
@@ -670,6 +836,14 @@ for the distance display → `POST /bookings/estimate-price` for the quote →
 **Optimistic UI**: safe for booking **status** transitions (you know the target
 state) but not for `POST /bookings` — the 409 double-book conflict is real and
 must be surfaced, not retried.
+
+**Booking rules worth surfacing**: a start time more than 15 minutes in the
+past today is a 400 ("This start time has already passed"). A retired car gets
+400 from `POST /bookings/estimate-price` ("This car is no longer available").
+Drivers whose licence has expired are never auto-assigned; choosing one by hand
+is a 400.
+
+**Page size**: every `?limit=` is capped at 100; read `pagination.limit` back.
 
 **Caching**: no `Cache-Control` headers are set. `GET /vehicles` is safe to
 cache client-side for a session. Availability and booking lists are not —

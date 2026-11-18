@@ -124,6 +124,31 @@
                   "type": "text"
                 },
                 {
+                  "key": "nationalIdFront",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "nationalIdBack",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "licenseFront",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "licenseBack",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "criminalRecord",
+                  "type": "file",
+                  "src": []
+                },
+                {
                   "key": "referralCode",
                   "value": "",
                   "type": "text"
@@ -155,7 +180,7 @@
                 }
               ]
             },
-            "description": "Create a customer or driver account. Multipart/form-data — fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned."
+            "description": "A driver can attach the papers here as file fields nationalIdFront, nationalIdBack, licenseFront, licenseBack, criminalRecord: they are stored privately and the response lists them in `documents` (PENDING, or FAILED with the reason; a bad file never undoes the signup). Other file fields are dropped. Create a customer or driver account. Multipart/form-data — fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned."
           },
           "response": []
         },
@@ -266,7 +291,7 @@
                 }
               }
             },
-            "description": "Public. Sends a 4-digit OTP to the phone. In dev the code is returned as dev_otp."
+            "description": "Public. Sends a 4-digit OTP to the phone; only phoneNumber is required (a new customer can give the name later with PATCH /auth/me). 403 for dashboard accounts. 01…, +20… and 0020… are the same number (stored as +20…). In dev the code is returned as dev_otp."
           },
           "response": [
             {
@@ -327,7 +352,7 @@
                 }
               }
             },
-            "description": "Public. Verifies OTP and returns a JWT. Dev bypass code: 0000. Response drives role-based home screen."
+            "description": "Public. Verifies the OTP and returns a JWT valid for APP_SESSION_DAYS (default 30) plus `profileComplete`. Dashboard accounts get 403 (they sign in with email, password and 2FA). Dev bypass code: 0000. Response drives role-based home screen."
           },
           "response": [
             {
@@ -595,7 +620,7 @@
                 "logout"
               ]
             },
-            "description": "Clears the auth cookie / current session."
+            "description": "Signs out: clears the auth cookie and revokes the token sent with the request (it gets 401 afterwards). Always 200."
           },
           "response": []
         },
@@ -622,7 +647,47 @@
                 "me"
               ]
             },
-            "description": "The signed-in user and role (role re-read from the database)."
+            "description": "The signed-in user: id, name, email, phoneNumber, preferredLanguage, role (re-read from the database) and `profileComplete` (false while a customer who signed up with the phone number only has no name yet)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /auth/me",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "The signed-in user completes or edits their own details: `name` (2-80), `email` (or null to clear; 409 if taken), `preferredLanguage` (ar|en). The phone number can't change here (422 for unknown fields). Dashboard accounts can't change their email here (403). Returns the GET /auth/me shape."
           },
           "response": [],
           "event": [
@@ -885,7 +950,16 @@
                 "disable"
               ]
             },
-            "description": "Disables 2FA for the authenticated user."
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Disables 2FA for the authenticated user. Needs the current 6-digit code in `token` (400 without it)."
           },
           "response": [],
           "event": [
@@ -1039,7 +1113,7 @@
                 }
               }
             },
-            "description": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount."
+            "description": "PUBLIC. Server-side price. Send `serviceType` (WEDDING, TRIP, VIP) with `vehicleId`: WEDDING/VIP = the car's own fixed price (or the default) covering included hours and km, plus every started extra hour (send `startTime`/`endTime`) and every extra km; TRIP = from the company (Settings origin, unless startPoint is sent) to a listed `destinationId` (fixed price per car category) or to `endPoint` (the category's \"another place\" price), plus extra km beyond the included ones. The response adds `lines` (itemised: wedding|vip|trip|trip_other, extra_hours, extra_km, package_discount, referral_discount with quantity, unitPrice, included), `bookedMinutes`, `depositRate`, `destination`, the points used and `route` (source haversine = straight-line estimate). Without serviceType the older per-km price applies. 400 for a retired car or an inactive destination."
           },
           "response": [
             {
@@ -1162,7 +1236,7 @@
                 }
               }
             },
-            "description": "Creates a booking (PENDING). Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free."
+            "description": "Creates a booking (PENDING). Send `serviceType` (WEDDING, TRIP, VIP) and, for a trip, `destinationId` (then startPoint/endPoint are optional: the trip starts at the company and ends at the destination). Priced exactly like POST /bookings/estimate-price; the booking keeps `serviceType`, `destinationId` and `priceLines`. An endTime earlier than startTime means the trip ends the next morning (e.g. 22:00 to 01:00); it must end by Settings `overnightLatestEndHour` (default 06:00; 400 otherwise, and 0 turns trips past midnight off). Also 400 for a trip shorter than `minTripMinutes` (default 30), more than `maxAdvanceBookingDays` ahead (default 365), or a start more than 15 minutes in the past today. Clashes with the car, the driver or maintenance are checked across midnight. Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free."
           },
           "response": [
             {
@@ -1309,7 +1383,7 @@
                 ":id"
               ]
             },
-            "description": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1."
+            "description": "Cancels a booking (DELETE). Settles the money paid by the cancellation policy (Settings `freeCancellationHours`, default 48): cancelled that long before the start, everything paid goes back to the customer's wallet; later, the deposit is kept and anything above it goes back. An admin may send `refundDeposit: true|false` to decide either way (ignored from a customer). The booking gets `cancelledAt`, `depositOutcome` (REFUNDED, KEPT or null when nothing was paid) and `depositRefunded`; the response also has `cancellation` (paid, refund, kept). Releases availability & driver and promotes waitlist position #1. Cancelling twice changes nothing."
           },
           "response": [],
           "event": [
@@ -1427,6 +1501,47 @@
           ]
         },
         {
+          "name": "GET /bookings/:id/cancellation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings/:id/cancellation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                ":id",
+                "cancellation"
+              ]
+            },
+            "description": "What cancelling now would do to the money paid: `paid`, `refund` (to the wallet), `kept`, `outcome`, `freeUntil` (last moment for a full refund) and `freeCancellationHours`. Show it before the customer confirms. The booking's customer or an admin (404 otherwise)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "DELETE /bookings/:id",
           "request": {
             "method": "DELETE",
@@ -1449,7 +1564,7 @@
                 ":id"
               ]
             },
-            "description": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1."
+            "description": "Cancels a booking (DELETE). Settles the money paid by the cancellation policy (Settings `freeCancellationHours`, default 48): cancelled that long before the start, everything paid goes back to the customer's wallet; later, the deposit is kept and anything above it goes back. An admin may send `refundDeposit: true|false` to decide either way (ignored from a customer). The booking gets `cancelledAt`, `depositOutcome` (REFUNDED, KEPT or null when nothing was paid) and `depositRefunded`; the response also has `cancellation` (paid, refund, kept). Releases availability & driver and promotes waitlist position #1. Cancelling twice changes nothing."
           },
           "response": [],
           "event": [
@@ -1788,6 +1903,143 @@
                 }
               ]
             }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /driver/documents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/driver/documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "driver",
+                "documents"
+              ]
+            },
+            "description": "The signed-in driver's papers: every required type (NATIONAL_ID_FRONT, NATIONAL_ID_BACK, LICENSE_FRONT, LICENSE_BACK, CRIMINAL_RECORD) with `status` MISSING, PENDING, APPROVED or REJECTED (+ `reviewNote`, the reason to show), and `summary.state` (MISSING, PENDING, REJECTED, APPROVED). 403 for non-drivers."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /driver/documents",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/driver/documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "driver",
+                "documents"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "type",
+                  "value": "NATIONAL_ID_FRONT",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Uploads one paper as multipart/form-data: `type` + `file` (JPG, PNG, WEBP or PDF, checked by content; 10 MB, 413 above). Replaces an earlier one of that type and puts it back to review (PENDING). Stored privately, never at a public URL. 201 with the document."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /driver/documents/:id/file",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/driver/documents/:id/file",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "driver",
+                "documents",
+                ":id",
+                "file"
+              ]
+            },
+            "description": "The driver's own paper (the dashboard team can open it too); 404 for anyone else. Sent inline with Cache-Control: private, no-store."
           },
           "response": [],
           "event": [
@@ -3941,6 +4193,79 @@
           ]
         },
         {
+          "name": "GET /admin/bookings/search",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/bookings/search",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "bookings",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "paymentStatus",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "scope",
+                  "value": "upcoming",
+                  "disabled": false
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "25",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Dashboard bookings page. `q` matches a reference (MW-1A2B3C), the customer's name or phone (01…, +20… or 0020…). Filters: `status`, `paymentStatus`, `scope` (upcoming = today onwards, soonest first [default]; past = latest first; all), `from`/`to` (YYYY-MM-DD), `page`, `limit` (max 100). Returns `data` (same shape as a day's bookings, plus cancellation fields), `counts` per status for the same search, and `pagination`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "GET /admin/vehicles/status",
           "request": {
             "method": "GET",
@@ -5265,7 +5590,7 @@
                 }
               }
             },
-            "description": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged."
+            "description": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged. 409 with errors.bookings when a driver being removed still has upcoming trips on this car."
           },
           "response": [],
           "event": [
@@ -5636,7 +5961,7 @@
                 }
               }
             },
-            "description": "Creates a dashboard account (Super Admin only). Returns `member` and a `temporaryPassword`, shown this once (only its hash is stored). At first sign-in the member picks their own password, then sets up 2FA. 409 if the email is taken. Audit-logged."
+            "description": "The temporary password works for Settings `tempPasswordDays` (default 7; `member.tempPasswordExpiresAt`); after that sign-in gets 403 \"This temporary password has expired\". Creates a dashboard account (Super Admin only). Returns `member` and a `temporaryPassword`, shown this once (only its hash is stored). At first sign-in the member picks their own password, then sets up 2FA. 409 if the email is taken. Audit-logged."
           },
           "response": [
             {
@@ -5755,7 +6080,7 @@
                 "reset-password"
               ]
             },
-            "description": "Forgotten password: returns a new `temporaryPassword` (shown once); the old password stops working and the member picks a new one at sign-in. Signs them out everywhere. Super Admin only. Audit-logged."
+            "description": "The temporary password works for Settings `tempPasswordDays` (default 7; `member.tempPasswordExpiresAt`); after that sign-in gets 403 \"This temporary password has expired\". Forgotten password: returns a new `temporaryPassword` (shown once); the old password stops working and the member picks a new one at sign-in. Signs them out everywhere. Super Admin only. Audit-logged."
           },
           "response": [],
           "event": [
@@ -5955,6 +6280,421 @@
               }
             }
           ]
+        },
+        {
+          "name": "GET /admin/drivers/:id/documents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/drivers/:id/documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "drivers",
+                ":id",
+                "documents"
+              ]
+            },
+            "description": "A driver's papers with their review state (same shape as GET /driver/documents)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/driver-documents/:id/file",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/driver-documents/:id/file",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "driver-documents",
+                ":id",
+                "file"
+              ]
+            },
+            "description": "Opens a driver's paper (dashboard only)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /admin/driver-documents/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/driver-documents/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "driver-documents",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"REJECTED\",\n  \"note\": \"الصورة مش واضحة\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Approves or rejects a paper: `{ status: APPROVED }` or `{ status: REJECTED, note }` (the reason is required and shown to the driver). Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/destinations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/destinations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "destinations"
+              ]
+            },
+            "description": "Pricing page: every private-trip destination (inactive too) with the prices entered (`prices`), the prices each car category actually gets (`effectivePrices`: a missing category uses Settings.tripOtherPrices), `effectiveIncludedKm` and how many bookings use it."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/destinations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/destinations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "destinations"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"مطار القاهرة الدولي\",\n  \"latitude\": 30.1219,\n  \"longitude\": 31.4056,\n  \"includedKm\": null,\n  \"prices\": {\n    \"LUXURY\": 2200,\n    \"VAN\": 1700\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Adds a private-trip destination (settings:manage). `prices` per car category; `includedKm` null = Settings.tripIncludedKm. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /admin/destinations/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/destinations/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "destinations",
+                ":id"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prices\": {\n    \"CLASSIC\": 2600\n  },\n  \"includedKm\": 200\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Edits a destination (settings:manage). `prices` is merged per category (send only the ones that change). `active: false` hides it from booking. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE /admin/destinations/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/destinations/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "destinations",
+                ":id"
+              ]
+            },
+            "description": "Deletes a destination nobody booked; one with bookings is switched off instead (`deactivated: true`) so history keeps it. settings:manage. Audit-logged."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Placess",
+      "item": [
+        {
+          "name": "GET /places/search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/places/search",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "places",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "قاعة الماسة",
+                  "disabled": false
+                },
+                {
+                  "key": "lat",
+                  "value": "30.0444",
+                  "disabled": false
+                },
+                {
+                  "key": "lng",
+                  "value": "31.2357",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "PUBLIC. Place search for the booking map, anywhere in Egypt (OpenStreetMap through Photon). `q` (2-120 characters); optional `lat`/`lng` rank nearby places first (send the map's centre). Returns up to 8 `{ name, detail, label, latitude, longitude, kind }`; send `{ latitude, longitude, label }` as startPoint/endPoint. 502 when the provider is down (let the user drop a pin instead). Cached for a day; limited per IP (PLACES_RATE_LIMIT, default 300 per 15 minutes)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /places/reverse",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/places/reverse",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "places",
+                "reverse"
+              ],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "30.0749",
+                  "disabled": false
+                },
+                {
+                  "key": "lng",
+                  "value": "31.3462",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "PUBLIC. The address at a pin (`lat`, `lng`, inside Egypt; 400 otherwise), from Nominatim with Photon as fallback, in Arabic. Same shape as a search result, with the pin's own coordinates. If both providers are down the label is the coordinates."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Pricings",
+      "item": [
+        {
+          "name": "GET /pricing",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pricing"
+              ]
+            },
+            "description": "PUBLIC. Every price and rule the apps need before booking: `origin` (where private trips start), `depositRate`, `wedding` and `vip` ({ defaultPrice, includedHours, includedKm, extraHourPrice, extraKmPrice }; a car's own price is `weddingPrice` / `vipPrice` on the vehicle), `trip` ({ includedKm, extraKmPrice, otherPrices per car category }) and the active `destinations` with their price per category. The final price always comes from POST /bookings/estimate-price."
+          },
+          "response": []
         }
       ]
     }

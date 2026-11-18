@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CalendarCheck, Coins, Crown, UserRound, Wallet } from "lucide-react";
 import { Link, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
@@ -70,9 +71,9 @@ export default function CustomerAnalytics() {
         actions={
           d && (
             <>
-              {d.customer.isVip && <Badge tone="mint" className="px-3 py-1.5 text-[11px]">⭐ عميل VIP</Badge>}
+              {d.customer.isVip && <Badge tone="mint" className="px-3 py-1.5 text-[13px]"><Crown className="size-3.5" /> عميل VIP</Badge>}
               {d.customer.phoneNumber && (
-                <a href={telHref(d.customer.phoneNumber)} className="ltr rounded-full border border-line bg-raised px-3 py-1.5 text-[11px] text-muted hover:text-cream">
+                <a href={telHref(d.customer.phoneNumber)} className="ltr rounded-full border border-line bg-raised px-3 py-1.5 text-[13px] text-muted hover:text-cream">
                   {maskPhone(d.customer.phoneNumber)}
                 </a>
               )}
@@ -87,10 +88,10 @@ export default function CustomerAnalytics() {
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
 
       <StatGrid>
-        <StatCard loading={q.isPending} label={`حجوزات ${word}`} value={d ? num(d.periodStats.bookings) : ""} />
-        <StatCard loading={q.isPending} label={`إنفاقه ${word}`} tone="cream" value={d ? num(d.periodStats.spend) : ""} delta="ج.م" />
-        <StatCard loading={q.isPending} label="إجمالي إنفاقه (كل الوقت)" tone="rose" value={d ? compact(d.lifetime.spend) : ""} delta="ج.م" />
-        <StatCard loading={q.isPending} label="عضو منذ" value={d ? monthYear(dateKeyOf(new Date(d.customer.memberSince))) : ""} />
+        <StatCard icon={<CalendarCheck />} loading={q.isPending} label={`حجوزات ${word}`} value={d ? num(d.periodStats.bookings) : ""} />
+        <StatCard icon={<Wallet />} loading={q.isPending} label={`إنفاقه ${word}`} tone="cream" value={d ? num(d.periodStats.spend) : ""} delta="ج.م" />
+        <StatCard icon={<Coins />} loading={q.isPending} label="إجمالي إنفاقه (كل الوقت)" tone="rose" value={d ? compact(d.lifetime.spend) : ""} delta="ج.م" />
+        <StatCard icon={<UserRound />} loading={q.isPending} label="عضو منذ" value={d ? monthYear(dateKeyOf(new Date(d.customer.memberSince))) : ""} />
       </StatGrid>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">

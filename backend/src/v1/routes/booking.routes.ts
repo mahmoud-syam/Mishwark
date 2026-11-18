@@ -9,6 +9,7 @@ import {
   updateBookingStatus,
   updateTripStatus,
   cancelBooking,
+  getCancellationTerms,
 } from "../controllers/booking.controller";
 import { authMiddleware, optionalAuthMiddleware } from "../middlewares/auth.middleware";
 
@@ -24,6 +25,7 @@ bookingRouter.get("/", authMiddleware, errorHandler(getBookings));
 bookingRouter.get("/:id", authMiddleware, errorHandler(getBookingById));
 bookingRouter.patch("/:id/status", authMiddleware, errorHandler(updateBookingStatus));
 bookingRouter.patch("/:id/trip-status", authMiddleware, errorHandler(updateTripStatus));
+bookingRouter.get("/:id/cancellation", authMiddleware, errorHandler(getCancellationTerms));
 bookingRouter.delete("/:id", authMiddleware, errorHandler(cancelBooking));
 
 export default bookingRouter;

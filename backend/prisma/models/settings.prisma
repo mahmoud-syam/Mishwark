@@ -11,6 +11,39 @@ model SystemSettings {
   bookingBufferMinutes      Int      @default(60)
   /// How early a driver may start a trip before its scheduled time.
   tripEarlyStartMinutes     Int      @default(120)
+  /// How many days ahead a trip may be booked.
+  maxAdvanceBookingDays     Int      @default(365)
+  /// Shortest trip that can be booked, in minutes.
+  minTripMinutes            Int      @default(30)
+  /// Latest hour (next morning) a trip may end when it runs past midnight. 0 = no trips past midnight.
+  overnightLatestEndHour    Int      @default(6)
+  /// A customer who cancels at least this many hours before the trip gets the deposit back (to the wallet); later, it is kept.
+  freeCancellationHours     Int      @default(48)
+  /// Days a temporary password given to a team member stays valid.
+  tempPasswordDays          Int      @default(7)
+
+  // Service prices (Pricing page)
+  /// Wedding: price of a car without its own wedding price, what it covers, and the extras.
+  weddingDefaultPrice       Float    @default(1500)
+  weddingIncludedHours      Int      @default(4)
+  weddingIncludedKm         Int      @default(50)
+  weddingExtraHourPrice     Float    @default(300)
+  weddingExtraKmPrice       Float    @default(50)
+  /// VIP occasion: same structure, its own prices.
+  vipDefaultPrice           Float    @default(3000)
+  vipIncludedHours          Int      @default(4)
+  vipIncludedKm             Int      @default(50)
+  vipExtraHourPrice         Float    @default(500)
+  vipExtraKmPrice           Float    @default(75)
+  /// Private trips: km included in a destination's price and the price per km after that.
+  tripIncludedKm            Int      @default(150)
+  tripExtraKmPrice          Float    @default(50)
+  /// Trip to a place not on the destinations list, per car category: { "LUXURY": 2500, ... }.
+  tripOtherPrices           Json?
+  /// Where private trips start (the company, in Sharqia).
+  originLabel               String   @default("الزقازيق، الشرقية")
+  originLat                 Float    @default(30.5877)
+  originLng                 Float    @default(31.502)
 
   // Money
   /// Commission (percent) given to newly created drivers.

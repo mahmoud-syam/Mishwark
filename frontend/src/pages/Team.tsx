@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Ban, KeyRound, ShieldOff } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -29,13 +30,13 @@ function TempPassword({ who, password, onDone }: { who: string; password: string
   };
   return (
     <div className="fade-in rounded-2xl border border-gold/50 bg-gold/10 p-4" role="status">
-      <div className="text-[13px] font-bold text-cream">الباسورد المؤقت لـ {who}</div>
+      <div className="text-[15px] font-bold text-cream">الباسورد المؤقت لـ {who}</div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <code className="ltr select-all rounded-lg bg-ink px-3 py-2 text-[18px] tracking-[2px] text-gold">{password}</code>
+        <code className="ltr select-all rounded-lg bg-ink px-3 py-2 text-[20px] tracking-[2px] text-gold">{password}</code>
         <Button size="sm" onClick={copy}>{copied ? "اتنسخ ✓" : "نسخ"}</Button>
       </div>
-      <p className="mt-3 text-[11px] leading-relaxed text-muted">
-        ابعته له بنفسك. مش هيظهر تاني بعد ما تقفل الرسالة دي. أول ما يدخل بيه هيختار باسورد خاص بيه، وبعدين يفعّل التحقق بخطوتين.
+      <p className="mt-3 text-[13px] leading-relaxed text-muted">
+        ابعته له بنفسك. مش هيظهر تاني بعد ما تقفل الرسالة دي. أول ما يدخل بيه هيختار باسورد خاص بيه، وبعدين يفعّل التحقق بخطوتين. الباسورد ده بينتهي بعد مدة (من الإعدادات)، وبعدها تعمل له واحد جديد.
       </p>
       <Button size="sm" variant="ghost" className="mt-2" onClick={onDone}>
         تمام، بعتّه
@@ -86,7 +87,7 @@ function AddMember({ onCreated }: { onCreated: (name: string, password: string) 
 }
 
 /** Needs a second click to run, so a reset is never a misclick. */
-function ConfirmButton({ label, confirm, onConfirm, busy }: { label: string; confirm: string; onConfirm: () => void; busy: boolean }) {
+function ConfirmButton({ label, icon, confirm, onConfirm, busy }: { label: string; icon?: React.ReactNode; confirm: string; onConfirm: () => void; busy: boolean }) {
   const [armed, setArmed] = useState(false);
   return armed ? (
     <span className="flex items-center gap-1">
@@ -97,6 +98,7 @@ function ConfirmButton({ label, confirm, onConfirm, busy }: { label: string; con
     </span>
   ) : (
     <Button size="sm" onClick={() => setArmed(true)} disabled={busy}>
+      {icon}
       {label}
     </Button>
   );
@@ -129,18 +131,23 @@ function MemberRow({ m, self, onPassword }: { m: TeamMember; self: boolean; onPa
         <div className="flex min-w-0 items-center gap-3">
           <Avatar text={initials(m.name)} tone={m.role === "SUPER_ADMIN" ? "gold" : "wine"} />
           <div className="flex min-w-0 flex-col">
-            <span className="truncate text-[13px] font-bold text-cream">
-              {m.name} {self && <span className="text-[11px] font-normal text-muted">(إنت)</span>}
+            <span className="truncate text-[15px] font-bold text-cream">
+              {m.name} {self && <span className="text-[13px] font-normal text-muted">(إنت)</span>}
             </span>
-            <span className="ltr truncate text-right text-[11px] text-muted">{m.email}</span>
+            <span className="ltr truncate text-right text-[13px] text-muted">{m.email}</span>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+        <div className="flex flex-wrap items-center gap-2 text-[13px]">
           <Badge tone={m.role === "SUPER_ADMIN" ? "gold" : "muted"}>{ROLE[m.role]}</Badge>
           {off ? (
             <Badge tone="rose">موقوف من {relativeStamp(m.disabledAt!)}</Badge>
+          ) : m.mustChangePassword && m.tempPasswordExpiresAt && new Date(m.tempPasswordExpiresAt).getTime() < Date.now() ? (
+            <Badge tone="rose">الباسورد المؤقت انتهى، اعمل له واحد جديد</Badge>
           ) : m.mustChangePassword ? (
-            <Badge tone="gold">لسه ما دخلش بالباسورد المؤقت</Badge>
+            <Badge tone="gold">
+              لسه ما دخلش بالباسورد المؤقت
+              {m.tempPasswordExpiresAt && ` · بينتهي ${new Date(m.tempPasswordExpiresAt).toLocaleDateString("ar-EG", { day: "numeric", month: "long" })}`}
+            </Badge>
           ) : m.twoFactorEnabled ? (
             <Badge tone="mint">التحقق بخطوتين مفعّل</Badge>
           ) : (
@@ -151,7 +158,7 @@ function MemberRow({ m, self, onPassword }: { m: TeamMember; self: boolean; onPa
       </div>
       {!self && off && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] text-muted">ما يقدرش يدخل. سجله وتعديلاته محفوظين.</span>
+          <span className="text-[13px] text-muted">ما يقدرش يدخل. سجله وتعديلاته محفوظين.</span>
           <Button size="sm" variant="primary" disabled={busy} onClick={() => enable.mutate()}>
             إعادة تفعيل الحساب
           </Button>
@@ -159,10 +166,10 @@ function MemberRow({ m, self, onPassword }: { m: TeamMember; self: boolean; onPa
       )}
       {!self && !off && (
         <div className="flex flex-wrap items-center gap-2">
-          <ConfirmButton label="🔐 إعادة ضبط التحقق بخطوتين" confirm="أكيد؟ هيعيد الإعداد في الدخول الجاي" busy={busy} onConfirm={() => reset2fa.mutate()} />
-          <ConfirmButton label="🔑 باسورد مؤقت جديد" confirm="أكيد؟ الباسورد القديم هيتلغي" busy={busy} onConfirm={() => resetPw.mutate()} />
+          <ConfirmButton icon={<ShieldOff className="size-4" />} label="إعادة ضبط التحقق بخطوتين" confirm="أكيد؟ هيعيد الإعداد في الدخول الجاي" busy={busy} onConfirm={() => reset2fa.mutate()} />
+          <ConfirmButton icon={<KeyRound className="size-4" />} label="باسورد مؤقت جديد" confirm="أكيد؟ الباسورد القديم هيتلغي" busy={busy} onConfirm={() => resetPw.mutate()} />
           <select
-            className="rounded-xl border border-line bg-raised px-3 py-1.5 text-[11px] text-cream outline-none focus:border-gold/60"
+            className="rounded-xl border border-line bg-raised px-3 py-1.5 text-[13px] text-cream outline-none focus:border-gold/60"
             value={m.role}
             disabled={busy}
             onChange={(e) => role.mutate(e.target.value as TeamRole)}
@@ -171,9 +178,9 @@ function MemberRow({ m, self, onPassword }: { m: TeamMember; self: boolean; onPa
             <option value="ADMIN">أدمن</option>
             <option value="SUPER_ADMIN">سوبر أدمن</option>
           </select>
-          <ConfirmButton label="⛔ إيقاف الحساب" confirm="أكيد؟ هيخرج فورًا ومش هيقدر يدخل" busy={busy} onConfirm={() => disable.mutate()} />
-          {reset2fa.isSuccess && <span className="fade-in text-[11px] text-mint">اتعمل ✓ وخرج من كل الأجهزة</span>}
-          {role.isSuccess && <span className="fade-in text-[11px] text-mint">الدور اتغيّر ✓</span>}
+          <ConfirmButton icon={<Ban className="size-4" />} label="إيقاف الحساب" confirm="أكيد؟ هيخرج فورًا ومش هيقدر يدخل" busy={busy} onConfirm={() => disable.mutate()} />
+          {reset2fa.isSuccess && <span className="fade-in text-[13px] text-mint">اتعمل ✓ وخرج من كل الأجهزة</span>}
+          {role.isSuccess && <span className="fade-in text-[13px] text-mint">الدور اتغيّر ✓</span>}
         </div>
       )}
       {err && <ErrorBox error={msg(err)} />}
@@ -189,7 +196,7 @@ export default function Team() {
   if (!isSuperAdmin) {
     return (
       <Page width="medium">
-        <PageHeader back="/" eyebrow="الإدارة" title="الفريق" />
+        <PageHeader eyebrow="حسابات الداشبورد" title="الفريق" />
         <ErrorBox error="الصفحة دي للسوبر أدمن بس." />
       </Page>
     );
@@ -202,8 +209,8 @@ export default function Team() {
 
   return (
     <Page>
-      <PageHeader back="/" eyebrow="الإدارة" title="الفريق" actions={q.data && <span className="text-[11px] text-muted">{active.length} حساب شغّال{pending ? ` · ${pending} لسه ما كمّلوش التفعيل` : ""}{disabledCount ? ` · ${disabledCount} موقوف` : ""}</span>} />
-      <p className="text-[12px] leading-relaxed text-muted">
+      <PageHeader eyebrow="حسابات الداشبورد" title="الفريق" actions={q.data && <span className="text-[13px] text-muted">{active.length} حساب شغّال{pending ? ` · ${pending} لسه ما كمّلوش التفعيل` : ""}{disabledCount ? ` · ${disabledCount} موقوف` : ""}</span>} />
+      <p className="text-[14px] leading-relaxed text-muted">
         كل واحد في الفريق له حساب باسمه، والتحقق بخطوتين إجباري للكل. لو حد ضيّع موبايله أو نسي الباسورد، اعمل له إعادة ضبط من هنا. ولو حد ساب الشغل، أوقف حسابه. أي إجراء بيخرّجه من كل الأجهزة، وبيتسجل في سجل التعديلات.
       </p>
       {shown && <TempPassword who={shown.name} password={shown.password} onDone={() => setShown(null)} />}

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Camera, TriangleAlert, Wrench } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, clashBookings, errorMessage, type ClashBooking } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { dayMonth, egp, time12, todayKey } from "../lib/format";
+import { dayMonth, egp, num, time12, todayKey } from "../lib/format";
 import { FLEET_STATUS, MAINTENANCE_STATE, MAINTENANCE_TYPES, VEHICLE_CATEGORY } from "../lib/labels";
 import type { DriverSummary, FleetDetail, VehicleCategory } from "../lib/types";
 import { Badge, Button, cx, Empty, ErrorBox, Field, fieldControl, Page, PageHeader, Panel, Skeleton } from "../components/ui";
@@ -22,6 +23,7 @@ const AR: Record<string, string> = {
   "A car can have up to 12 photos": "أقصى عدد صور للعربية 12 صورة.",
   "Each photo must be 5 MB or smaller": "حجم الصورة لازم يكون 5 ميجا أو أقل.",
   "The main driver must be one of the car's drivers": "السواق الأساسي لازم يكون من سواقين العربية.",
+  "These upcoming trips are with a driver you're removing. Move them to another driver first": "الرحلات دي مع سواق إنت بتشيله من العربية. انقلها لسواق تاني الأول:",
 };
 const msg = (e: unknown) => {
   if (e instanceof ApiError) {
@@ -38,7 +40,7 @@ function ClashList({ bookings }: { bookings: ClashBooking[] }) {
     <ul className="mt-2 flex flex-col gap-1">
       {bookings.map((b) => (
         <li key={b.id}>
-          <Link to={`/day/${b.date}?booking=${b.id}`} className="text-[11px] text-gold hover:underline">
+          <Link to={`/day/${b.date}?booking=${b.id}`} className="text-[13px] text-gold hover:underline">
             <span className="ltr">#{b.ref}</span> · {dayMonth(b.date)} · {time12(b.startTime)} · {b.customer}
           </Link>
         </li>
@@ -49,7 +51,7 @@ function ClashList({ bookings }: { bookings: ClashBooking[] }) {
 
 function ErrorWithBookings({ error }: { error: unknown }) {
   return (
-    <div className="rounded-xl border border-wine bg-wine/15 px-4 py-3 text-[12px] text-blush" role="alert">
+    <div className="rounded-xl border border-wine bg-wine/15 px-4 py-3 text-[14px] text-blush" role="alert">
       {msg(error)}
       <ClashList bookings={clashBookings(error)} />
     </div>
@@ -68,21 +70,26 @@ const invalidateFleet = (qc: ReturnType<typeof useQueryClient>, id?: string) => 
 type Form = {
   make: string; model: string; year: string; plateNumber: string; color: string; capacity: string; category: VehicleCategory;
   basePrice: string; pricePerKm: string; pricePerHour: string; luggage: string; description: string; features: string[];
+  /** "" = use the default price from the Pricing page. */
+  weddingPrice: string; vipPrice: string;
 };
 const EMPTY: Form = {
   make: "", model: "", year: String(new Date().getFullYear()), plateNumber: "", color: "", capacity: "4", category: "LUXURY",
-  basePrice: "0", pricePerKm: "0", pricePerHour: "0", luggage: "3", description: "", features: [],
+  basePrice: "0", pricePerKm: "0", pricePerHour: "0", luggage: "3", description: "", features: [], weddingPrice: "", vipPrice: "",
 };
 const fromCar = (c: FleetDetail): Form => ({
   make: c.make, model: c.model, year: String(c.year), plateNumber: c.plateNumber, color: c.color, capacity: String(c.capacity), category: c.category,
   basePrice: String(c.basePrice), pricePerKm: String(c.pricePerKm), pricePerHour: String(c.pricePerHour), luggage: String(c.luggage),
   description: c.description.replace(/^\[demo\]\s*/, ""), features: c.features,
+  weddingPrice: c.weddingPrice == null ? "" : String(c.weddingPrice), vipPrice: c.vipPrice == null ? "" : String(c.vipPrice),
 });
 const NUM_FIELDS = ["year", "capacity", "basePrice", "pricePerKm", "pricePerHour", "luggage"] as const;
 const toBody = (f: Form) => ({
   ...f,
   ...Object.fromEntries(NUM_FIELDS.map((k) => [k, Number(f[k])])),
   make: f.make.trim(), model: f.model.trim(), plateNumber: f.plateNumber.trim(), color: f.color.trim(), description: f.description.trim(),
+  weddingPrice: f.weddingPrice.trim() === "" ? null : Number(f.weddingPrice),
+  vipPrice: f.vipPrice.trim() === "" ? null : Number(f.vipPrice),
 });
 
 function validate(f: Form): Record<string, string> {
@@ -99,6 +106,10 @@ function validate(f: Form): Record<string, string> {
   for (const k of ["basePrice", "pricePerKm", "pricePerHour"] as const) {
     const n = Number(f[k]);
     if (f[k].trim() === "" || !Number.isFinite(n) || n < 0) e[k] = "رقم موجب";
+  }
+  for (const k of ["weddingPrice", "vipPrice"] as const) {
+    const n = Number(f[k]);
+    if (f[k].trim() !== "" && (!Number.isFinite(n) || n < 0)) e[k] = "رقم موجب أو سيبها فاضية";
   }
   return e;
 }
@@ -125,7 +136,7 @@ function FeaturePicker({ value, onChange, disabled }: { value: string[]; onChang
               disabled={disabled}
               aria-pressed={on}
               onClick={() => toggle(f)}
-              className={cx("rounded-full border px-3 py-1.5 text-[11px] transition", on ? "border-gold bg-gold/15 text-gold" : "border-line text-muted hover:border-gold/50")}
+              className={cx("rounded-full border px-3 py-1.5 text-[13px] transition", on ? "border-gold bg-gold/15 text-gold" : "border-line text-muted hover:border-gold/50")}
             >
               {on ? "✓ " : ""}
               {f}
@@ -136,7 +147,7 @@ function FeaturePicker({ value, onChange, disabled }: { value: string[]; onChang
       {!disabled && (
         <div className="flex items-center gap-2">
           <input
-            className="w-48 rounded-lg border border-line bg-raised px-3 py-1.5 text-[12px] text-cream outline-none focus:border-gold/60"
+            className="w-48 rounded-lg border border-line bg-raised px-3 py-1.5 text-[14px] text-cream outline-none focus:border-gold/60"
             placeholder="ميزة جديدة…"
             value={custom}
             maxLength={30}
@@ -226,10 +237,20 @@ function DetailsForm({ car, canEdit, onCreated }: { car?: FleetDetail; canEdit: 
         {input("luggage", "عدد الشنط", { numeric: true })}
       </Panel>
 
-      <Panel title="الأسعار" tag="0 = سعر النوع من الإعدادات" bodyClassName="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {input("basePrice", "سعر فتح الرحلة (ج.م)", { numeric: true, hint: typePrices && Number(f.basePrice) === 0 ? `هيتحسب ${egp(typePrices.basePrice)}` : undefined })}
-        {input("pricePerKm", "سعر الكيلو (ج.م)", { numeric: true, hint: typePrices && Number(f.pricePerKm) === 0 ? `هيتحسب ${egp(typePrices.pricePerKm)}` : undefined })}
-        {input("pricePerHour", "سعر الساعة (ج.م)", { numeric: true, hint: typePrices && Number(f.pricePerHour) === 0 ? `هيتحسب ${egp(typePrices.pricePerHour)}` : undefined })}
+      <Panel title="أسعار الخدمات" tag="فاضية = السعر العام من صفحة الأسعار" bodyClassName="flex flex-col gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {input("weddingPrice", "سعر الزفاف للعربية دي (ج.م)", { numeric: true, placeholder: car ? `العام: ${num(car.defaultServicePrices.wedding)}` : "السعر العام", hint: f.weddingPrice.trim() === "" && car ? `هيتحسب ${egp(car.defaultServicePrices.wedding)}` : undefined })}
+          {input("vipPrice", "سعر VIP للعربية دي (ج.م)", { numeric: true, placeholder: car ? `العام: ${num(car.defaultServicePrices.vip)}` : "السعر العام", hint: f.vipPrice.trim() === "" && car ? `هيتحسب ${egp(car.defaultServicePrices.vip)}` : undefined })}
+        </div>
+        <p className="text-[12px] text-muted">المشاوير الخاصة بتتسعّر حسب نوع العربية والوجهة من صفحة الأسعار. الساعات والكيلومترات المشمولة والزيادة عليها من نفس الصفحة.</p>
+        <details className="rounded-xl border border-line px-3 py-2">
+          <summary className="cursor-pointer text-[13px] text-muted">التسعير القديم بالكيلو (للنسخ القديمة من التطبيق بس)</summary>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {input("basePrice", "سعر فتح الرحلة (ج.م)", { numeric: true, hint: typePrices && Number(f.basePrice) === 0 ? `هيتحسب ${egp(typePrices.basePrice)}` : undefined })}
+            {input("pricePerKm", "سعر الكيلو (ج.م)", { numeric: true, hint: typePrices && Number(f.pricePerKm) === 0 ? `هيتحسب ${egp(typePrices.pricePerKm)}` : undefined })}
+            {input("pricePerHour", "سعر الساعة (ج.م)", { numeric: true, hint: typePrices && Number(f.pricePerHour) === 0 ? `هيتحسب ${egp(typePrices.pricePerHour)}` : undefined })}
+          </div>
+        </details>
       </Panel>
 
       <Panel title="اللي بيظهر للعميل في التطبيق" bodyClassName="flex flex-col gap-3">
@@ -250,7 +271,7 @@ function DetailsForm({ car, canEdit, onCreated }: { car?: FleetDetail; canEdit: 
       {save.error && <ErrorBox error={msg(save.error)} />}
       {canEdit && (
         <div className="flex items-center justify-end gap-3">
-          {saved && !changed.length && <span className="fade-in text-[11px] text-mint">اتحفظ ✓</span>}
+          {saved && !changed.length && <span className="fade-in text-[13px] text-mint">اتحفظ ✓</span>}
           {car && changed.length > 0 && (
             <Button variant="ghost" size="sm" onClick={() => setF(initial)} disabled={save.isPending}>
               إلغاء التغييرات
@@ -297,17 +318,17 @@ function Photos({ car, canEdit }: { car: FleetDetail; canEdit: boolean }) {
           {car.images.map((img) => (
             <div key={img.id} className="group relative overflow-hidden rounded-xl border border-line">
               <img src={img.imageUrl} alt="" className="h-28 w-full object-cover" loading="lazy" />
-              {img.isCover && <span className="absolute right-2 top-2 rounded-full bg-gold px-2 py-0.5 text-[10px] font-bold text-ink">الغلاف</span>}
+              {img.isCover && <span className="absolute right-2 top-2 rounded-full bg-gold px-2 py-0.5 text-[12px] font-bold text-ink">الغلاف</span>}
               {canEdit && (
                 <div className="absolute inset-x-0 bottom-0 flex justify-between gap-1 bg-ink/75 p-1.5 opacity-100 sm:opacity-0 sm:transition sm:group-hover:opacity-100">
                   {!img.isCover ? (
-                    <button type="button" className="text-[10px] text-cream hover:text-gold" onClick={() => cover.mutate(img.id)}>
+                    <button type="button" className="text-[12px] text-cream hover:text-gold" onClick={() => cover.mutate(img.id)}>
                       اجعلها الغلاف
                     </button>
                   ) : (
                     <span />
                   )}
-                  <button type="button" className="text-[10px] text-rose hover:underline" onClick={() => remove.mutate(img.id)} aria-label="حذف الصورة">
+                  <button type="button" className="text-[12px] text-rose hover:underline" onClick={() => remove.mutate(img.id)} aria-label="حذف الصورة">
                     حذف
                   </button>
                 </div>
@@ -329,9 +350,9 @@ function Photos({ car, canEdit }: { car: FleetDetail; canEdit: boolean }) {
             onChange={(e) => e.target.files?.length && upload.mutate(e.target.files)}
           />
           <Button onClick={() => file.current?.click()} disabled={upload.isPending}>
-            {upload.isPending ? "بيرفع…" : "📷 رفع صور"}
+            <Camera className="size-4" /> {upload.isPending ? "بيرفع…" : "رفع صور"}
           </Button>
-          <span className="text-[10px] text-muted">JPG أو PNG أو WEBP · لحد 5 ميجا للصورة</span>
+          <span className="text-[12px] text-muted">JPG أو PNG أو WEBP · لحد 5 ميجا للصورة</span>
         </div>
       )}
     </Panel>
@@ -371,21 +392,21 @@ function Drivers({ car, canEdit }: { car: FleetDetail; canEdit: boolean }) {
   return (
     <Panel title="السواقين" tag="بس هما اللي يسوقوا العربية دي" bodyClassName="flex flex-col gap-3">
       {ids.length === 0 ? (
-        <div className="rounded-xl border border-gold/40 bg-gold/10 px-3 py-2.5 text-[11px] text-cream">⚠ من غير سواق العربية مش هتظهر للعملاء ولا تتحجز.</div>
+        <div className="flex items-center gap-2 rounded-xl border border-gold/40 bg-gold/10 px-3 py-2.5 text-[13px] text-cream"><TriangleAlert className="size-4 shrink-0 text-gold" /> من غير سواق العربية مش هتظهر للعملاء ولا تتحجز.</div>
       ) : (
         <ul className="flex flex-col gap-2">
           {ids.map((id) => {
             const d = names.get(id);
             return (
               <li key={id} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-raised px-3 py-2">
-                <label className="flex items-center gap-2 text-[12px] text-cream">
+                <label className="flex items-center gap-2 text-[14px] text-cream">
                   <input type="radio" name="primary-driver" checked={primary === id} onChange={() => setPrimary(id)} disabled={!canEdit} className="accent-[var(--color-gold)]" />
                   <span className="font-bold">{d?.name ?? "…"}</span>
-                  {primary === id && <span className="text-[10px] text-gold">الأساسي</span>}
-                  {d && d.status !== "ACTIVE" && <span className="text-[10px] text-muted">({d.status === "ONLEAVE" ? "إجازة" : d.status === "OFF" ? "خارج الخدمة" : "في رحلة"})</span>}
+                  {primary === id && <span className="text-[12px] text-gold">الأساسي</span>}
+                  {d && d.status !== "ACTIVE" && <span className="text-[12px] text-muted">({d.status === "ONLEAVE" ? "إجازة" : d.status === "OFF" ? "خارج الخدمة" : "في رحلة"})</span>}
                 </label>
                 {canEdit && (
-                  <button type="button" className="text-[11px] text-rose hover:underline" onClick={() => remove(id)}>
+                  <button type="button" className="text-[13px] text-rose hover:underline" onClick={() => remove(id)}>
                     شيل
                   </button>
                 )}
@@ -397,7 +418,7 @@ function Drivers({ car, canEdit }: { car: FleetDetail; canEdit: boolean }) {
       {canEdit && (
         <>
           <select
-            className="rounded-xl border border-line bg-raised px-3 py-2 text-[12px] text-cream outline-none focus:border-gold/60"
+            className="rounded-xl border border-line bg-raised px-3 py-2 text-[14px] text-cream outline-none focus:border-gold/60"
             value=""
             onChange={(e) => add(e.target.value)}
             aria-label="إضافة سواق"
@@ -411,9 +432,9 @@ function Drivers({ car, canEdit }: { car: FleetDetail; canEdit: boolean }) {
                 </option>
               ))}
           </select>
-          {save.error && <ErrorBox error={msg(save.error)} />}
+          {save.error && <ErrorWithBookings error={save.error} />}
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] text-muted">لو العميل ما اختارش سواق، الأساسي بيتجرّب الأول.</span>
+            <span className="text-[12px] text-muted">لو العميل ما اختارش سواق، الأساسي بيتجرّب الأول.</span>
             <Button variant="primary" size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
               {save.isPending ? "…" : "حفظ السواقين"}
             </Button>
@@ -486,7 +507,7 @@ function Maintenance({ car, canEdit }: { car: FleetDetail; canEdit: boolean }) {
           )}
           <div className="flex justify-end sm:col-span-2">
             <Button type="submit" variant="primary" disabled={!valid || schedule.isPending}>
-              {schedule.isPending ? "…" : "🔧 تسجيل الصيانة"}
+              <Wrench className="size-4" /> {schedule.isPending ? "…" : "تسجيل الصيانة"}
             </Button>
           </div>
         </form>
@@ -502,10 +523,10 @@ function Maintenance({ car, canEdit }: { car: FleetDetail; canEdit: boolean }) {
             return (
               <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-raised px-3 py-2.5">
                 <div className="flex min-w-0 flex-col">
-                  <span className="text-[12px] font-bold text-cream">
+                  <span className="text-[14px] font-bold text-cream">
                     {m.type} <Badge tone={st.tone}>{st.label}</Badge>
                   </span>
-                  <span className="text-[11px] text-muted">
+                  <span className="text-[13px] text-muted">
                     {dayMonth(m.startDate)}
                     {m.endDate !== m.startDate && ` → ${dayMonth(m.endDate)}`}
                     {m.cost > 0 && ` · ${egp(m.cost)}`}
@@ -540,7 +561,7 @@ function ServiceStatus({ car, canEdit }: { car: FleetDetail; canEdit: boolean })
   if (!canEdit) return null;
   return car.retiredAt ? (
     <Panel title="العربية موقوفة" bodyClassName="flex flex-col gap-3">
-      <p className="text-[12px] text-muted">
+      <p className="text-[14px] text-muted">
         مش ظاهرة للعملاء ولا بتتحجز{car.retiredReason ? ` · السبب: ${car.retiredReason}` : ""}. سجلها وحجوزاتها القديمة محفوظين.
       </p>
       {restore.error && <ErrorBox error={msg(restore.error)} />}
@@ -550,9 +571,9 @@ function ServiceStatus({ car, canEdit }: { car: FleetDetail; canEdit: boolean })
     </Panel>
   ) : (
     <Panel title="إيقاف العربية" bodyClassName="flex flex-col gap-3">
-      <p className="text-[11px] text-muted">بدل الحذف: بتختفي من التطبيق والحجوزات الجديدة، وتاريخها بيفضل. تقدر ترجّعها في أي وقت.</p>
+      <p className="text-[13px] text-muted">بدل الحذف: بتختفي من التطبيق والحجوزات الجديدة، وتاريخها بيفضل. تقدر ترجّعها في أي وقت.</p>
       <input
-        className="rounded-xl border border-line bg-raised px-3 py-2 text-[12px] text-cream outline-none focus:border-gold/60"
+        className="rounded-xl border border-line bg-raised px-3 py-2 text-[14px] text-cream outline-none focus:border-gold/60"
         placeholder="السبب (اختياري): اتباعت، حادثة…"
         value={reason}
         maxLength={200}
@@ -585,7 +606,7 @@ export default function FleetVehicle() {
           <ErrorBox error="معندكش صلاحية تضيف عربيات." />
         ) : (
           <>
-            <p className="text-[12px] text-muted">بعد الإضافة هتقدر ترفع الصور وتحدد السواقين والصيانة.</p>
+            <p className="text-[14px] text-muted">بعد الإضافة هتقدر ترفع الصور وتحدد السواقين والصيانة.</p>
             <DetailsForm canEdit onCreated={(newId) => navigate(`/fleet/${newId}`, { replace: true })} />
           </>
         )}
@@ -603,7 +624,7 @@ export default function FleetVehicle() {
         actions={
           car &&
           st && (
-            <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted">
+            <div className="flex flex-wrap items-center gap-3 text-[13px] text-muted">
               <Badge tone={st.tone} dot>
                 {st.label}
               </Badge>
@@ -621,7 +642,7 @@ export default function FleetVehicle() {
         </div>
       ) : (
         <>
-          {!canEdit && <div className="rounded-xl border border-line bg-raised px-4 py-3 text-[12px] text-muted">للعرض بس. تعديل الأسطول محتاج صلاحية vehicle:manage.</div>}
+          {!canEdit && <div className="rounded-xl border border-line bg-raised px-4 py-3 text-[14px] text-muted">للعرض بس. تعديل الأسطول محتاج صلاحية vehicle:manage.</div>}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="flex flex-col gap-4 lg:col-span-2">
               <DetailsForm car={car} canEdit={canEdit} />
@@ -637,7 +658,7 @@ export default function FleetVehicle() {
                   <ul className="flex flex-col">
                     {car.upcomingBookings.map((b) => (
                       <li key={b.id} className="border-b border-line py-2 last:border-b-0">
-                        <Link to={`/day/${b.bookingDate}?booking=${b.id}`} className="flex items-center justify-between gap-2 text-[12px] hover:text-gold">
+                        <Link to={`/day/${b.bookingDate}?booking=${b.id}`} className="flex items-center justify-between gap-2 text-[14px] hover:text-gold">
                           <span className="text-cream">
                             {dayMonth(b.bookingDate)} · {time12(b.startTime)}
                           </span>

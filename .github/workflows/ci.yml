@@ -1,0 +1,71 @@
+# Checks every pull request and every push to main: the API (typecheck, API
+# docs in sync, the full test suite against a throwaway Postgres built from the
+# migrations) and the dashboard (typecheck + production build).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mishwark_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mishwark_test
+      JWT_SECRET: ci-${{ github.run_id }}-not-a-real-secret-0123456789
+      BUSINESS_TZ: Africa/Cairo
+      NODE_ENV: test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Database from the migrations
+        run: |
+          for f in $(ls -d prisma/migrations/*/ | sort); do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f/migration.sql"
+          done
+      - run: npm run typecheck
+      - run: npm run api-docs:check
+      - run: npm test
+
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build

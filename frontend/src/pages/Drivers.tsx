@@ -1,3 +1,5 @@
+import { Link } from "react-router";
+import { DocumentsBadge } from "../components/DriverDocuments";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
 import type { DriverStatus, DriverSummary } from "../lib/types";
@@ -24,7 +26,7 @@ export default function Drivers() {
 
   return (
     <Page>
-      <PageHeader back="/" eyebrow="Super Admin" title="كل السائقين" actions={q.data && <span className="text-[11px] text-muted">{q.data.length} سائق · مرتبين بإيراد الشهر</span>} />
+      <PageHeader eyebrow="حالة وأداء كل سواق" title="السواقين" actions={q.data && <span className="text-[13px] text-muted">{q.data.length} سائق · مرتبين بإيراد الشهر</span>} />
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
       {setStatus.error && <ErrorBox error={errorMessage(setStatus.error)} />}
       {q.isPending ? (
@@ -34,15 +36,20 @@ export default function Drivers() {
       ) : (
         <div className="stagger grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {q.data!.map((d, i) => (
-            <div key={d.id} className="flex flex-col gap-2 rounded-[18px] border border-line bg-surface p-3">
+            <div key={d.id} className="card flex flex-col gap-2 p-3">
               <DriverCard d={d} tone={tones[i % 3]} />
-              <label className="flex items-center justify-between gap-2 px-1 text-[11px] text-muted">
+              {d.documents && (
+                <Link to={`/drivers/${d.id}`} className="px-1">
+                  <DocumentsBadge s={d.documents} />
+                </Link>
+              )}
+              <label className="flex items-center justify-between gap-2 px-1 text-[13px] text-muted">
                 الحالة
                 {d.status === "ONTRIP" ? (
                   <span className="text-gold">في رحلة دلوقتي</span>
                 ) : (
                   <select
-                    className="rounded-lg border border-line bg-raised px-2 py-1 text-[11px] text-cream outline-none focus:border-gold/60"
+                    className="rounded-lg border border-line bg-raised px-2 py-1 text-[13px] text-cream outline-none focus:border-gold/60"
                     value={d.status}
                     disabled={setStatus.isPending}
                     onChange={(e) => setStatus.mutate({ id: d.id, status: e.target.value as DriverStatus })}

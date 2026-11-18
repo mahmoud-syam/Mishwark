@@ -3,22 +3,31 @@ import { useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import type { CustomerAnalytics, CustomerHit, Vehicle } from "../lib/types";
-import { egp, initials, maskPhone, num, todayKey } from "../lib/format";
-import { EVENT_TYPES, SAVED_PLACES, toPlaceValue } from "../lib/places";
+import type { CustomerAnalytics, CustomerHit, PriceLine, PricingCatalog, ServiceType, Vehicle } from "../lib/types";
+import PriceLines from "../components/PriceLines";
+import { egp, initials, maskPhone, todayKey } from "../lib/format";
+import { EVENT_TYPES } from "../lib/places";
+import { LocationField, type PlacePoint } from "../components/PlacePicker";
 import { Avatar, Button, cx, ErrorBox, Field, fieldControl, Page, PageHeader, Panel, Skeleton, Toggle } from "../components/ui";
 
 interface Estimate {
-  basePrice: number;
-  distancePrice: number;
-  timePrice: number;
-  totalPrice: number;
-  referralDiscount: number;
+  data: { totalPrice: number; depositRequired: number; basePrice: number; distancePrice: number; timePrice: number; referralDiscount: number };
+  lines?: PriceLine[];
+  depositRate?: number;
+  bookedMinutes?: number | null;
+  route: { distanceKm: number; source: string } | null;
 }
 
+const SERVICES: { value: ServiceType; label: string; hint: string }[] = [
+  { value: "WEDDING", label: "زفاف", hint: "سعر ثابت للعربية بيشمل ساعات وكيلومترات" },
+  { value: "TRIP", label: "مشوار خاص", hint: "من الشرقية لوجهة بسعر ثابت" },
+  { value: "VIP", label: "VIP", hint: "سعر ثابت للمناسبة" },
+];
+
+/** Wraps past midnight: 22:00 + 3h = 01:00 (the trip ends the next morning). */
 const addHours = (hhmm: string, h: number) => {
   const [hh, mm] = hhmm.split(":").map(Number);
-  const t = Math.min(23 * 60 + 59, hh * 60 + mm + h * 60);
+  const t = (hh * 60 + mm + h * 60) % 1440;
   return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
 };
 
@@ -38,12 +47,15 @@ export default function BookOnBehalf() {
   const [params] = useSearchParams();
 
   const [customer, setCustomer] = useState<CustomerHit | null>(null);
+  const [service, setService] = useState<ServiceType>("WEDDING");
+  /** Private trip: a listed destination's id, or "other" for a place on the map. */
+  const [destinationId, setDestinationId] = useState("");
   const [vehicleId, setVehicleId] = useState("");
   const [date, setDate] = useState(todayKey());
   const [startTime, setStartTime] = useState("19:00");
   const [endTime, setEndTime] = useState("22:00");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [from, setFrom] = useState<PlacePoint | null>(null);
+  const [to, setTo] = useState<PlacePoint | null>(null);
   const [driverId, setDriverId] = useState("");
   const [eventType, setEventType] = useState("");
   const [override, setOverride] = useState("");
@@ -78,17 +90,43 @@ export default function BookOnBehalf() {
   // The API lists only cars in service with a driver; maintenance is checked for the chosen date.
   const bookable = vehicles.data ?? [];
 
-  const fromValue = toPlaceValue(from);
-  const toValue = toPlaceValue(to);
-  const estimateKey = useDebounced(JSON.stringify([vehicleId, fromValue, toValue, customer?.id ?? null]), 450);
+  // Prices, destinations and where private trips start (Pricing page).
+  const catalog = useQuery({ queryKey: ["pricing-catalog"], queryFn: () => api.get<PricingCatalog>("/pricing") });
+  const listed = service === "TRIP" && destinationId !== "" && destinationId !== "other";
+  // A private trip starts at the company (it can still be changed on the map);
+  // leaving "trip" clears that start so a wedding gets its own points.
+  const isOrigin = (p: PlacePoint | null) => !!p && !!catalog.data && p.latitude === catalog.data.origin.latitude && p.longitude === catalog.data.origin.longitude;
+  const chooseService = (next: ServiceType) => {
+    if (next === service) return;
+    if (next === "TRIP" && catalog.data) setFrom(catalog.data.origin);
+    if (service === "TRIP" && isOrigin(from)) setFrom(null);
+    setService(next);
+  };
+  useEffect(() => {
+    if (service === "TRIP" && !from && catalog.data) setFrom(catalog.data.origin);
+  }, [service, catalog.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Exact coordinates from the map, with the name shown to the driver and customer.
+  const fromValue = from;
+  const toValue = listed ? null : to;
+  const ready = Boolean(vehicleId) && (service === "TRIP" ? listed || Boolean(toValue) : Boolean(fromValue && toValue));
+  const quoteBody = {
+    vehicleId,
+    serviceType: service,
+    ...(listed && { destinationId }),
+    ...(fromValue && { startPoint: fromValue }),
+    ...(toValue && { endPoint: toValue }),
+    startTime,
+    endTime,
+    ...(customer && { customerId: customer.id }),
+  };
+  const current = JSON.stringify(quoteBody);
+  const estimateKey = useDebounced(current, 450);
   const estimate = useQuery({
     queryKey: ["estimate", estimateKey],
-    queryFn: () => {
-      const [v, s, e, c] = JSON.parse(estimateKey);
-      // With the customer, the quote includes their first-booking referral discount.
-      return api.post<Estimate>("/bookings/estimate-price", { vehicleId: v, startPoint: s, endPoint: e, ...(c ? { customerId: c } : {}) });
-    },
-    enabled: Boolean(vehicleId && fromValue && toValue) && estimateKey === JSON.stringify([vehicleId, fromValue, toValue, customer?.id ?? null]),
+    // With the customer, the quote includes their package and first-booking referral discount.
+    queryFn: () => api.raw<Estimate>("POST", "/bookings/estimate-price", JSON.parse(estimateKey)),
+    enabled: ready && estimateKey === current,
     retry: false,
   });
 
@@ -101,8 +139,10 @@ export default function BookOnBehalf() {
         bookingDate: date,
         startTime,
         endTime,
-        startPoint: fromValue,
-        endPoint: toValue,
+        serviceType: service,
+        destinationId: listed ? destinationId : undefined,
+        startPoint: fromValue ?? undefined,
+        endPoint: toValue ?? undefined,
         eventType: eventType || undefined,
         priceOverride: isSuperAdmin && override !== "" ? Number(override) : undefined,
         markPaid,
@@ -117,12 +157,12 @@ export default function BookOnBehalf() {
     const p: string[] = [];
     if (!customer) p.push("اختار العميل");
     if (!vehicleId) p.push("اختار العربية");
-    if (!fromValue || !toValue) p.push("حدد نقطة الانطلاق والوجهة");
+    if (service === "TRIP" ? !listed && !toValue : !fromValue || !toValue) p.push(service === "TRIP" ? "اختار الوجهة" : "حدد نقطة الانطلاق والوجهة");
     if (date < todayKey()) p.push("التاريخ لازم يكون النهاردة أو بعد كده");
-    if (endTime <= startTime) p.push("ميعاد النهاية لازم يكون بعد البداية");
+    if (endTime === startTime) p.push("ميعاد النهاية لازم يكون غير البداية");
     if (override !== "" && !(Number(override) > 0)) p.push("السعر اليدوي لازم يكون رقم أكبر من صفر");
     return p;
-  }, [customer, vehicleId, fromValue, toValue, date, startTime, endTime, override]);
+  }, [customer, vehicleId, fromValue, toValue, listed, service, date, startTime, endTime, override]);
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -130,15 +170,33 @@ export default function BookOnBehalf() {
     if (problems.length === 0) submit.mutate();
   };
 
-  const finalPrice = override !== "" && isSuperAdmin ? Number(override) : estimate.data?.totalPrice;
+  const finalPrice = override !== "" && isSuperAdmin ? Number(override) : estimate.data?.data.totalPrice;
 
   return (
     <Page width="medium">
-      <PageHeader back="/" eyebrow="Super Admin" title="احجز نيابة عن عميل" />
+      <PageHeader eyebrow="حجز بالتليفون أو في المكتب" title="احجز لعميل" />
       <form onSubmit={onSubmit} className="flex flex-col gap-[18px]" noValidate>
         <CustomerStep customer={customer} onChange={setCustomer} />
 
         <Panel title="٢. تفاصيل الحجز">
+          <div role="radiogroup" aria-label="نوع الخدمة" className="mb-3 grid grid-cols-3 gap-2">
+            {SERVICES.map((sv) => {
+              const on = sv.value === service;
+              return (
+                <button
+                  key={sv.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => chooseService(sv.value)}
+                  className={cx("flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-right transition", on ? "border-gold bg-gold/10" : "border-line bg-raised hover:border-gold/50")}
+                >
+                  <span className={cx("text-[15px] font-bold", on ? "text-gold" : "text-cream")}>{sv.label}</span>
+                  <span className="text-[12px] text-muted">{sv.hint}</span>
+                </button>
+              );
+            })}
+          </div>
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             <Field label="العربية">
               {vehicles.isPending ? (
@@ -157,12 +215,23 @@ export default function BookOnBehalf() {
             <Field label="التاريخ">
               <input className={`${fieldControl} ltr text-right`} type="date" min={todayKey()} value={date} onChange={(e) => setDate(e.target.value)} required />
             </Field>
-            <Field label="من">
-              <input className={fieldControl} list="saved-places" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="نقطة الانطلاق" required />
-            </Field>
-            <Field label="إلى">
-              <input className={fieldControl} list="saved-places" value={to} onChange={(e) => setTo(e.target.value)} placeholder="الوجهة" required />
-            </Field>
+            <LocationField which="from" value={from} other={to} onChange={setFrom} />
+            {service === "TRIP" ? (
+              <Field label="الوجهة">
+                <select className={fieldControl} value={destinationId} onChange={(e) => setDestinationId(e.target.value)} aria-label="الوجهة">
+                  <option value="" className="bg-surface">اختار الوجهة…</option>
+                  {(catalog.data?.destinations ?? []).map((d) => (
+                    <option key={d.id} value={d.id} className="bg-surface">
+                      {d.name}
+                    </option>
+                  ))}
+                  <option value="other" className="bg-surface">مكان تاني (على الخريطة)</option>
+                </select>
+              </Field>
+            ) : (
+              <LocationField which="to" value={to} other={from} onChange={setTo} />
+            )}
+            {service === "TRIP" && destinationId === "other" && <LocationField which="to" value={to} other={from} onChange={setTo} />}
             <Field label="الميعاد">
               <div className="flex items-center gap-2">
                 <input
@@ -176,9 +245,10 @@ export default function BookOnBehalf() {
                   required
                   aria-label="ميعاد البداية"
                 />
-                <span className="text-[11px] text-muted">لحد</span>
+                <span className="text-[13px] text-muted">لحد</span>
                 <input className={`${fieldControl} ltr text-right`} type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required aria-label="ميعاد النهاية" />
               </div>
+              {endTime < startTime && <p className="mt-1.5 text-[13px] text-gold">الرحلة بتخلص تاني يوم الصبح</p>}
             </Field>
             <Field label="السائق">
               <select className={fieldControl} value={driverId} onChange={(e) => setDriverId(e.target.value)} aria-label="السائق">
@@ -195,35 +265,37 @@ export default function BookOnBehalf() {
               <input className={fieldControl} list="event-types" value={eventType} onChange={(e) => setEventType(e.target.value)} placeholder="زفة فرح، استقبال مطار…" />
             </Field>
           </div>
-          <datalist id="saved-places">
-            {SAVED_PLACES.map((p) => (
-              <option key={p.label} value={p.label} />
-            ))}
-          </datalist>
           <datalist id="event-types">
             {EVENT_TYPES.map((t) => (
               <option key={t} value={t} />
             ))}
           </datalist>
-          <p className="mt-2.5 text-[10px] text-muted">الأماكن المحفوظة بتتسعّر بالمسافة الفعلية. أي مكان تاني بيتحدد على الخريطة من السيرفر.</p>
+          <p className="mt-2.5 text-[12px] text-muted">دوس على "من" أو "إلى" عشان تدور على أي مكان في مصر أو تحط دبوس على الخريطة. السعر بيتحسب بالمسافة الفعلية بين النقطتين.</p>
         </Panel>
 
         <Panel title="٣. السعر والدفع">
-          <div className="flex items-center justify-between pb-3 text-[11px] text-muted">
-            <span>السعر المحسوب تلقائيًا</span>
-            <span className="ltr text-[13px] font-bold text-cream">
-              {estimate.isFetching ? <Skeleton className="inline-block h-4 w-16" /> : estimate.data ? egp(estimate.data.totalPrice) : "—"}
-            </span>
+          <div className="mb-3">
+            {estimate.isFetching && !estimate.data ? (
+              <Skeleton className="h-32" />
+            ) : estimate.data?.lines ? (
+              <div className={cx(estimate.isFetching && "opacity-60 transition-opacity")}>
+                <PriceLines
+                  lines={estimate.data.lines}
+                  total={estimate.data.data.totalPrice}
+                  deposit={estimate.data.data.depositRequired}
+                  depositRate={estimate.data.depositRate}
+                  distanceKm={estimate.data.route?.distanceKm}
+                  distanceEstimated={estimate.data.route?.source === "haversine"}
+                  bookedMinutes={estimate.data.bookedMinutes}
+                />
+              </div>
+            ) : (
+              <p className="rounded-xl border border-dashed border-line px-3 py-4 text-center text-[13px] text-muted">
+                {service === "TRIP" ? "اختار العربية والوجهة عشان يظهر السعر بالتفصيل." : "اختار العربية ونقطة الانطلاق والوجهة عشان يظهر السعر بالتفصيل."}
+              </p>
+            )}
           </div>
-          {estimate.data && (
-            <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted">
-              <span>أساسي {num(estimate.data.basePrice)}</span>
-              <span>مسافة {num(estimate.data.distancePrice)}</span>
-              {estimate.data.timePrice > 0 && <span>وقت {num(estimate.data.timePrice)}</span>}
-              {estimate.data.referralDiscount > 0 && <span className="text-mint">خصم أول حجز (إحالة) −{num(estimate.data.referralDiscount)}</span>}
-            </div>
-          )}
-          {estimate.error && <p className="mb-3 text-[11px] text-rose">{estimate.error instanceof ApiError ? estimate.error.message : "مش قادر أحسب السعر دلوقتي."}</p>}
+          {estimate.error && <p className="mb-3 text-[13px] text-rose">{estimate.error instanceof ApiError ? estimate.error.message : "مش قادر أحسب السعر دلوقتي."}</p>}
           <Field label="تعديل يدوي للسعر (اختياري)" hint={isSuperAdmin ? "— بصلاحية Super Admin —" : "التعديل اليدوي متاح للـ Super Admin بس"}>
             <input
               className={`${fieldControl} ltr text-right`}
@@ -233,7 +305,7 @@ export default function BookOnBehalf() {
               disabled={!isSuperAdmin}
               value={override}
               onChange={(e) => setOverride(e.target.value)}
-              placeholder={estimate.data ? String(Math.round(estimate.data.totalPrice)) : ""}
+              placeholder={estimate.data ? String(Math.round(estimate.data.data.totalPrice)) : ""}
             />
           </Field>
           <div className="mt-3">
@@ -245,7 +317,7 @@ export default function BookOnBehalf() {
         {submit.error && <ErrorBox error={submitError(submit.error)} />}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="text-[12px] text-muted">{finalPrice != null && <>الإجمالي: <b className="text-cream">{egp(finalPrice)}</b></>}</span>
+          <span className="text-[14px] text-muted">{finalPrice != null && <>الإجمالي: <b className="text-cream">{egp(finalPrice)}</b></>}</span>
           <Button type="submit" variant="primary" size="lg" disabled={submit.isPending} className="min-w-[230px]">
             {submit.isPending ? "جاري الحجز…" : "تأكيد الحجز نيابة عن العميل"}
           </Button>
@@ -255,8 +327,30 @@ export default function BookOnBehalf() {
   );
 }
 
+/** The API's booking refusals, in Arabic. */
+const BOOKING_ERRORS: [RegExp, (m: RegExpMatchArray) => string][] = [
+  [/already passed/i, () => "الميعاد ده عدّى خلاص. اختار وقت بعد دلوقتي."],
+  [/past date/i, () => "التاريخ ده عدّى."],
+  [/up to (\d+) days ahead/i, (m) => `الحجز متاح لحد ${m[1]} يوم من النهارده بس.`],
+  [/at least (\d+) minutes/i, (m) => `الرحلة لازم تكون ${m[1]} دقيقة على الأقل.`],
+  [/must end by (\d\d:\d\d)/i, (m) => `الرحلة اللي بتعدّي نص الليل لازم تخلص قبل ${m[1]} الصبح.`],
+  [/endTime must be later/i, () => "الرحلات بعد نص الليل مقفولة من الإعدادات. ميعاد النهاية لازم يكون بعد البداية."],
+  [/maintenance/i, () => "العربية دي في الصيانة في اليوم ده."],
+  [/no longer available/i, () => "العربية دي اتشالت من الأسطول."],
+  [/licence has expired/i, () => "رخصة السائق ده منتهية. اختار سائق تاني أو سيبها تلقائي."],
+  [/no driver of this car is free/i, () => "مفيش سواق من سواقين العربية فاضي في الميعاد ده."],
+  [/no driver assigned/i, () => "العربية دي لسه ما اتحددلهاش سواقين. حددهم من صفحة الأسطول."],
+  [/OFF or ON LEAVE/i, () => "السائق ده في إجازة أو مش شغال النهارده."],
+];
+
 function submitError(e: unknown) {
   if (e instanceof ApiError && e.status === 409) return "العربية أو السائق محجوزين في نفس الميعاد ده. اختار وقت أو عربية تانية.";
+  if (e instanceof ApiError && e.status === 400) {
+    for (const [re, say] of BOOKING_ERRORS) {
+      const m = e.message.match(re);
+      if (m) return say(m);
+    }
+  }
   return errorMessage(e);
 }
 
@@ -278,15 +372,15 @@ function CustomerStep({ customer, onChange }: { customer: CustomerHit | null; on
           <div className="flex items-center gap-3">
             <Avatar text={initials(customer.name)} tone="gold" />
             <div>
-              <div className="text-[13px] font-bold text-cream">{customer.name}</div>
-              <div className="text-[11px] text-muted">
+              <div className="text-[15px] font-bold text-cream">{customer.name}</div>
+              <div className="text-[13px] text-muted">
                 <span className="ltr">{maskPhone(customer.phoneNumber)}</span> · {customer.bookingsCount} حجوزات سابقة
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[16px] text-gold" aria-hidden>✓</span>
-            <button type="button" className="text-[11px] text-muted underline-offset-4 hover:text-cream hover:underline" onClick={() => onChange(null)}>
+            <span className="text-[18px] text-gold" aria-hidden>✓</span>
+            <button type="button" className="text-[13px] text-muted underline-offset-4 hover:text-cream hover:underline" onClick={() => onChange(null)}>
               تغيير
             </button>
           </div>
@@ -301,7 +395,7 @@ function CustomerStep({ customer, onChange }: { customer: CustomerHit | null; on
         />
       ) : (
         <>
-          <input className="field-input" value={term} onChange={(e) => setTerm(e.target.value)} placeholder="🔍 دور برقم موبايل أو اسم العميل…" aria-label="بحث عن عميل" />
+          <input className="field-input" value={term} onChange={(e) => setTerm(e.target.value)} placeholder="دور برقم موبايل أو اسم العميل…" aria-label="بحث عن عميل" />
           {debounced.length >= 2 && (
             <ul className="mt-2 flex flex-col gap-1.5">
               {search.isFetching && <Skeleton className="h-12 rounded-xl" />}
@@ -314,18 +408,18 @@ function CustomerStep({ customer, onChange }: { customer: CustomerHit | null; on
                   >
                     <Avatar text={initials(c.name)} size={32} tone="plain" />
                     <span>
-                      <span className="block text-[12px] font-bold text-cream">{c.name}</span>
-                      <span className="block text-[11px] text-muted">
+                      <span className="block text-[14px] font-bold text-cream">{c.name}</span>
+                      <span className="block text-[13px] text-muted">
                         <span className="ltr">{maskPhone(c.phoneNumber)}</span> · {c.bookingsCount} حجوزات سابقة
                       </span>
                     </span>
                   </button>
                 </li>
               ))}
-              {search.data && search.data.length === 0 && !search.isFetching && <li className="px-1 text-[11px] text-muted">مفيش عميل بالاسم أو الرقم ده.</li>}
+              {search.data && search.data.length === 0 && !search.isFetching && <li className="px-1 text-[13px] text-muted">مفيش عميل بالاسم أو الرقم ده.</li>}
             </ul>
           )}
-          <p className="mt-3 text-center text-[11px] text-muted">
+          <p className="mt-3 text-center text-[13px] text-muted">
             مش لاقي العميل؟{" "}
             <button type="button" className="text-gold hover:underline" onClick={() => setCreating(true)}>
               أنشئ حساب جديد بسرعة ←

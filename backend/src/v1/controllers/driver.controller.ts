@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { ForbiddenException } from "../utils/errors";
 import DriverService from "../services/driver.service";
-import { paramStr, queryNum, queryStr } from "../utils/routeParams";
+import { paramStr, queryNum, queryStr, queryLimit } from "../utils/routeParams";
 
 export const getDriverProfile = async (req: Request, res: Response) => {
   const userId = req.user?.id;
@@ -30,7 +30,7 @@ export const getDriverBookings = async (req: Request, res: Response) => {
   const result = await DriverService.listDriverBookings(userId, {
     filter: queryStr(req.query.filter),
     page: queryNum(req.query.page, 1),
-    limit: queryNum(req.query.limit, 10),
+    limit: queryLimit(req.query.limit, 10),
   });
   res.status(200).json({ success: true, data: result.items, pagination: result.pagination });
 };

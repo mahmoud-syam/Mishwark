@@ -1,3 +1,5 @@
+import { tripMinutes } from "../utils/slots";
+import { bookingRef } from "../utils/bookingRef";
 import prismaClient from "../utils/prismaClientHelper";
 import {
   AuditAction,
@@ -7,6 +9,7 @@ import {
   PaymentRecordStatus,
   PaymentStatus,
   Prisma,
+  ServiceType,
   ReferralStatus,
   ReviewerType,
   TripStatus,
@@ -19,11 +22,13 @@ import AuditService, { AuditActor } from "./audit.service";
 import PaymentService from "./payment.service";
 import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
 import FleetService from "./fleet.service";
+import DriverDocumentService from "./driver-document.service";
 import {
   addDays,
   addMonths,
   dateKey,
   diffDays,
+  isDateKey,
   monthStart,
   yearStart,
   zonedToInstant,
@@ -40,7 +45,50 @@ export const COMPLAINT_MAX_RATING = DEFAULT_SETTINGS.complaintMaxRating;
 
 export type AnalyticsPeriod = "day" | "month" | "year";
 
-export const bookingRef = (id: string) => `MW-${id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+export { bookingRef };
+
+/** What the dashboard shows for one booking (day page, bookings page). */
+const BOOKING_ROW = {
+  customer: { select: { id: true, name: true, phoneNumber: true } },
+  vehicle: { select: { id: true, make: true, model: true, plateNumber: true, category: true } },
+  driver: { select: { id: true, fullName: true } },
+  payments: {
+    select: { id: true, amount: true, paymentMethod: true, status: true, createdAt: true },
+    orderBy: { createdAt: "desc" as const },
+  },
+} satisfies Prisma.BookingsInclude;
+
+const shapeBooking = (b: Prisma.BookingsGetPayload<{ include: typeof BOOKING_ROW }>) => ({
+  id: b.id,
+  ref: bookingRef(b.id),
+  status: b.status,
+  tripStatus: b.tripStatus,
+  bookingDate: b.bookingDate,
+  startTime: b.startTime,
+  endTime: b.endTime,
+  startPoint: b.startPoint,
+  endPoint: b.endPoint,
+  eventType: b.eventType,
+  packageId: b.packageId,
+  totalPrice: b.totalPrice,
+  packageDiscount: b.packageDiscount,
+  referralDiscount: b.referralDiscount,
+  paymentStatus: b.paymentStatus,
+  depositRequired: b.depositRequired,
+  paid: b.depositPaid,
+  payments: b.payments,
+  notes: b.notes,
+  createdAt: b.createdAt,
+  cancelledAt: b.cancelledAt,
+  depositOutcome: b.depositOutcome,
+  depositRefunded: b.depositRefunded,
+  serviceType: b.serviceType,
+  priceLines: b.priceLines,
+  customer: b.customer,
+  vehicle: { ...b.vehicle, name: vehicleName(b.vehicle) },
+  driver: b.driver,
+});
+
 
 const round = (n: number, digits = 0) => {
   const f = 10 ** digits;
@@ -93,6 +141,8 @@ export interface BookOnBehalfInput {
   endTime: string;
   startPoint?: any;
   endPoint?: any;
+  serviceType?: ServiceType;
+  destinationId?: string;
   eventType?: string;
   notes?: string;
   priceOverride?: number;
@@ -189,7 +239,48 @@ export class AdminDashboardService {
       });
     }
 
+    // Drivers who are off or on leave but still hold upcoming trips: those
+    // trips need another driver (setting the status doesn't move them).
+    const stranded = await prismaClient.bookings.groupBy({
+      by: ["driverId"],
+      where: {
+        bookingDate: { gte: today },
+        status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+        driver: { status: { in: [DriverStatus.OFF, DriverStatus.ONLEAVE] } },
+      },
+      _count: { _all: true },
+      _min: { bookingDate: true },
+    });
+    const strandedDrivers = stranded.length
+      ? await prismaClient.drivers.findMany({ where: { id: { in: stranded.map((x) => x.driverId) } }, select: { id: true, fullName: true, status: true } })
+      : [];
+
+    // Drivers with papers waiting for review.
+    const papersWaiting = await prismaClient.driverDocuments.groupBy({ by: ["driverId"], where: { status: "PENDING" }, _count: { _all: true } });
+    const papersDrivers = papersWaiting.length
+      ? await prismaClient.drivers.findMany({ where: { id: { in: papersWaiting.map((x) => x.driverId) } }, select: { id: true, fullName: true } })
+      : [];
+
     const alerts = [
+      ...papersWaiting.map((x) => ({
+        type: "documents_pending" as const,
+        severity: "warning" as const,
+        entityId: x.driverId,
+        driverName: papersDrivers.find((d) => d.id === x.driverId)?.fullName ?? "",
+        documents: x._count._all,
+      })),
+      ...stranded.map((x) => {
+        const d = strandedDrivers.find((v) => v.id === x.driverId);
+        return {
+          type: "driver_unavailable" as const,
+          severity: "danger" as const,
+          entityId: x.driverId,
+          driverName: d?.fullName ?? "",
+          driverStatus: d?.status ?? DriverStatus.OFF,
+          trips: x._count._all,
+          firstDate: x._min.bookingDate ?? today,
+        };
+      }),
       ...maintenance.map((m) => ({
         type: "maintenance" as const,
         severity: "warning" as const,
@@ -250,6 +341,7 @@ export class AdminDashboardService {
     const ids = drivers.map((d) => d.id);
     const userIds = drivers.map((d) => d.userId);
 
+    const docRows = await prismaClient.driverDocuments.findMany({ where: { driverId: { in: ids } }, select: { driverId: true, type: true, status: true } });
     const [monthAgg, completedAgg, ratingAgg, complaintAgg] = await Promise.all([
       prismaClient.bookings.groupBy({
         by: ["driverId"],
@@ -294,6 +386,7 @@ export class AdminDashboardService {
           monthRevenue: m?._sum.totalPrice ?? 0,
           monthTrips: m?._count._all ?? 0,
           totalTrips: completedAgg.find((a) => a.driverId === d.id)?._count._all ?? 0,
+          documents: DriverDocumentService.summarize(docRows.filter((x) => x.driverId === d.id)),
         };
       })
       .sort((a, b) => b.monthRevenue - a.monthRevenue || b.totalTrips - a.totalTrips)
@@ -306,15 +399,7 @@ export class AdminDashboardService {
       prismaClient.bookings.findMany({
         where: { bookingDate: date, status: { not: BookingStatus.CANCELLED } },
         orderBy: { startTime: "asc" },
-        include: {
-          customer: { select: { id: true, name: true, phoneNumber: true } },
-          vehicle: { select: { id: true, make: true, model: true, plateNumber: true, category: true } },
-          driver: { select: { id: true, fullName: true } },
-          payments: {
-            select: { id: true, amount: true, paymentMethod: true, status: true, createdAt: true },
-            orderBy: { createdAt: "desc" },
-          },
-        },
+        include: BOOKING_ROW,
       }),
       prismaClient.vehicles.count(),
       prismaClient.drivers.findMany({
@@ -332,32 +417,76 @@ export class AdminDashboardService {
         vehiclesUsed: new Set(bookings.map((b) => b.vehicleId)).size,
         totalVehicles,
       },
-      bookings: bookings.map((b) => ({
-        id: b.id,
-        ref: bookingRef(b.id),
-        status: b.status,
-        tripStatus: b.tripStatus,
-        startTime: b.startTime,
-        endTime: b.endTime,
-        startPoint: b.startPoint,
-        endPoint: b.endPoint,
-        eventType: b.eventType,
-        packageId: b.packageId,
-        totalPrice: b.totalPrice,
-        packageDiscount: b.packageDiscount,
-        referralDiscount: b.referralDiscount,
-        paymentStatus: b.paymentStatus,
-        depositRequired: b.depositRequired,
-        paid: b.depositPaid,
-        payments: b.payments,
-        customer: b.customer,
-        vehicle: { ...b.vehicle, name: vehicleName(b.vehicle) },
-        driver: b.driver,
-      })),
+      bookings: bookings.map(shapeBooking),
       drivers: drivers.map((d) => {
         const trips = bookings.filter((b) => b.driverId === d.id).map((b) => b.startTime);
         return { id: d.id, name: d.fullName, status: d.status, trips };
       }),
+    };
+  }
+
+  // -------------------------------------------------------- bookings page
+  /**
+   * Bookings page: search by reference (MW-1A2B3C), customer name or phone,
+   * filtered by status, payment and dates. Upcoming = today onwards, soonest
+   * first; past = before today, latest first. `counts` are per status for the
+   * same search, so the tabs show how many each would give.
+   */
+  public static async bookings(params: {
+    q?: string;
+    status?: string;
+    paymentStatus?: string;
+    scope?: string;
+    from?: string;
+    to?: string;
+    page: number;
+    limit: number;
+  }) {
+    const today = dateKey();
+    const where: Prisma.BookingsWhereInput = {};
+    const and: Prisma.BookingsWhereInput[] = [];
+    const scope = params.scope === "past" || params.scope === "all" ? params.scope : "upcoming";
+    if (scope === "upcoming") and.push({ bookingDate: { gte: today } });
+    if (scope === "past") and.push({ bookingDate: { lt: today } });
+    if (params.from && isDateKey(params.from)) and.push({ bookingDate: { gte: params.from } });
+    if (params.to && isDateKey(params.to)) and.push({ bookingDate: { lte: params.to } });
+    if (params.paymentStatus && (Object.values(PaymentStatus) as string[]).includes(params.paymentStatus)) {
+      and.push({ paymentStatus: params.paymentStatus as PaymentStatus });
+    }
+    const q = (params.q ?? "").trim();
+    if (q) {
+      const ref = q.replace(/^#?MW-?/i, "");
+      const digits = q.replace(/\D/g, "");
+      const or: Prisma.BookingsWhereInput[] = [{ customer: { name: { contains: q, mode: "insensitive" } } }];
+      if (/^[0-9a-f]{3,8}$/i.test(ref)) or.push({ id: { startsWith: ref.toLowerCase() } });
+      if (digits.length >= 4) {
+        // 01012345678 is stored as +201012345678.
+        const local = digits.replace(/^0020/, "").replace(/^20(?=1)/, "").replace(/^0(?=1)/, "");
+        or.push({ customer: { phoneNumber: { contains: local } } });
+      }
+      and.push({ OR: or });
+    }
+    if (and.length) where.AND = and;
+    const status = params.status && (Object.values(BookingStatus) as string[]).includes(params.status) ? (params.status as BookingStatus) : undefined;
+    const listWhere: Prisma.BookingsWhereInput = status ? { ...where, status } : where;
+    const order: Prisma.SortOrder = scope === "upcoming" ? "asc" : "desc";
+
+    const [rows, total, byStatus] = await Promise.all([
+      prismaClient.bookings.findMany({
+        where: listWhere,
+        orderBy: [{ bookingDate: order }, { startTime: order }],
+        skip: (params.page - 1) * params.limit,
+        take: params.limit,
+        include: BOOKING_ROW,
+      }),
+      prismaClient.bookings.count({ where: listWhere }),
+      prismaClient.bookings.groupBy({ by: ["status"], where, _count: { _all: true } }),
+    ]);
+    const counts = Object.fromEntries(Object.values(BookingStatus).map((st) => [st, byStatus.find((x) => x.status === st)?._count._all ?? 0]));
+    return {
+      items: rows.map(shapeBooking),
+      counts,
+      pagination: { total, page: params.page, limit: params.limit, totalPages: Math.ceil(total / params.limit) },
     };
   }
 
@@ -384,7 +513,7 @@ export class AdminDashboardService {
     const now = Date.now();
     return rows.map((b) => {
       const scheduledStart = zonedToInstant(b.bookingDate, b.startTime).getTime();
-      const scheduledEnd = zonedToInstant(b.bookingDate, b.endTime || b.startTime).getTime();
+      const scheduledEnd = scheduledStart + tripMinutes(b.startTime, b.endTime || b.startTime) * 60_000;
       const plannedMinutes =
         b.durationMinutes > 0 ? b.durationMinutes : Math.max(15, (scheduledEnd - scheduledStart) / 60_000);
       const startedAt = b.tripStartedAt?.getTime() ?? scheduledStart;
@@ -662,6 +791,8 @@ export class AdminDashboardService {
         endTime: input.endTime,
         startPoint: input.startPoint,
         endPoint: input.endPoint,
+        serviceType: input.serviceType,
+        destinationId: input.destinationId,
         eventType: input.eventType,
         notes: input.notes,
       },

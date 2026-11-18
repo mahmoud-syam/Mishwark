@@ -155,3 +155,32 @@ enum AuditAction {
   UPDATE
   DELETE
 }
+
+/// What happened to the paid deposit when a booking was cancelled.
+enum DepositOutcome {
+  REFUNDED
+  KEPT
+}
+
+/// How a booking is priced.
+enum ServiceType {
+  WEDDING
+  TRIP
+  VIP
+}
+
+/// Papers a driver uploads.
+enum DriverDocumentType {
+  NATIONAL_ID_FRONT
+  NATIONAL_ID_BACK
+  LICENSE_FRONT
+  LICENSE_BACK
+  CRIMINAL_RECORD
+}
+
+/// Review state of a driver document.
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}

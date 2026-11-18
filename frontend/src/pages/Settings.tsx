@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -27,6 +28,17 @@ const GROUPS: { title: string; tag: string; fields: FieldDef[] }[] = [
       { key: "depositRate", label: "نسبة العربون", unit: "%", min: 0, max: 100, help: "من إجمالي سعر الرحلة. الحجز بيتأكد لوحده لما العربون يتدفع." },
       { key: "bookingBufferMinutes", label: "الفاصل بين رحلتين", unit: "دقيقة", min: 0, max: 720, int: true, help: "أقل وقت فاضي لازم يكون بين رحلتين لنفس العربية أو السائق." },
       { key: "tripEarlyStartMinutes", label: "السائق يبدأ الرحلة قبل ميعادها بـ", unit: "دقيقة", min: 0, max: 1440, int: true, help: "أقصى وقت يقدر السائق يبدأ فيه الرحلة قبل ميعادها." },
+      { key: "minTripMinutes", label: "أقل مدة للرحلة", unit: "دقيقة", min: 0, max: 720, int: true, help: "الحجز اللي أقصر من كده بيترفض. 0 = مفيش حد أدنى." },
+      { key: "maxAdvanceBookingDays", label: "أقصى مدة للحجز مقدمًا", unit: "يوم", min: 1, max: 1095, int: true, help: "العميل يقدر يحجز لحد المدة دي من النهارده." },
+      { key: "overnightLatestEndHour", label: "الرحلة بعد نص الليل تخلص بحد أقصى الساعة", unit: "صباحًا", min: 0, max: 12, int: true, help: "رحلة زي 10 بالليل لـ 1 الصبح. 6 يعني لازم تخلص قبل 6 الصبح. 0 = ممنوع الرحلات بعد نص الليل." },
+    ],
+  },
+  {
+    title: "الإلغاء والفريق",
+    tag: "العربون والباسوورد المؤقت",
+    fields: [
+      { key: "freeCancellationHours", label: "الإلغاء المجاني قبل الرحلة بـ", unit: "ساعة", min: 0, max: 720, int: true, help: "العميل اللي يلغي قبل الرحلة بالمدة دي أو أكتر بياخد العربون في محفظته. بعدها العربون بيتحجز (والزيادة فوقه بترجع). الأدمن يقدر يقرر غير كده وقت الإلغاء." },
+      { key: "tempPasswordDays", label: "صلاحية الباسوورد المؤقت لعضو الفريق", unit: "يوم", min: 1, max: 90, int: true, help: "بعدها الباسوورد المؤقت مايشتغلش والـ Super Admin يعمل واحد جديد." },
     ],
   },
   {
@@ -159,7 +171,7 @@ export default function Settings() {
 
   const actions = canEdit && (
     <>
-      {saved && changeCount === 0 && <span className="fade-in text-[11px] text-mint">اتحفظ ✓</span>}
+      {saved && changeCount === 0 && <span className="fade-in text-[13px] text-mint">اتحفظ ✓</span>}
       {changeCount > 0 && (
         <Button variant="ghost" size="sm" onClick={discard} disabled={save.isPending}>
           إلغاء التغييرات
@@ -173,12 +185,12 @@ export default function Settings() {
 
   return (
     <Page>
-      <PageHeader back="/" eyebrow="Super Admin" title="الإعدادات" actions={actions} />
+      <PageHeader eyebrow="قواعد الحجز والأسعار والتنبيهات" title="الإعدادات" actions={actions} />
 
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
       {save.error && <ErrorBox error={errorMessage(save.error)} />}
       {!canEdit && q.data && (
-        <div className="rounded-xl border border-line bg-raised px-4 py-3 text-[12px] text-muted">
+        <div className="rounded-xl border border-line bg-raised px-4 py-3 text-[14px] text-muted">
           للعرض بس. تعديل الإعدادات محتاج صلاحية <span dir="ltr">settings:manage</span> (الـ Super Admin عنده الصلاحية دي).
         </div>
       )}
@@ -214,10 +226,10 @@ export default function Settings() {
                             aria-invalid={!!errors[f.key]}
                             onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                           />
-                          <span className="shrink-0 text-[11px] text-muted">{f.unit}</span>
+                          <span className="shrink-0 text-[13px] text-muted">{f.unit}</span>
                         </span>
                       </Field>
-                      <p className="px-1 text-[10.5px] leading-relaxed text-muted">
+                      <p className="px-1 text-[12px] leading-relaxed text-muted">
                         {f.help} <span className="text-muted/70">الأصلي: {def.toLocaleString("en")}</span>
                       </p>
                     </div>
@@ -227,12 +239,15 @@ export default function Settings() {
             ))}
           </div>
 
-          <Panel title="الأسعار حسب نوع العربية" tag="بالجنيه · لو العربية ليها سعر خاص بيها بيتحسب هو">
+          <div className="rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-[14px] text-cream">
+            أسعار الزفاف والمشاوير والـ VIP بقت في <Link to="/pricing" className="font-bold text-gold underline underline-offset-4">صفحة الأسعار</Link>. الجدول اللي تحت ده للتسعير القديم بالكيلو، وبيستخدمه بس أي نسخة قديمة من التطبيق لسه ما اتحدّثتش.
+          </div>
+          <Panel title="التسعير القديم بالكيلو (للنسخ القديمة من التطبيق)" tag="بالجنيه · لو العربية ليها سعر خاص بيها بيتحسب هو">
             <Table head={["النوع", ...RATE_FIELDS.map((r) => r.label)]}>
               {Object.keys(rates).map((cat) => (
                 <tr key={cat}>
                   <Td className="font-bold">
-                    {VEHICLE_CATEGORY[cat] ?? cat} <span className="text-[10px] font-normal text-muted" dir="ltr">{cat}</span>
+                    {VEHICLE_CATEGORY[cat] ?? cat} <span className="text-[12px] font-normal text-muted" dir="ltr">{cat}</span>
                   </Td>
                   {RATE_FIELDS.map((rf) => {
                     const k = `${cat}.${rf.key}`;
@@ -241,7 +256,7 @@ export default function Settings() {
                     return (
                       <Td key={rf.key}>
                         <input
-                          className={`ltr w-24 rounded-lg border bg-raised px-2 py-1.5 text-right text-[12px] font-bold text-cream outline-none focus:border-gold/60 ${errors[k] ? "border-wine" : changed ? "border-gold/70" : "border-line"}`}
+                          className={`ltr w-24 rounded-lg border bg-raised px-2 py-1.5 text-right text-[14px] font-bold text-cream outline-none focus:border-gold/60 ${errors[k] ? "border-wine" : changed ? "border-gold/70" : "border-line"}`}
                           inputMode="decimal"
                           value={rates[cat][rf.key]}
                           disabled={!canEdit}
@@ -256,7 +271,7 @@ export default function Settings() {
             </Table>
           </Panel>
 
-          <p className="text-[11px] leading-relaxed text-muted">
+          <p className="text-[13px] leading-relaxed text-muted">
             التغيير بيسري على الحجوزات الجديدة بس. الحجوزات الموجودة بتفضل بسعرها وعربونها. كل تعديل بيتسجل في سجل التوثيق.
           </p>
         </>

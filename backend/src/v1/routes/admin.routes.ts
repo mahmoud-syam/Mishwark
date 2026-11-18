@@ -18,6 +18,7 @@ import {
   getOverview,
   getDriversSummary,
   getDay,
+  searchBookings,
   getLiveTrips,
   getDriverAnalytics,
   updateDriverCommission,
@@ -52,6 +53,8 @@ import {
   cancelMaintenance,
 } from "../controllers/fleet.controller";
 import { PERMISSIONS } from "../constants/roles";
+import { adminDocumentFile, adminDriverDocuments, reviewDocument } from "../controllers/driver-document.controller";
+import { createDestination, deleteDestination, listDestinations, updateDestination } from "../controllers/destination.controller";
 import { createTeamMember, disableTeamMember, enableTeamMember, listTeam, requireSuperAdmin, resetTeamMember2FA, resetTeamMemberPassword, setTeamMemberRole } from "../controllers/team.controller";
 
 const adminRouter: Router = Router();
@@ -62,6 +65,7 @@ adminRouter.get("/stats/summary", errorHandler(getDashboardStats));
 adminRouter.get("/bookings/calendar", errorHandler(getBookingsCalendar));
 adminRouter.get("/bookings", errorHandler(getBookingsByDate));
 adminRouter.get("/bookings/all", errorHandler(getAllBookings));
+adminRouter.get("/bookings/search", errorHandler(searchBookings));
 adminRouter.get("/vehicles/status", errorHandler(getFleetStatus));
 adminRouter.get("/drivers/:id/stats", errorHandler(getDriverStats));
 adminRouter.get("/drivers", errorHandler(listDrivers));
@@ -114,5 +118,14 @@ adminRouter.post("/team/:id/enable", requireSuperAdmin, errorHandler(enableTeamM
 
 // Changing business settings needs settings:manage (Super Admin by default).
 adminRouter.put("/settings", requirePermission(PERMISSIONS.SETTINGS_MANAGE), errorHandler(updateSystemSettings));
+// Driver papers: view and approve / reject.
+adminRouter.get("/drivers/:id/documents", errorHandler(adminDriverDocuments));
+adminRouter.get("/driver-documents/:id/file", errorHandler(adminDocumentFile));
+adminRouter.patch("/driver-documents/:id", errorHandler(reviewDocument));
+// Private-trip destinations and their prices (Pricing page).
+adminRouter.get("/destinations", errorHandler(listDestinations));
+adminRouter.post("/destinations", requirePermission(PERMISSIONS.SETTINGS_MANAGE), errorHandler(createDestination));
+adminRouter.patch("/destinations/:id", requirePermission(PERMISSIONS.SETTINGS_MANAGE), errorHandler(updateDestination));
+adminRouter.delete("/destinations/:id", requirePermission(PERMISSIONS.SETTINGS_MANAGE), errorHandler(deleteDestination));
 
 export default adminRouter;

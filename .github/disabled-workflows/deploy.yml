@@ -1,11 +1,16 @@
 # Deploys the API (backend/) and the admin dashboard build (frontend/dist) to the VPS.
-# Still disabled: uncomment, check the branch name (the default branch is `main`),
-# and add the secrets HOST, USERNAME, SSH_KEY and DATABASE_URL.
+# Still disabled. It lives outside .github/workflows because GitHub reports a
+# fully commented-out workflow as a failed run on every push. To turn it on:
+# move it back to .github/workflows/, uncomment it, check the branch name (the
+# default branch is `main`), and add the secrets HOST, USERNAME, SSH_KEY and
+# DATABASE_URL.
 #
 # Layout on the server:
 #   ~/AcsWebsite/AcsWebsite-backend/            API (dist/, prisma/, package.json, .env)
 #   ~/AcsWebsite/AcsWebsite-backend/dashboard-dist/   dashboard build
 # Set DASHBOARD_DIST=./dashboard-dist in the server's .env.
+# Drivers' papers live in DRIVER_DOCUMENTS_DIR (default ./storage/driver-documents):
+# keep that folder out of the files the deploy replaces, and back it up.
 
 # name: Deploy to VPS
 

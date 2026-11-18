@@ -12,7 +12,10 @@ import { randomInt } from "crypto";
 import SmsService from "../services/sms.service";
 import SettingsService from "../services/settings.service";
 import { ReferralStatus } from "../../../generated/prisma";
-import { authCookieOptions, clearAuthCookieOptions } from "../utils/authCookie";
+import { appSessionDays, authCookieOptions, clearAuthCookieOptions } from "../utils/authCookie";
+import fs from "fs";
+import { imageTypeOf } from "../middlewares/multer.middleware";
+import DriverDocumentService, { SIGNUP_FIELDS } from "../services/driver-document.service";
 
 const OTP_TTL_MINUTES = Number(process.env.OTP_TTL_MINUTES ?? 5);
 const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS ?? 5);
@@ -24,7 +27,18 @@ import { ForbiddenException } from "../utils/errors";
 import { z } from "zod";
 
 export const signup = async (req: Request, res: Response, next: NextFunction) => {
+    // The profile picture, and for a driver the papers (nationalIdFront,
+    // nationalIdBack, licenseFront, licenseBack, criminalRecord) which go to the
+    // private documents folder once the account exists. Anything else is dropped.
+    const uploaded = (req.files as Express.Multer.File[] | undefined) ?? [];
+    const picture = uploaded.find((f) => f.fieldname === "pic");
+    const papers = uploaded.filter((f) => f !== picture && SIGNUP_FIELDS[f.fieldname]);
+    uploaded.filter((f) => f !== picture && !papers.includes(f)).forEach((f) => fs.rmSync(f.path, { force: true }));
+    const dropPapers = () => papers.forEach((f) => fs.rmSync(f.path, { force: true }));
     try {
+        if (picture && (!picture.mimetype.startsWith("image/") || imageTypeOf(picture.path) !== picture.mimetype)) {
+            throw new BadRequestsException("The profile picture must be a real JPG, PNG or WEBP image", ErrorCodes.UNPROCESSABLE_ENTITY);
+        }
         const safePayload = SignupSchema.safeParse(req.body);
 
         if (!safePayload.success) {
@@ -43,9 +57,7 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
             licenseExpiry,
         } = safePayload.data;
 
-        const files = req.files as Express.Multer.File[] | undefined;
-        const pictureFile = files?.find(f => f.fieldname === "pic");
-        const uploadedPicPath = pictureFile ? `/uploads/employees/${pictureFile.filename}` : pic;
+        const uploadedPicPath = picture ? `/uploads/employees/${picture.filename}` : pic;
 
         const normalizedEmail = email.toLowerCase().trim();
         const normalizedCode = code?.trim() || null;
@@ -89,6 +101,7 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
         const requestedRole = normalizeRoleName(role) ?? USER_ROLES.CUSTOMER;
         const roleRecord = await findOrCreateRole(requestedRole);
 
+        let createdDriverId: string | null = null;
         const user = await prismaClient.$transaction(async (prisma) => {
             const createdUser = await prisma.users.create({
                 data: {
@@ -113,7 +126,7 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
             // Conversations.driverId both reference Drivers.id, so a user with
             // the Driver role but no profile 404s on every /driver/* endpoint.
             if (requestedRole === USER_ROLES.DRIVER) {
-                await prisma.drivers.create({
+                createdDriverId = (await prisma.drivers.create({
                     data: {
                         userId: createdUser.id,
                         commissionRate: (await SettingsService.get()).defaultCommissionRate,
@@ -127,7 +140,8 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
                             }
                             : undefined,
                     },
-                });
+                    select: { id: true },
+                })).id;
             }
 
             // Signing up with a code used to set referredById only, so no
@@ -147,12 +161,29 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
             return createdUser;
         });
 
+        // A driver's papers, checked and stored privately. A bad file doesn't undo
+        // the signup: it is reported so the app can upload it again.
+        const documents: { field: string; status: string; error?: string }[] = [];
+        if (createdDriverId) {
+            for (const f of papers) {
+                try {
+                    await DriverDocumentService.save(createdDriverId, SIGNUP_FIELDS[f.fieldname], f);
+                    documents.push({ field: f.fieldname, status: "PENDING" });
+                } catch (err) {
+                    documents.push({ field: f.fieldname, status: "FAILED", error: (err as Error).message });
+                }
+            }
+        } else dropPapers();
+
         res.status(201).json({
             message: "User created successfully",
             user: { ...user, role: requestedRole },
+            ...(createdDriverId && { documents }),
         });
 
     } catch (error) {
+        if (picture) fs.rmSync(picture.path, { force: true });
+        dropPapers();
         next(error);
     }
 }
@@ -236,6 +267,10 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         if (user.disabledAt) {
             throw new ForbiddenException("This account is disabled. Contact your Super Admin");
         }
+        // A temporary password only works for a few days (Settings).
+        if (user.mustChangePassword && user.tempPasswordExpiresAt && user.tempPasswordExpiresAt.getTime() < Date.now()) {
+            throw new ForbiddenException("This temporary password has expired. Ask your Super Admin for a new one");
+        }
         SignInGuard.succeed(req, email);
 
         // Mandatory: a temporary password is replaced, then 2FA is set up or checked.
@@ -256,7 +291,7 @@ export const setPasswordLogin = async (req: Request, res: Response, next: NextFu
         }
         const updated = await prismaClient.users.update({
             where: { id: user.id },
-            data: { password: hashSync(newPassword, 10), mustChangePassword: false, tokenVersion: { increment: 1 } },
+            data: { password: hashSync(newPassword, 10), mustChangePassword: false, tempPasswordExpiresAt: null, tokenVersion: { increment: 1 } },
         });
         return res.status(200).json(await nextSignInStep(updated));
     } catch (error) {
@@ -313,19 +348,85 @@ export const verify2FALogin = async (req: Request, res: Response, next: NextFunc
 };
 
 /** The signed-in user, as resolved by authMiddleware (role re-read from the DB). */
+const DASHBOARD_NO_OTP = "Dashboard accounts sign in with email, password and 2FA";
+
+/** A customer who signed up with the phone number only has it as their name. */
+const profileComplete = (u: { name: string; phoneNumber: string | null }) => !!u.name.trim() && u.name !== u.phoneNumber;
+
+const meShape = (u: { id: string; name: string; email: string | null; phoneNumber: string | null; preferredLanguage?: string }, role: unknown) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    phoneNumber: u.phoneNumber,
+    preferredLanguage: u.preferredLanguage ?? "ar",
+    role,
+    profileComplete: profileComplete(u),
+});
+
 export const me = async (req: Request, res: Response) => {
     const u = req.user!;
-    res.status(200).json({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        phoneNumber: u.phoneNumber,
-        role: u.role,
-    });
+    const row = await prismaClient.users.findUnique({ where: { id: u.id }, select: { preferredLanguage: true } });
+    res.status(200).json(meShape({ ...(u as any), preferredLanguage: row?.preferredLanguage }, u.role));
+};
+
+const UpdateMeSchema = z
+    .object({
+        name: z.string().trim().min(2, "Name is too short").max(80),
+        email: z.union([z.string().trim().toLowerCase().email("Invalid email"), z.null()]),
+        preferredLanguage: z.enum(["ar", "en"]),
+    })
+    .partial()
+    .strict();
+
+/**
+ * The signed-in customer or driver completes or edits their own details
+ * (name, email, language). The phone number can't change here: it is the
+ * sign-in. Dashboard accounts can't change their email (it is their sign-in;
+ * a Super Admin manages it).
+ */
+export const updateMe = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const input = UpdateMeSchema.parse(req.body ?? {});
+        const u = req.user!;
+        if (input.email !== undefined && isAdminRole(u.role?.name)) {
+            throw new ForbiddenException("Dashboard accounts can't change their email here");
+        }
+        if (input.email) {
+            const taken = await prismaClient.users.findFirst({ where: { email: input.email, id: { not: u.id } }, select: { id: true } });
+            if (taken) throw new ConflictException("This email is already used by another account");
+        }
+        const updated = await prismaClient.users.update({
+            where: { id: u.id },
+            data: input,
+            select: { id: true, name: true, email: true, phoneNumber: true, preferredLanguage: true },
+        });
+        // A driver's name shows on trips from the driver record too.
+        if (input.name) await prismaClient.drivers.updateMany({ where: { userId: u.id }, data: { fullName: input.name } });
+        res.status(200).json(meShape(updated, u.role));
+    } catch (error) {
+        next(error);
+    }
 };
 
 export const logout = async (req: Request, res: Response, next: NextFunction) => {
     try {
+        // Revoke the token too, not just the cookie, so a copied token stops
+        // working. One session per account (sign-in already rotates the
+        // version), so this logs out nothing else. A stale or bad token is
+        // ignored: logout always succeeds.
+        const header = req.headers.authorization;
+        const raw = req.cookies?.token || (header?.startsWith("Bearer ") ? header.slice(7) : undefined);
+        if (raw) {
+            try {
+                const t = jwt.verify(raw, process.env.JWT_SECRET as string) as any;
+                if (t?.user?.id && typeof t.user.tokenVersion === "number") {
+                    await prismaClient.users.updateMany({
+                        where: { id: t.user.id, tokenVersion: t.user.tokenVersion },
+                        data: { tokenVersion: { increment: 1 } },
+                    });
+                }
+            } catch { /* expired or invalid: nothing to revoke */ }
+        }
         res.clearCookie("token", clearAuthCookieOptions());
         res.status(200).json({ message: "Logout successful" });
     } catch (error) {
@@ -439,8 +540,13 @@ export const otpRequest = async (req: Request, res: Response, next: NextFunction
 
         const existingUser = await prismaClient.users.findUnique({
             where: { phoneNumber },
-            select: { id: true, otpSentAt: true },
+            select: { id: true, otpSentAt: true, role: { select: { name: true } } },
         });
+        // Dashboard accounts sign in with email + password + 2FA only. An SMS
+        // code used to sign them in too, skipping the password and the 2FA.
+        if (existingUser && isAdminRole(existingUser.role?.name)) {
+            throw new ForbiddenException(DASHBOARD_NO_OTP);
+        }
 
         if (existingUser?.otpSentAt && Date.now() - existingUser.otpSentAt.getTime() < OTP_RESEND_SECONDS * 1000) {
             return res.status(429).json({
@@ -564,6 +670,9 @@ export const otpVerify = async (req: Request, res: Response, next: NextFunction)
         if (user.disabledAt) {
             throw new ForbiddenException("This account is disabled. Contact your Super Admin");
         }
+        if (isAdminRole(user.role?.name)) {
+            throw new ForbiddenException(DASHBOARD_NO_OTP);
+        }
         SignInGuard.succeed(req, phoneNumber);
 
         const updatedUser = await prismaClient.users.update({
@@ -581,15 +690,19 @@ export const otpVerify = async (req: Request, res: Response, next: NextFunction)
         // Flatten permissions to names so requirePermission does not receive
         // raw Prisma Permission objects.
         const tokenUser = buildTokenUser(updatedUser);
-        const token = jwt.sign({ user: tokenUser }, process.env.JWT_SECRET as string, { expiresIn: "24h" });
+        const days = appSessionDays();
+        const token = jwt.sign({ user: tokenUser }, process.env.JWT_SECRET as string, { expiresIn: `${days}d` });
 
-        res.cookie("token", token, authCookieOptions());
+        res.cookie("token", token, authCookieOptions(days * 86_400_000));
 
         res.status(200).json({
             message: "OTP verified successfully",
             token,
             role: tokenUser.role?.name ?? null,
-            user: tokenUser
+            user: tokenUser,
+            // false while the customer hasn't given a name yet (signed up with
+            // the phone number only): ask for it when they book.
+            profileComplete: profileComplete(updatedUser),
         });
     } catch (error) {
         next(error);

@@ -9,6 +9,14 @@ model Bookings {
   package        Packages? @relation(fields: [packageId], references: [id], onDelete: SetNull)
   packageId      String?
   eventType      String    @default("")
+  /// How the trip is priced: wedding, private trip (to a destination) or VIP.
+  /// Null = the older per-km pricing (bookings made before service types).
+  serviceType    ServiceType?
+  /// Private trip to a listed destination (null = another place).
+  destination    Destinations? @relation(fields: [destinationId], references: [id], onDelete: SetNull)
+  destinationId  String?
+  /// The price as itemised lines when booked ({ code, amount, quantity, unitPrice }).
+  priceLines     Json?
   startPoint     String    @default("")
   endPoint       String    @default("")
   routeWaypoints Json?
@@ -54,6 +62,11 @@ model Bookings {
   depositRequired        Float                    @default(0)
   depositPaid            Float                    @default(0)
   paymentStatus          PaymentStatus            @default(UNPAID)
+  // Cancellation: when, by whom, and what happened to the deposit paid.
+  cancelledAt            DateTime?
+  cancelledById          String?
+  depositOutcome         DepositOutcome?
+  depositRefunded        Float                    @default(0)
   driverNotes            String                   @default("")
   notes                  String                   @default("")
   createdAt              DateTime                 @default(now())
@@ -68,7 +81,10 @@ model Bookings {
   vehicleAvailabilities  VehicleAvailability[]
   tripLocations          TripLocations[]
 
-  @@unique([vehicleId, bookingDate, startTime])
+  // One active booking per car, day and start time. A partial unique index
+  // (cancelled bookings excluded, so a freed slot can be booked again) lives in
+  // migration 20261118090000; Prisma's schema can't express the condition.
+  @@index([vehicleId, bookingDate])
 }
 
 model TripLocations {
@@ -79,4 +95,21 @@ model TripLocations {
   longitude  Float
   speed      Float?
   recordedAt DateTime @default(now())
+}
+
+/// Private-trip destinations with a fixed price per car category (Pricing page).
+model Destinations {
+  id          String     @id @default(uuid())
+  name        String
+  latitude    Float
+  longitude   Float
+  /// Kilometres included in the price; null = Settings.tripIncludedKm.
+  includedKm  Int?
+  /// { "LUXURY": 2500, "VAN": 1800, ... }. A missing category uses Settings.tripOtherPrices.
+  prices      Json       @default("{}")
+  active      Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @default(now()) @updatedAt
+  bookings    Bookings[]
 }

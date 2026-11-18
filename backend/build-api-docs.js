@@ -30,7 +30,7 @@ function readRouteFiles() {
     .readdirSync(ROUTES_DIR)
     .filter((f) => /\.(route|routes)\.ts$/.test(f));
   // order by the namespace used at mount time in src/v1/routes/index.ts
-  const MOUNT_ORDER = ["auth", "vehicles", "booking", "driver", "review", "payment", "waitlist", "package", "chat", "referral", "wallet", "notification", "admin"];
+  const MOUNT_ORDER = ["auth", "vehicles", "booking", "driver", "review", "payment", "waitlist", "package", "chat", "referral", "wallet", "notification", "admin", "places", "pricing"];
   files.sort((a, b) => {
     const ma = MOUNT_ORDER.indexOf(a.replace(/\.(route|routes)\.ts$/, ""));
     const mb = MOUNT_ORDER.indexOf(b.replace(/\.(route|routes)\.ts$/, ""));
@@ -87,6 +87,8 @@ const MOUNTS = {
   wallet: "/wallet",
   notification: "/notifications",
   admin: "/admin",
+  places: "/places",
+  pricing: "/pricing",
 };
 
 // ---------------------------------------------------------------
@@ -107,6 +109,12 @@ const BODY_EXAMPLES = {
     // Required only when role is "driver".
     licenseNumber: "LIC-998877",
     licenseExpiry: "2030-12-31",
+    // Driver papers (optional here, can also be sent later to POST /driver/documents).
+    nationalIdFront: "",
+    nationalIdBack: "",
+    licenseFront: "",
+    licenseBack: "",
+    criminalRecord: "",
     // Optional referral code captured during signup.
     referralCode: "",
     // Legacy employee fields, still accepted for backwards compatibility.
@@ -124,8 +132,8 @@ const BODY_EXAMPLES = {
   "/auth/set-password": { loginToken: "{{loginToken}}", newPassword: "MyOwnPass#2026" },
   // The controller reads `secret` from the body, not `otpCode`.
   "/auth/2fa/verify": { token: "123456", secret: "JBSWY3DPEHPK3PXP" },
-  // Disable takes no body: it acts on the authenticated user.
-  "/auth/2fa/disable": {},
+  // The current code is required while 2FA is on.
+  "/auth/2fa/disable": { token: "123456" },
 
   // bookings
   "/bookings/estimate-distance": {
@@ -231,8 +239,12 @@ const BODY_EXAMPLES = {
   "/admin/vehicles/{id}": { basePrice: 1800, luggage: 3, features: ["تكييف", "مقاعد جلد"] },
   "/admin/vehicles/{id}/retire": { reason: "Sold" },
   "/admin/vehicles/{id}/reactivate": {},
+  "POST /admin/destinations": { name: "مطار القاهرة الدولي", latitude: 30.1219, longitude: 31.4056, includedKm: null, prices: { LUXURY: 2200, VAN: 1700 } },
+  "PATCH /admin/destinations/{id}": { prices: { CLASSIC: 2600 }, includedKm: 200 },
   "/admin/vehicles/{id}/drivers": { driverIds: ["{{driverId}}"], primaryDriverId: "{{driverId}}" },
   "/admin/vehicles/{id}/images": { images: "" },
+  "POST /driver/documents": { type: "NATIONAL_ID_FRONT", file: "" },
+  "/admin/driver-documents/{id}": { status: "REJECTED", note: "الصورة مش واضحة" },
   "/admin/vehicles/{id}/images/{imageId}/cover": {},
   "/admin/vehicles/{id}/maintenance": { maintenanceType: "صيانة دورية", startDate: "2026-12-01", endDate: "2026-12-02", cost: 1500, notes: "" },
   "/admin/maintenance/{id}/complete": { cost: 1450, notes: "Done" },
@@ -250,6 +262,9 @@ const BODY_EXAMPLES = {
 };
 
 const QUERY_EXAMPLES = {
+  "/places/search": [{ key: "q", value: "قاعة الماسة" }, { key: "lat", value: "30.0444" }, { key: "lng", value: "31.2357" }],
+  "/places/reverse": [{ key: "lat", value: "30.0749" }, { key: "lng", value: "31.3462" }],
+  "/admin/bookings/search": [{ key: "q", value: "" }, { key: "status", value: "" }, { key: "paymentStatus", value: "" }, { key: "scope", value: "upcoming" }, { key: "page", value: "1" }, { key: "limit", value: "25" }],
   "/vehicles": [{ key: "category", value: "VAN" }, { key: "status", value: "AVAILABLE" }],
   "/vehicles/{id}/availability": [{ key: "month", value: "2026-09" }],
   "/bookings/estimate-price": [],
@@ -289,30 +304,45 @@ const ID_CAPTURE = {
 const DESCRIPTIONS = {
   "/auth/login": "Email/password sign-in, step 1. Limits: 5 wrong passwords for one account from one device (IP) block that device from that account for 15 minutes (429, `errors.retryAfterSeconds`); the owner on another device is unaffected. 403 for a disabled account. Never returns a session: it answers with the next step and a `loginToken` (signed, 5 minutes): `passwordChangeRequired` (temporary password: call /auth/set-password), `twoFactorSetupRequired` (with `secret` + `qrCodeDataURL`: call /auth/verify-2fa-setup) or `twoFactorRequired` (call /auth/verify-2fa). 400 on a wrong email or password.",
   "/auth/set-password": "Sign-in step after a temporary password (accounts created or reset from the Team page): the user picks their own password (8+ characters, not the temporary one). Answers with the next step and a new `loginToken`. 400 if the pass is missing, expired or already used.",
-  "/auth/signup": "Create a customer or driver account. Multipart/form-data — fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
-  "/auth/otp/request": "Public. Sends a 4-digit OTP to the phone. In dev the code is returned as dev_otp.",
-  "/auth/otp/verify": "Public. Verifies OTP and returns a JWT. Dev bypass code: 0000. Response drives role-based home screen.",
-  "/auth/logout": "Clears the auth cookie / current session.",
+  "/auth/signup": "A driver can attach the papers here as file fields nationalIdFront, nationalIdBack, licenseFront, licenseBack, criminalRecord: they are stored privately and the response lists them in `documents` (PENDING, or FAILED with the reason; a bad file never undoes the signup). Other file fields are dropped. Create a customer or driver account. Multipart/form-data — fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
+  "/auth/otp/request": "Public. Sends a 4-digit OTP to the phone; only phoneNumber is required (a new customer can give the name later with PATCH /auth/me). 403 for dashboard accounts. 01…, +20… and 0020… are the same number (stored as +20…). In dev the code is returned as dev_otp.",
+  "/auth/otp/verify": "Public. Verifies the OTP and returns a JWT valid for APP_SESSION_DAYS (default 30) plus `profileComplete`. Dashboard accounts get 403 (they sign in with email, password and 2FA). Dev bypass code: 0000. Response drives role-based home screen.",
+  "/auth/logout": "Signs out: clears the auth cookie and revokes the token sent with the request (it gets 401 afterwards). Always 200.",
   "/auth/logout-all-devices": "Bumps tokenVersion, invalidating every session for the user.",
   "/auth/verify-2fa": "Last sign-in step when 2FA is on: `loginToken` from /auth/login plus the 6-digit code. Sets the session cookie and returns `user`. Each pass works once; a wrong code changes nothing. A bare `userId` is no longer accepted (400).",
   "/auth/verify-2fa-setup": "Last sign-in step when 2FA isn't set up yet: `loginToken` plus the code from the authenticator app. The secret is the one inside the pass (the one shown in the QR); any `secret` in the body is ignored. Sets the session cookie and returns `user`. A bare `userId` is no longer accepted (400).",
   "/auth/2fa/setup": "Returns TOTP secret + QR code data URL for authenticator enrollment.",
   "/auth/2fa/verify": "Validates an OTP to enable 2FA.",
-  "/auth/2fa/disable": "Disables 2FA for the authenticated user.",
+  "/auth/2fa/disable": "Disables 2FA for the authenticated user. Needs the current 6-digit code in `token` (400 without it).",
   "/auth/change-password/{userId}": "Needs user_password:manage. Sets a user's password (8+ characters) and optionally resets 2FA; signs the user out everywhere. Dashboard accounts (Admin, Super Admin) only by a Super Admin (403); use the Team page for them.",
   "/auth/reset-2fa/{userId}": "Needs user_password:manage. Resets a user's 2FA and signs them out everywhere. Dashboard accounts (Admin, Super Admin) only by a Super Admin (403).",
   "GET /admin/team": "Team page (Super Admin only, 403 otherwise): dashboard accounts (Admin and Super Admin) with role, `twoFactorEnabled`, `mustChangePassword` (hasn't replaced the temporary password yet) and `lastLoginAt`. Super Admins first.",
-  "POST /admin/team": "Creates a dashboard account (Super Admin only). Returns `member` and a `temporaryPassword`, shown this once (only its hash is stored). At first sign-in the member picks their own password, then sets up 2FA. 409 if the email is taken. Audit-logged.",
+  "POST /admin/team": "The temporary password works for Settings `tempPasswordDays` (default 7; `member.tempPasswordExpiresAt`); after that sign-in gets 403 \"This temporary password has expired\". Creates a dashboard account (Super Admin only). Returns `member` and a `temporaryPassword`, shown this once (only its hash is stored). At first sign-in the member picks their own password, then sets up 2FA. 409 if the email is taken. Audit-logged.",
   "/admin/team/{id}/reset-2fa": "Lost phone: the member sets up 2FA again at the next sign-in. Signs them out everywhere. Super Admin only; not on your own account (400) or on non-team accounts (404). Audit-logged.",
-  "/admin/team/{id}/reset-password": "Forgotten password: returns a new `temporaryPassword` (shown once); the old password stops working and the member picks a new one at sign-in. Signs them out everywhere. Super Admin only. Audit-logged.",
+  "/admin/team/{id}/reset-password": "The temporary password works for Settings `tempPasswordDays` (default 7; `member.tempPasswordExpiresAt`); after that sign-in gets 403 \"This temporary password has expired\". Forgotten password: returns a new `temporaryPassword` (shown once); the old password stops working and the member picks a new one at sign-in. Signs them out everywhere. Super Admin only. Audit-logged.",
   "/admin/team/{id}/disable": "Disables a team account (someone left): signed out everywhere at once, can't sign in (403 \"This account is disabled\"), history and audit entries kept. Any account but your own, Super Admins included. Super Admin only. Audit-logged.",
   "/admin/team/{id}/enable": "Enables a disabled team account again; the member signs in as before (password + 2FA). Super Admin only. Audit-logged.",
   "/admin/team/{id}/role": "Changes a member's role (ADMIN or SUPER_ADMIN). Signs them out so the new permissions apply. Super Admin only; not on your own account. Audit-logged.",
-  "/bookings/estimate-price": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount.",
+  "/bookings/estimate-price": "PUBLIC. Server-side price. Send `serviceType` (WEDDING, TRIP, VIP) with `vehicleId`: WEDDING/VIP = the car's own fixed price (or the default) covering included hours and km, plus every started extra hour (send `startTime`/`endTime`) and every extra km; TRIP = from the company (Settings origin, unless startPoint is sent) to a listed `destinationId` (fixed price per car category) or to `endPoint` (the category's \"another place\" price), plus extra km beyond the included ones. The response adds `lines` (itemised: wedding|vip|trip|trip_other, extra_hours, extra_km, package_discount, referral_discount with quantity, unitPrice, included), `bookedMinutes`, `depositRate`, `destination`, the points used and `route` (source haversine = straight-line estimate). Without serviceType the older per-km price applies. 400 for a retired car or an inactive destination.",
   "/bookings/estimate-distance": "PUBLIC. Resolves startPoint/endPoint (coordinates or a place name) into distanceKm and durationMinutes. Coordinates are passed through; free text is geocoded via OpenRouteService. Without ORS_API_KEY the server falls back to a straight-line estimate and says so in `source` and `warning`.",
   "/bookings/{id}/status": "Transitions booking status. PENDING→CONFIRMED/CANCELLED, CONFIRMED→COMPLETED/CANCELLED.",
   "/bookings/{id}/trip-status": "NOTSTARTED→INPROGRESS→ARRIVED→COMPLETED. Trip COMPLETED auto-completes the booking and releases the driver.",
-  "/bookings/{id}": "Cancels a booking (DELETE). Releases availability & driver and promotes waitlist position #1.",
+  "/bookings/{id}": "Cancels a booking (DELETE). Settles the money paid by the cancellation policy (Settings `freeCancellationHours`, default 48): cancelled that long before the start, everything paid goes back to the customer's wallet; later, the deposit is kept and anything above it goes back. An admin may send `refundDeposit: true|false` to decide either way (ignored from a customer). The booking gets `cancelledAt`, `depositOutcome` (REFUNDED, KEPT or null when nothing was paid) and `depositRefunded`; the response also has `cancellation` (paid, refund, kept). Releases availability & driver and promotes waitlist position #1. Cancelling twice changes nothing.",
+  "/bookings/{id}/cancellation": "What cancelling now would do to the money paid: `paid`, `refund` (to the wallet), `kept`, `outcome`, `freeUntil` (last moment for a full refund) and `freeCancellationHours`. Show it before the customer confirms. The booking's customer or an admin (404 otherwise).",
+  "/pricing": "PUBLIC. Every price and rule the apps need before booking: `origin` (where private trips start), `depositRate`, `wedding` and `vip` ({ defaultPrice, includedHours, includedKm, extraHourPrice, extraKmPrice }; a car's own price is `weddingPrice` / `vipPrice` on the vehicle), `trip` ({ includedKm, extraKmPrice, otherPrices per car category }) and the active `destinations` with their price per category. The final price always comes from POST /bookings/estimate-price.",
+  "GET /admin/destinations": "Pricing page: every private-trip destination (inactive too) with the prices entered (`prices`), the prices each car category actually gets (`effectivePrices`: a missing category uses Settings.tripOtherPrices), `effectiveIncludedKm` and how many bookings use it.",
+  "POST /admin/destinations": "Adds a private-trip destination (settings:manage). `prices` per car category; `includedKm` null = Settings.tripIncludedKm. Audit-logged.",
+  "PATCH /admin/destinations/{id}": "Edits a destination (settings:manage). `prices` is merged per category (send only the ones that change). `active: false` hides it from booking. Audit-logged.",
+  "DELETE /admin/destinations/{id}": "Deletes a destination nobody booked; one with bookings is switched off instead (`deactivated: true`) so history keeps it. settings:manage. Audit-logged.",
+  "GET /driver/documents": "The signed-in driver's papers: every required type (NATIONAL_ID_FRONT, NATIONAL_ID_BACK, LICENSE_FRONT, LICENSE_BACK, CRIMINAL_RECORD) with `status` MISSING, PENDING, APPROVED or REJECTED (+ `reviewNote`, the reason to show), and `summary.state` (MISSING, PENDING, REJECTED, APPROVED). 403 for non-drivers.",
+  "POST /driver/documents": "Uploads one paper as multipart/form-data: `type` + `file` (JPG, PNG, WEBP or PDF, checked by content; 10 MB, 413 above). Replaces an earlier one of that type and puts it back to review (PENDING). Stored privately, never at a public URL. 201 with the document.",
+  "/driver/documents/{id}/file": "The driver's own paper (the dashboard team can open it too); 404 for anyone else. Sent inline with Cache-Control: private, no-store.",
+  "/admin/drivers/{id}/documents": "A driver's papers with their review state (same shape as GET /driver/documents).",
+  "/admin/driver-documents/{id}/file": "Opens a driver's paper (dashboard only).",
+  "/admin/driver-documents/{id}": "Approves or rejects a paper: `{ status: APPROVED }` or `{ status: REJECTED, note }` (the reason is required and shown to the driver). Audit-logged.",
+  "/places/search": "PUBLIC. Place search for the booking map, anywhere in Egypt (OpenStreetMap through Photon). `q` (2-120 characters); optional `lat`/`lng` rank nearby places first (send the map's centre). Returns up to 8 `{ name, detail, label, latitude, longitude, kind }`; send `{ latitude, longitude, label }` as startPoint/endPoint. 502 when the provider is down (let the user drop a pin instead). Cached for a day; limited per IP (PLACES_RATE_LIMIT, default 300 per 15 minutes).",
+  "/places/reverse": "PUBLIC. The address at a pin (`lat`, `lng`, inside Egypt; 400 otherwise), from Nominatim with Photon as fallback, in Arabic. Same shape as a search result, with the pin's own coordinates. If both providers are down the label is the coordinates.",
+  "/admin/bookings/search": "Dashboard bookings page. `q` matches a reference (MW-1A2B3C), the customer's name or phone (01…, +20… or 0020…). Filters: `status`, `paymentStatus`, `scope` (upcoming = today onwards, soonest first [default]; past = latest first; all), `from`/`to` (YYYY-MM-DD), `page`, `limit` (max 100). Returns `data` (same shape as a day's bookings, plus cancellation fields), `counts` per status for the same search, and `pagination`.",
   "/driver/{id}": "PUBLIC. Returns a driver's profile by id (rating included).",
   "/referrals/{id}/complete": "PUBLIC. Credits both referrer & referee wallets when the refereed user completes their first booking.",
   "/driver/bookings": "Driver's trips. filter=today|upcoming|completed.",
@@ -350,7 +380,7 @@ const DESCRIPTIONS = {
   "/admin/vehicle-features": "Suggested feature labels for the fleet form (the defaults plus every feature already used on a car).",
   "/admin/vehicles/{id}/retire": "Takes a car out of service instead of deleting it: hidden from the app and from new bookings, history kept. Needs vehicle:manage. 409 with `errors.bookings` (the upcoming bookings) while any are pending or confirmed. Audit-logged.",
   "/admin/vehicles/{id}/reactivate": "Puts a retired car back in service. Needs vehicle:manage. Audit-logged.",
-  "/admin/vehicles/{id}/drivers": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged.",
+  "/admin/vehicles/{id}/drivers": "Sets the car's drivers (up to 10) and the main driver. Needs vehicle:manage. Only these drivers can drive the car: a booking without a driver tries the main driver first, then the others, skipping drivers off, on leave or busy. Drivers can no longer attach themselves to cars. An empty list hides the car from the app. Audit-logged. 409 with errors.bookings when a driver being removed still has upcoming trips on this car.",
   "/admin/vehicles/{id}/images": "Uploads car photos as multipart/form-data, field `images` (up to 8 per request, 12 per car). JPG, PNG or WEBP only, checked by the file's content; 5 MB each (413 over). The first photo becomes the cover. Needs vehicle:manage.",
   "/admin/vehicles/{id}/images/{imageId}": "Deletes a photo. If it was the cover, the next photo becomes the cover. Needs vehicle:manage.",
   "/admin/vehicles/{id}/images/{imageId}/cover": "Makes this photo the cover (shown first in the app). Needs vehicle:manage.",
@@ -359,12 +389,13 @@ const DESCRIPTIONS = {
   "DELETE /admin/maintenance/{id}": "Cancels maintenance that isn't done yet and frees its days. Needs vehicle:manage. Audit-logged.",
   "/admin/audit-logs": "Append-only audit trail. ?action=CREATE|UPDATE|DELETE&page=&limit=",
   "/admin/audit-logs/export": "Audit trail as an .xlsx download. ?action=",
-  "/auth/me": "The signed-in user and role (role re-read from the database).",
+  "GET /auth/me": "The signed-in user: id, name, email, phoneNumber, preferredLanguage, role (re-read from the database) and `profileComplete` (false while a customer who signed up with the phone number only has no name yet).",
+  "PATCH /auth/me": "The signed-in user completes or edits their own details: `name` (2-80), `email` (or null to clear; 409 if taken), `preferredLanguage` (ar|en). The phone number can't change here (422 for unknown fields). Dashboard accounts can't change their email here (403). Returns the GET /auth/me shape.",
   "GET /vehicles": "Cars customers can book: in service and with at least one driver (retired or driverless cars are hidden). Each car has `luggage`, `features`, photos (cover first) and a status derived for today (AVAILABLE, BOOKED or MAINTENANCE). ?category=&status=",
   "GET /vehicles/{id}": "One bookable car with photos (cover first), features and luggage. 404 if it doesn't exist, is retired or has no driver.",
   "POST /driver/vehicles": "Retired: always 403. Cars are assigned to drivers by the administration (PUT /admin/vehicles/{id}/drivers).",
   "DELETE /driver/vehicles/{vehicleId}": "Retired: always 403. Cars are assigned to drivers by the administration (PUT /admin/vehicles/{id}/drivers).",
-  "POST /bookings": "Creates a booking (PENDING). Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free.",
+  "POST /bookings": "Creates a booking (PENDING). Send `serviceType` (WEDDING, TRIP, VIP) and, for a trip, `destinationId` (then startPoint/endPoint are optional: the trip starts at the company and ends at the destination). Priced exactly like POST /bookings/estimate-price; the booking keeps `serviceType`, `destinationId` and `priceLines`. An endTime earlier than startTime means the trip ends the next morning (e.g. 22:00 to 01:00); it must end by Settings `overnightLatestEndHour` (default 06:00; 400 otherwise, and 0 turns trips past midnight off). Also 400 for a trip shorter than `minTripMinutes` (default 30), more than `maxAdvanceBookingDays` ahead (default 365), or a start more than 15 minutes in the past today. Clashes with the car, the driver or maintenance are checked across midnight. Only the car's own drivers can drive it: a chosen driver must be one of them (400 \"This driver isn't assigned to this car\"); otherwise the main driver is tried first, then the others. 400 \"This car has no driver assigned yet\", 400 on a retired car or a maintenance day, 409 when the car is too close to another trip or none of its drivers is free.",
 };
 
 const SUCCESS_RESPONSES = {
@@ -446,7 +477,7 @@ const openapiSchemas = {
   VehicleImagesBody: { type: "object", properties: { images: { type: "array", maxItems: 8, items: { type: "string", format: "binary" }, description: "JPG, PNG or WEBP, 5 MB each." } }, required: ["images"] },
   MaintenanceCreateBody: { type: "object", properties: { maintenanceType: { type: "string", maxLength: 100 }, startDate: { type: "string", format: "date" }, endDate: { type: "string", format: "date", description: "Defaults to startDate; at most 60 days." }, cost: { type: "number", minimum: 0 }, notes: { type: "string", maxLength: 500 } }, required: ["maintenanceType", "startDate"] },
   MaintenanceCompleteBody: { type: "object", properties: { cost: { type: "number", minimum: 0 }, notes: { type: "string", maxLength: 500 } } },
-  SignupBody: { type: "object", properties: { name: { type: "string" }, email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 }, pic: { type: "string" }, role: { type: "string", enum: ["customer", "driver"], default: "customer", description: "Account type. Admin roles cannot be self-assigned." }, licenseNumber: { type: "string", description: "Required when role is 'driver'." }, licenseExpiry: { type: "string", description: "Required when role is 'driver'." }, referralCode: { type: "string" }, phoneNumbers: { type: "array", items: { type: "object", properties: { number: { type: "string" } } } } }, required: ["name", "email", "password", "phoneNumbers"] },
+  SignupBody: { type: "object", properties: { name: { type: "string" }, email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 }, pic: { type: "string" }, role: { type: "string", enum: ["customer", "driver"], default: "customer", description: "Account type. Admin roles cannot be self-assigned." }, licenseNumber: { type: "string", description: "Required when role is 'driver'." }, licenseExpiry: { type: "string", description: "Required when role is 'driver'." }, nationalIdFront: { type: "string", format: "binary", description: "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`." }, nationalIdBack: { type: "string", format: "binary", description: "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`." }, licenseFront: { type: "string", format: "binary", description: "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`." }, licenseBack: { type: "string", format: "binary", description: "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`." }, criminalRecord: { type: "string", format: "binary", description: "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`." }, referralCode: { type: "string" }, phoneNumbers: { type: "array", items: { type: "object", properties: { number: { type: "string" } } } } }, required: ["name", "email", "password", "phoneNumbers"] },
   LoginBody: { type: "object", properties: { email: { type: "string", format: "email" }, password: { type: "string", minLength: 6 } }, required: ["email", "password"] },
   OtpRequest: { type: "object", properties: { phoneNumber: { type: "string", minLength: 8 } }, required: ["phoneNumber"] },
   OtpVerify: { type: "object", properties: { phoneNumber: { type: "string" }, code: { type: "string", minLength: 4, maxLength: 4 } }, required: ["phoneNumber", "code"] },
@@ -529,7 +560,7 @@ const openapiSchemas = {
   CreateBookingBody: { type: "object", properties: { customerId: { type: "string" }, vehicleId: { type: "string" }, driverId: { type: "string" }, bookingDate: { type: "string", example: "2026-09-15" }, startTime: { type: "string", example: "10:00" }, endTime: { type: "string", example: "12:00" }, startPoint: { $ref: "#/components/schemas/LocationInput" }, endPoint: { $ref: "#/components/schemas/LocationInput" }, distanceKm: { type: "number", description: "Optional hint. Recomputed server-side and never priced." }, durationMinutes: { type: "number", description: "Optional hint. Recomputed server-side and never priced." }, notes: { type: "string" }, driverNotes: { type: "string" }, packageId: { type: "string" }, eventType: { type: "string" }, isPeakHour: { type: "boolean" }, surgeMultiplier: { type: "number", deprecated: true, description: "Ignored. The server applies the peak surge from Settings when isPeakHour is true." } }, required: ["vehicleId", "bookingDate", "startTime", "endTime", "startPoint", "endPoint"] },
   UpdateBookingStatusBody: { type: "object", properties: { status: { type: "string", enum: ["PENDING", "CONFIRMED", "COMPLETED", "CANCELLED"] } }, required: ["status"] },
   UpdateTripStatusBody: { type: "object", properties: { tripStatus: { type: "string", enum: ["NOTSTARTED", "INPROGRESS", "ARRIVED", "COMPLETED"] } }, required: ["tripStatus"] },
-  CancelBookingBody: { type: "object", properties: { reason: { type: "string" } } },
+  CancelBookingBody: { type: "object", properties: { reason: { type: "string" }, refundDeposit: { type: "boolean", description: "Admin only: refund everything paid (true) or keep the deposit (false), whatever the policy says" } } },
   UpdateDriverProfileBody: { type: "object", properties: { fullName: { type: "string" }, licenseNumber: { type: "string" }, licenseExpiry: { type: "string" }, pic: { type: "string" } } },
   DriverStatusBody: { type: "object", properties: { status: { type: "string", enum: ["ACTIVE", "OFF", "ONLEAVE"] } }, required: ["status"] },
   AssignVehicleBody: { type: "object", properties: { vehicleId: { type: "string" }, isPrimary: { type: "boolean" } }, required: ["vehicleId"] },
@@ -544,7 +575,7 @@ const openapiSchemas = {
   CompleteReferralBody: { type: "object", properties: { bookingId: { type: "string" } }, required: ["bookingId"] },
   WalletOperationBody: { type: "object", properties: { amount: { type: "number", minimum: 1 }, type: { type: "string", enum: ["REFERRAL_REWARD", "REFUND", "MANUAL_ADJUSTMENT", "PAYMENT_DEDUCTION", "DEPOSIT"] }, description: { type: "string" } }, required: ["amount", "type"] },
   UpdateUserRoleBody: { type: "object", properties: { userId: { type: "string" }, roleId: { type: "string" } }, required: ["userId", "roleId"] },
-  SystemSettingsBody: { type: "object", additionalProperties: false, properties: { depositRate: { type: "number", minimum: 0, maximum: 100, description: "Percent of the total price" }, bookingBufferMinutes: { type: "integer", minimum: 0, maximum: 720 }, tripEarlyStartMinutes: { type: "integer", minimum: 0, maximum: 1440 }, defaultCommissionRate: { type: "number", minimum: 0, maximum: 100 }, referralRewardAmount: { type: "number", minimum: 0 }, peakSurgeMultiplier: { type: "number", minimum: 1, maximum: 5 }, vipSpendThreshold: { type: "number", minimum: 0 }, delayAlertMinutes: { type: "integer", minimum: 1, maximum: 240 }, punctualityGraceMinutes: { type: "integer", minimum: 0, maximum: 240 }, complaintMaxRating: { type: "integer", minimum: 1, maximum: 4 }, maintenanceAlertDays: { type: "integer", minimum: 1, maximum: 90 }, categoryRates: { type: "object", description: "Only the categories to change", properties: { CAR: { type: "object", properties: { basePrice: { type: "number", minimum: 0 }, pricePerKm: { type: "number", minimum: 0 }, pricePerHour: { type: "number", minimum: 0 } } }, VAN: { type: "object", properties: { basePrice: { type: "number", minimum: 0 }, pricePerKm: { type: "number", minimum: 0 }, pricePerHour: { type: "number", minimum: 0 } } }, BUS: { type: "object", properties: { basePrice: { type: "number", minimum: 0 }, pricePerKm: { type: "number", minimum: 0 }, pricePerHour: { type: "number", minimum: 0 } } }, TRUCK: { type: "object", properties: { basePrice: { type: "number", minimum: 0 }, pricePerKm: { type: "number", minimum: 0 }, pricePerHour: { type: "number", minimum: 0 } } }, CLASSIC: { type: "object", properties: { basePrice: { type: "number", minimum: 0 }, pricePerKm: { type: "number", minimum: 0 }, pricePerHour: { type: "number", minimum: 0 } } }, LUXURY: { type: "object", properties: { basePrice: { type: "number", minimum: 0 }, pricePerKm: { type: "number", minimum: 0 }, pricePerHour: { type: "number", minimum: 0 } } } } }, performanceHistoryVisible: { type: "boolean" }, evaluationsVisible: { type: "boolean" }, selfAppraisalsVisible: { type: "boolean" } } },
+  SystemSettingsBody: { type: "object", additionalProperties: false, properties: { depositRate: { type: "number", minimum: 0, maximum: 100, description: "Percent of the total price" }, bookingBufferMinutes: { type: "integer", minimum: 0, maximum: 720 }, tripEarlyStartMinutes: { type: "integer", minimum: 0, maximum: 1440 }, defaultCommissionRate: { type: "number", minimum: 0, maximum: 100 }, referralRewardAmount: { type: "number", minimum: 0 }, peakSurgeMultiplier: { type: "number", minimum: 1, maximum: 5 }, vipSpendThreshold: { type: "number", minimum: 0 }, delayAlertMinutes: { type: "integer", minimum: 1, maximum: 240 }, punctualityGraceMinutes: { type: "integer", minimum: 0, maximum: 240 }, complaintMaxRating: { type: "integer", minimum: 1, maximum: 4 }, maintenanceAlertDays: { type: "integer", minimum: 1, maximum: 90 }, categoryRates: { type: "object", description: "Only the categories to change", properties: { CAR: { type: "object", properties: { basePrice: { type: "number", minimum: 0 }, pricePerKm: { type: "number", minimum: 0 }, pricePerHour: { type: "number", minimum: 0 } } }, VAN: { type: "object", properties: { basePrice: { type: "number", minimum: 0 }, pricePerKm: { type: "number", minimum: 0 }, pricePerHour: { type: "number", minimum: 0 } } }, BUS: { type: "object", properties: { basePrice: { type: "number", minimum: 0 }, pricePerKm: { type: "number", minimum: 0 }, pricePerHour: { type: "number", minimum: 0 } } }, TRUCK: { type: "object", properties: { basePrice: { type: "number", minimum: 0 }, pricePerKm: { type: "number", minimum: 0 }, pricePerHour: { type: "number", minimum: 0 } } }, CLASSIC: { type: "object", properties: { basePrice: { type: "number", minimum: 0 }, pricePerKm: { type: "number", minimum: 0 }, pricePerHour: { type: "number", minimum: 0 } } }, LUXURY: { type: "object", properties: { basePrice: { type: "number", minimum: 0 }, pricePerKm: { type: "number", minimum: 0 }, pricePerHour: { type: "number", minimum: 0 } } } } }, performanceHistoryVisible: { type: "boolean" }, evaluationsVisible: { type: "boolean" }, selfAppraisalsVisible: { type: "boolean" }, maxAdvanceBookingDays: { type: "integer", minimum: 1, maximum: 1095 }, minTripMinutes: { type: "integer", minimum: 0, maximum: 720 }, overnightLatestEndHour: { type: "integer", minimum: 0, maximum: 12, description: "Latest hour a trip past midnight may end; 0 = no trips past midnight" }, freeCancellationHours: { type: "integer", minimum: 0, maximum: 720 }, tempPasswordDays: { type: "integer", minimum: 1, maximum: 90 } } },
   // ---------- response schemas ----------
   PriceEstimate: { type: "object", properties: { success: { type: "boolean" }, data: { type: "object", properties: { basePrice: { type: "number" }, distancePrice: { type: "number" }, timePrice: { type: "number" }, surgeMultiplier: { type: "number" }, discountAmount: { type: "number" }, packageDiscount: { type: "number" }, referralDiscount: { type: "number" }, totalPrice: { type: "number" }, depositRequired: { type: "number" }, depositPaid: { type: "number", deprecated: true } } }, route: { $ref: "#/components/schemas/RouteInfo" }, comparison: { $ref: "#/components/schemas/DistanceComparison" } } },
   EstimateDistanceResponse: { type: "object", properties: { success: { type: "boolean" }, data: { $ref: "#/components/schemas/RouteInfo" } } },
@@ -917,10 +948,10 @@ const LOGIN_STEP_ROUTES = new Set(["/auth/login", "/auth/set-password"]);
 // /auth/signup is the only route mounted behind multer, so it is the only one
 // that must be described as multipart/form-data. Declaring it as JSON makes
 // multer skip req.body entirely, so every field arrives undefined.
-const MULTIPART_ROUTES = new Set(["/auth/signup", "/admin/vehicles/{id}/images"]);
+const MULTIPART_ROUTES = new Set(["/auth/signup", "/admin/vehicles/{id}/images", "POST /driver/documents", "/driver/documents"]);
 
 // File fields must be sent as multipart `file` parts, not text.
-const MULTIPART_FILE_FIELDS = { "/auth/signup": new Set(["pic"]), "/admin/vehicles/{id}/images": new Set(["images"]) };
+const MULTIPART_FILE_FIELDS = { "/auth/signup": new Set(["pic", "nationalIdFront", "nationalIdBack", "licenseFront", "licenseBack", "criminalRecord"]), "/admin/vehicles/{id}/images": new Set(["images"]), "/driver/documents": new Set(["file"]) };
 
 // Shown in the Apidog sidebar next to each folder.
 const TAG_DESCRIPTIONS = {

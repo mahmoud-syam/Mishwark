@@ -1,3 +1,5 @@
+import { ServiceType } from "../../../generated/prisma";
+import { TIME_RE } from "../utils/slots";
 import { z } from "zod";
 import { AuditAction, PaymentMethod } from "../../../generated/prisma";
 
@@ -33,17 +35,26 @@ export const bookOnBehalfSchema = z
     vehicleId: z.string().min(1),
     driverId: z.string().min(1).optional(),
     bookingDate: dateParamSchema,
-    startTime: z.string().regex(/^\d{2}:\d{2}$/),
-    endTime: z.string().regex(/^\d{2}:\d{2}$/),
-    startPoint: point,
-    endPoint: point,
+    startTime: z.string().regex(TIME_RE),
+    endTime: z.string().regex(TIME_RE),
+    startPoint: point.optional(),
+    endPoint: point.optional(),
+    serviceType: z.nativeEnum(ServiceType).optional(),
+    destinationId: z.string().min(1).optional(),
     eventType: z.string().max(100).optional(),
     notes: z.string().max(2000).optional(),
     priceOverride: z.number().min(0).max(1_000_000).optional(),
     markPaid: z.boolean().optional(),
     paymentMethod: z.nativeEnum(PaymentMethod).optional(),
   })
-  .refine((v) => v.startTime < v.endTime, { path: ["endTime"], message: "endTime must be later than startTime" });
+  // An earlier end time = ends the next morning (limit checked when booking).
+  .refine((v) => v.startTime !== v.endTime, { path: ["endTime"], message: "endTime must be different from startTime" })
+  // A trip starts at the company by default and can end at a listed destination;
+  // everything else needs both points.
+  .refine((v) => (v.serviceType === ServiceType.TRIP ? !!(v.destinationId || v.endPoint) : !!(v.startPoint && v.endPoint)), {
+    path: ["endPoint"],
+    message: "Provide startPoint and endPoint, or a destination for a private trip",
+  });
 
 export const auditActionSchema = z
   .string()

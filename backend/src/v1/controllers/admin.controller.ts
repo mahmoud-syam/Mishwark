@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import AdminService from "../services/admin.service";
-import { paramStr, queryNum, queryStr } from "../utils/routeParams";
+import { paramStr, queryNum, queryStr, queryLimit } from "../utils/routeParams";
 import AuditService from "../services/audit.service";
 import SettingsService, { updateSettingsSchema } from "../services/settings.service";
 import prismaClient from "../utils/prismaClientHelper";
@@ -23,7 +23,7 @@ export const getBookingsByDate = async (req: Request, res: Response) => {
   const result = await AdminService.getBookingsByDate(
     queryStr(req.query.date) as string,
     queryNum(req.query.page, 1),
-    queryNum(req.query.limit, 20)
+    queryLimit(req.query.limit, 20)
   );
   res.status(200).json({ success: true, data: result.items, pagination: result.pagination });
 };
@@ -41,7 +41,7 @@ export const getDriverStats = async (req: Request, res: Response) => {
 export const listUsers = async (req: Request, res: Response) => {
   const result = await AdminService.listUsers({
     page: queryNum(req.query.page, 1),
-    limit: queryNum(req.query.limit, 20),
+    limit: queryLimit(req.query.limit, 20),
     role: queryStr(req.query.role),
   });
   res.status(200).json({ success: true, data: result.items, pagination: result.pagination });
@@ -50,7 +50,7 @@ export const listUsers = async (req: Request, res: Response) => {
 export const listDrivers = async (req: Request, res: Response) => {
   const result = await AdminService.listDrivers({
     page: queryNum(req.query.page, 1),
-    limit: queryNum(req.query.limit, 20),
+    limit: queryLimit(req.query.limit, 20),
     status: queryStr(req.query.status),
   });
   res.status(200).json({ success: true, data: result.items, pagination: result.pagination });
@@ -110,6 +110,24 @@ const SETTING_LABELS: Record<string, string> = {
   punctualityGraceMinutes: "سماحية التأخير في البدء (دقيقة)",
   complaintMaxRating: "تقييم الشكوى (أقل من أو يساوي)",
   maintenanceAlertDays: "تنبيه الصيانة (يوم)",
+  maxAdvanceBookingDays: "أقصى حجز مقدمًا (يوم)",
+  minTripMinutes: "أقل مدة للرحلة (دقيقة)",
+  overnightLatestEndHour: "آخر ساعة للرحلات بعد نص الليل",
+  freeCancellationHours: "الإلغاء المجاني قبلها بـ (ساعة)",
+  tempPasswordDays: "صلاحية الباسورد المؤقت (يوم)",
+  weddingDefaultPrice: "سعر الزفاف الافتراضي",
+  weddingIncludedHours: "ساعات الزفاف المشمولة",
+  weddingIncludedKm: "كيلومترات الزفاف المشمولة",
+  weddingExtraHourPrice: "سعر ساعة الزفاف الزيادة",
+  weddingExtraKmPrice: "سعر كيلو الزفاف الزيادة",
+  vipDefaultPrice: "سعر VIP الافتراضي",
+  vipIncludedHours: "ساعات VIP المشمولة",
+  vipIncludedKm: "كيلومترات VIP المشمولة",
+  vipExtraHourPrice: "سعر ساعة VIP الزيادة",
+  vipExtraKmPrice: "سعر كيلو VIP الزيادة",
+  tripIncludedKm: "كيلومترات المشوار المشمولة",
+  tripExtraKmPrice: "سعر كيلو المشوار الزيادة",
+  originLabel: "نقطة بداية المشاوير",
   performanceHistoryVisible: "performanceHistoryVisible",
   evaluationsVisible: "evaluationsVisible",
   selfAppraisalsVisible: "selfAppraisalsVisible",
@@ -126,6 +144,9 @@ const describeSettingsChange = (before: any, after: any): string => {
     for (const f of ["basePrice", "pricePerKm", "pricePerHour"]) {
       if (b[f] !== a[f]) parts.push(`سعر ${cat} ${f}: ${b[f]} → ${a[f]}`);
     }
+  }
+  for (const cat of Object.keys(after.tripOtherPrices ?? {})) {
+    if (before.tripOtherPrices?.[cat] !== after.tripOtherPrices[cat]) parts.push(`مشوار لوجهة تانية ${cat}: ${before.tripOtherPrices?.[cat]} → ${after.tripOtherPrices[cat]}`);
   }
   return parts.join(" · ");
 };
@@ -150,7 +171,7 @@ export const updateSystemSettings = async (req: Request, res: Response) => {
 export const getAllBookings = async (req: Request, res: Response) => {
   const result = await AdminService.getAllBookings({
     page: queryNum(req.query.page, 1),
-    limit: queryNum(req.query.limit, 20),
+    limit: queryLimit(req.query.limit, 20),
     status: queryStr(req.query.status),
     customerId: queryStr(req.query.customerId),
     driverId: queryStr(req.query.driverId),

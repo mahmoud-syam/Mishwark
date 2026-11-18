@@ -11,7 +11,13 @@ import {
   NotificationChannel,
   NotificationStatus,
   PaymentStatus,
+  DepositOutcome,
+  WalletTransactionType,
+  ServiceType,
+  Prisma,
 } from "../../../generated/prisma";
+import { bookingRef } from "../utils/bookingRef";
+import ServicePricing, { priceService } from "./service-pricing.service";
 import {
   BadRequestException,
   ConflictException,
@@ -22,26 +28,17 @@ import { PricingService, calculateEstimatedPrice } from "./pricing.service";
 import MapsService, { LocationInput, RouteResult, toCoordinates } from "./maps.service";
 import { getDriverIdForUser } from "./role.service";
 import { isAdminRole, normalizeRoleName, USER_ROLES } from "../constants/roles";
-import { dateKey, zonedToInstant } from "../utils/businessTime";
+import { addDays, dateKey, timeKey, zonedToInstant } from "../utils/businessTime";
+import { isOvernight, minutesOf, nearbyDays, slotSpan, spansClash, tripMinutes } from "../utils/slots";
 import ReferralService from "./referral.service";
 import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
 import DiscountService from "./discount.service";
 import FleetService from "./fleet.service";
 import PackageService from "./package.service";
 
+/** Same-day clash of two time slots (a slot whose end is before its start runs past midnight). */
 export function checkSlotOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
-  const toMins = (t: string) => {
-    if (!t) return 0;
-    const parts = t.split(":");
-    const h = parseInt(parts[0] || "0", 10);
-    const m = parseInt(parts[1] || "0", 10);
-    return h * 60 + m;
-  };
-  const sA = toMins(startA);
-  const eA = toMins(endA);
-  const sB = toMins(startB);
-  const eB = toMins(endB);
-  return sA < eB && sB < eA;
+  return spansClash(slotSpan(null, startA, endA), slotSpan(null, startB, endB));
 }
 
 /**
@@ -51,15 +48,9 @@ export function checkSlotOverlap(startA: string, endA: string, startB: string, e
 export const BOOKING_BUFFER_MINUTES = DEFAULT_SETTINGS.bookingBufferMinutes;
 export const TRIP_EARLY_START_MINUTES = DEFAULT_SETTINGS.tripEarlyStartMinutes;
 
-const shiftTime = (t: string, minutes: number) => {
-  const [h, m] = (t || "00:00").split(":").map((x) => parseInt(x || "0", 10));
-  const total = Math.min(24 * 60, Math.max(0, h * 60 + m + minutes));
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-};
-
 /** Overlap check that also keeps BOOKING_BUFFER_MINUTES free between trips. */
 export function checkSlotOverlapWithBuffer(startA: string, endA: string, startB: string, endB: string, buffer = BOOKING_BUFFER_MINUTES): boolean {
-  return checkSlotOverlap(startA, endA, shiftTime(startB, -buffer), shiftTime(endB, buffer));
+  return spansClash(slotSpan(null, startA, endA), slotSpan(null, startB, endB), buffer);
 }
 
 export function isValidBookingTransition(from: BookingStatus, to: BookingStatus): boolean {
@@ -101,6 +92,9 @@ export interface CreateBookingDTO {
   eventType?: string;
   isPeakHour?: boolean;
   surgeMultiplier?: number;
+  /** Wedding / private trip / VIP pricing. Absent = the older per-km price. */
+  serviceType?: ServiceType;
+  destinationId?: string;
 }
 
 /**
@@ -216,8 +210,33 @@ export class BookingService {
     if (data.bookingDate < todayStr) {
       throw new BadRequestException("Cannot book a trip for a past date");
     }
+    // Today: the start time can't be gone already (15 minutes' grace for a
+    // booking made at the door).
+    if (data.bookingDate === todayStr && minutesOf(data.startTime) < minutesOf(timeKey()) - 15) {
+      throw new BadRequestException("This start time has already passed");
+    }
 
     const settings = await SettingsService.get();
+    if (data.bookingDate > addDays(todayStr, settings.maxAdvanceBookingDays)) {
+      throw new BadRequestException(`Trips can be booked up to ${settings.maxAdvanceBookingDays} days ahead`);
+    }
+    // An end time earlier than the start means the trip ends the next morning.
+    const overnight = isOvernight(data.startTime, data.endTime);
+    if (overnight && (settings.overnightLatestEndHour === 0 || minutesOf(data.endTime) > settings.overnightLatestEndHour * 60)) {
+      throw new BadRequestException(
+        settings.overnightLatestEndHour === 0
+          ? "endTime must be later than startTime"
+          : `A trip can run past midnight but must end by ${String(settings.overnightLatestEndHour).padStart(2, "0")}:00`
+      );
+    }
+    if (tripMinutes(data.startTime, data.endTime) < settings.minTripMinutes) {
+      throw new BadRequestException(`A trip must be at least ${settings.minTripMinutes} minutes long`);
+    }
+    // Trips on the day before can run into this one, and an overnight trip
+    // reaches the next day, so clashes are checked across three days.
+    const span = slotSpan(data.bookingDate, data.startTime, data.endTime);
+    const clashes = (t: { bookingDate: string; startTime: string; endTime: string }) =>
+      spansClash(span, slotSpan(t.bookingDate, t.startTime, t.endTime), settings.bookingBufferMinutes);
 
     const created = await prismaClient.$transaction(async (tx) => {
       // 1. Vehicle check
@@ -230,7 +249,16 @@ export class BookingService {
       if (vehicle.retiredAt) {
         throw new BadRequestException("This car is no longer available");
       }
-      if (await FleetService.maintenanceOn(tx, vehicle.id, data.bookingDate)) {
+      // Service pricing decides the default points too (a trip starts at the company).
+      const service = data.serviceType
+        ? await ServicePricing.resolve(tx, { serviceType: data.serviceType, vehicleId: data.vehicleId, destinationId: data.destinationId, startPoint: data.startPoint, endPoint: data.endPoint }, settings)
+        : null;
+      const startPoint = service ? service.startPoint : data.startPoint;
+      const endPoint = service ? service.endPoint : data.endPoint;
+      if (
+        (await FleetService.maintenanceOn(tx, vehicle.id, data.bookingDate)) ||
+        (overnight && (await FleetService.maintenanceOn(tx, vehicle.id, addDays(data.bookingDate, 1))))
+      ) {
         throw new BadRequestException("This car is in maintenance on that day");
       }
 
@@ -254,10 +282,10 @@ export class BookingService {
       // 3b. The car itself first, so the customer hears the clear reason
       // ("too close to its previous trip") rather than "no driver is free".
       const carTrips = await tx.bookings.findMany({
-        where: { bookingDate: data.bookingDate, vehicleId: data.vehicleId, status: { not: BookingStatus.CANCELLED } },
-        select: { startTime: true, endTime: true },
+        where: { bookingDate: { in: nearbyDays(data.bookingDate) }, vehicleId: data.vehicleId, status: { not: BookingStatus.CANCELLED } },
+        select: { bookingDate: true, startTime: true, endTime: true },
       });
-      if (carTrips.some((t) => checkSlotOverlapWithBuffer(data.startTime, data.endTime, t.startTime, t.endTime, settings.bookingBufferMinutes))) {
+      if (carTrips.some(clashes)) {
         throw new ConflictException(`Vehicle or driver has a booking within ${settings.bookingBufferMinutes} minutes of this time slot`);
       }
 
@@ -272,13 +300,13 @@ export class BookingService {
         bookingDate: data.bookingDate,
         startTime: data.startTime,
         endTime: data.endTime,
-        overlaps: (start, end) => checkSlotOverlapWithBuffer(data.startTime, data.endTime, start, end, settings.bookingBufferMinutes),
+        overlaps: clashes,
       });
 
       // 3d. Re-check the car AND the chosen driver together
       const existingBookings = await tx.bookings.findMany({
         where: {
-          bookingDate: data.bookingDate,
+          bookingDate: { in: nearbyDays(data.bookingDate) },
           status: { not: BookingStatus.CANCELLED },
           OR: [
             { vehicleId: data.vehicleId },
@@ -288,7 +316,7 @@ export class BookingService {
       });
 
       for (const existing of existingBookings) {
-        if (checkSlotOverlapWithBuffer(data.startTime, data.endTime, existing.startTime, existing.endTime, settings.bookingBufferMinutes)) {
+        if (clashes(existing)) {
           throw new ConflictException(
             `Vehicle or driver has a booking within ${settings.bookingBufferMinutes} minutes of this time slot`
           );
@@ -301,15 +329,25 @@ export class BookingService {
       // price, so a client could book a 400 km trip for the base fee. It is now
       // always recomputed from the endpoints; the client's figure is only kept
       // alongside it for auditing.
-      const route = await MapsService.route(data.startPoint, data.endPoint);
+      const route = await MapsService.route(startPoint, endPoint);
 
       // 6. Discounts: the customer's own active package (% set by an admin) and
       // the referral discount on a referred customer's first booking.
       const pkg = await DiscountService.resolvePackage(tx, data.packageId, customerId, true);
       const referralDiscount = await DiscountService.referralDiscount(tx, customerId);
 
-      // 7. Calculate price estimate from the server-computed distance
-      const priceEstimate = calculateEstimatedPrice({
+      // 7. Price: by service type (fixed prices, itemised), or the older per-km formula.
+      const servicePrice = service
+        ? priceService({
+            ...service.input,
+            bookedMinutes: tripMinutes(data.startTime, data.endTime),
+            distanceKm: route.distanceKm,
+            packageDiscountPercent: pkg?.discountPercentage ?? 0,
+            referralDiscount,
+            depositRate: settings.depositRate,
+          })
+        : null;
+      const priceEstimate = servicePrice ? { ...servicePrice.breakdown, depositPaid: servicePrice.depositRequired } : calculateEstimatedPrice({
         packageDiscountPercent: pkg?.discountPercentage ?? 0,
         referralDiscount,
         vehicleCategory: vehicle.category,
@@ -333,8 +371,11 @@ export class BookingService {
           driverId: driverId,
           packageId: data.packageId || null,
           eventType: data.eventType || "",
-          startPoint: describePoint(data.startPoint),
-          endPoint: describePoint(data.endPoint),
+          startPoint: describePoint(startPoint),
+          endPoint: describePoint(endPoint),
+          serviceType: data.serviceType ?? null,
+          destinationId: service?.destination?.id ?? null,
+          priceLines: servicePrice ? (servicePrice.lines as unknown as Prisma.InputJsonValue) : undefined,
           distanceKm: route.distanceKm,
           durationMinutes: route.durationMinutes,
           startLat: route.start.latitude,
@@ -391,7 +432,39 @@ export class BookingService {
     return created;
   }
 
-  public static async cancelBooking(bookingId: string, cancelledByUserId?: string) {
+  /**
+   * What cancelling a booking would do to the money already paid.
+   *
+   * Policy (Settings): cancelled at least `freeCancellationHours` before the
+   * start -> everything paid goes back to the customer's wallet. Later -> the
+   * deposit is kept and anything paid above it goes back. An admin may decide
+   * either way (`refundDeposit`), e.g. when the company cancels.
+   */
+  public static cancellationTerms(
+    booking: { bookingDate: string; startTime: string; depositPaid: number; depositRequired: number },
+    freeCancellationHours: number,
+    refundDeposit?: boolean,
+    now = Date.now()
+  ) {
+    const paid = Math.max(0, Math.round(booking.depositPaid * 100) / 100);
+    const startsAt = zonedToInstant(booking.bookingDate, booking.startTime).getTime();
+    const freeUntil = new Date(startsAt - freeCancellationHours * 3_600_000);
+    const free = refundDeposit ?? now <= freeUntil.getTime();
+    const kept = free ? 0 : Math.min(paid, Math.max(0, booking.depositRequired));
+    const refund = Math.round((paid - kept) * 100) / 100;
+    const outcome: DepositOutcome | null = paid <= 0 ? null : kept > 0 ? DepositOutcome.KEPT : DepositOutcome.REFUNDED;
+    return { paid, refund, kept, outcome, freeUntil: freeUntil.toISOString(), freeCancellationHours, overridden: refundDeposit !== undefined };
+  }
+
+  public static async getCancellationTerms(bookingId: string) {
+    const booking = await prismaClient.bookings.findUnique({ where: { id: bookingId } });
+    if (!booking) throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    const settings = await SettingsService.get();
+    return this.cancellationTerms(booking, settings.freeCancellationHours);
+  }
+
+  public static async cancelBooking(bookingId: string, cancelledByUserId?: string, opts: { refundDeposit?: boolean } = {}) {
+    const { freeCancellationHours } = await SettingsService.get();
     return await prismaClient.$transaction(async (tx) => {
       const booking = await tx.bookings.findUnique({
         where: { id: bookingId },
@@ -408,7 +481,7 @@ export class BookingService {
 
       // Idempotent check: if already CANCELLED, return cleanly without error
       if (booking.status === BookingStatus.CANCELLED) {
-        return { booking, promotedWaitlistEntry: null };
+        return { booking, promotedWaitlistEntry: null, cancellation: null };
       }
 
       // Transition validity check
@@ -416,11 +489,29 @@ export class BookingService {
         throw new BadRequestException(`Cannot cancel booking with status ${booking.status}`);
       }
 
-      // 1. Update Booking status to CANCELLED
+      // 1. Update Booking status to CANCELLED, settling the deposit by the
+      //    cancellation policy. A refund is credited to the customer's wallet.
+      const terms = BookingService.cancellationTerms(booking, freeCancellationHours, opts.refundDeposit);
       const updatedBooking = await tx.bookings.update({
         where: { id: bookingId },
-        data: { status: BookingStatus.CANCELLED },
+        data: {
+          status: BookingStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancelledById: cancelledByUserId ?? null,
+          depositOutcome: terms.outcome,
+          depositRefunded: terms.refund,
+        },
       });
+      if (terms.refund > 0) {
+        await tx.walletTransactions.create({
+          data: {
+            userId: booking.customerId,
+            amount: terms.refund,
+            type: WalletTransactionType.REFUND,
+            description: `Refund for cancelled booking ${bookingRef(booking.id)}`,
+          },
+        });
+      }
 
       // 2. Release the vehicle's day — but only if no other active trip of
       //    this vehicle remains that day, and never over a BLOCKED day.
@@ -506,7 +597,7 @@ export class BookingService {
         });
       }
 
-      return { booking: updatedBooking, promotedWaitlistEntry };
+      return { booking: updatedBooking, promotedWaitlistEntry, cancellation: terms };
     });
   }
 

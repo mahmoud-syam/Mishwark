@@ -3,12 +3,17 @@ import BookingService, { ListBookingsParams, bookingPartyOf } from "../services/
 import prismaClient from "../utils/prismaClientHelper";
 import { ForbiddenException, NotFoundException } from "../utils/errors";
 import PricingService from "../services/pricing.service";
+import ServicePricing from "../services/service-pricing.service";
 import { isAdminRole, normalizeRoleName } from "../constants/roles";
 import MapsService from "../services/maps.service";
-import { queryNum, queryStr } from "../utils/routeParams";
+import AuditService from "../services/audit.service";
+import { AuditAction } from "../../../generated/prisma";
+import { bookingRef } from "../utils/bookingRef";
+import { queryNum, queryStr, queryLimit } from "../utils/routeParams";
 import {
   calculatePriceSchema,
   createBookingSchema,
+  cancelBookingSchema,
   estimateDistanceSchema,
 } from "../schemas/booking.schema";
 
@@ -21,6 +26,26 @@ export const calculatePrice = async (req: Request, res: Response) => {
   const user: any = (req as any).user;
   const roleName = normalizeRoleName(user?.role?.name);
   const forCustomer = input.customerId && roleName && isAdminRole(roleName) ? input.customerId : user?.id;
+  if (input.serviceType) {
+    // Wedding / private trip / VIP: fixed prices with itemised lines.
+    const q = await ServicePricing.quote(
+      { serviceType: input.serviceType, vehicleId: input.vehicleId!, destinationId: input.destinationId, startPoint: input.startPoint, endPoint: input.endPoint, startTime: input.startTime, endTime: input.endTime, packageId: input.packageId },
+      forCustomer
+    );
+    return res.status(200).json({
+      success: true,
+      data: q.breakdown,
+      serviceType: q.serviceType,
+      lines: q.lines,
+      bookedMinutes: q.bookedMinutes,
+      depositRate: q.depositRate,
+      destination: q.destination,
+      startPoint: q.startPoint,
+      endPoint: q.endPoint,
+      route: { distanceKm: q.route.distanceKm, durationMinutes: q.route.durationMinutes, source: q.route.source, start: q.route.start, end: q.route.end, warning: q.route.warning },
+      comparison: null,
+    });
+  }
   const quote = await PricingService.quote(input, forCustomer);
 
   res.status(200).json({
@@ -64,7 +89,7 @@ export const getBookings = async (req: Request, res: Response) => {
   const result = await BookingService.listBookings(
     {
       page: queryNum(req.query.page, 1),
-      limit: queryNum(req.query.limit, 10),
+      limit: queryLimit(req.query.limit, 10),
       status: queryStr(req.query.status) as ListBookingsParams["status"],
       tripStatus: queryStr(req.query.tripStatus) as ListBookingsParams["tripStatus"],
       bookingDate: queryStr(req.query.bookingDate),
@@ -95,10 +120,25 @@ export const getBookingById = async (req: Request, res: Response) => {
   });
 };
 
+const byAdmin = (req: Request) => {
+  const role = req.user?.role;
+  return isAdminRole(normalizeRoleName(typeof role === "string" ? role : role?.name));
+};
+
 export const updateBookingStatus = async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const { status } = req.body;
+  const before = await prismaClient.bookings.findUnique({ where: { id }, select: { status: true } });
   const booking = await BookingService.updateBookingStatus(id, status, req.user);
+  if (byAdmin(req) && before && before.status !== booking.status) {
+    await AuditService.record({ id: req.user!.id, name: req.user!.name }, {
+      action: AuditAction.UPDATE,
+      entityType: "booking",
+      entityId: id,
+      entityLabel: `حجز #${bookingRef(id)}`,
+      details: `status: ${before.status} → ${booking.status}`,
+    });
+  }
   res.status(200).json({
     success: true,
     data: booking,
@@ -122,11 +162,33 @@ export const cancelBooking = async (req: Request, res: Response) => {
   if (party === null) throw new NotFoundException(`Booking with ID ${id} not found`);
   // Drivers can't cancel a customer's booking; admins and the customer can.
   if (party === "driver") throw new ForbiddenException("Drivers cannot cancel bookings");
-  const result = await BookingService.cancelBooking(id, req.user?.id);
+  // Only an admin may decide the deposit either way; a customer gets the policy.
+  const { refundDeposit } = cancelBookingSchema.parse(req.body ?? {});
+  const result = await BookingService.cancelBooking(id, req.user?.id, party === "admin" ? { refundDeposit } : {});
+  if (party === "admin" && result.cancellation) {
+    const c = result.cancellation;
+    await AuditService.record({ id: req.user!.id, name: req.user!.name }, {
+      action: AuditAction.UPDATE,
+      entityType: "booking",
+      entityId: id,
+      entityLabel: `حجز #${bookingRef(id)}`,
+      details: `cancelled · paid ${c.paid}, refunded ${c.refund}, kept ${c.kept}${c.overridden ? " (admin decision)" : " (policy)"}`,
+    });
+  }
   res.status(200).json({
     success: true,
     message: "Booking cancelled successfully",
     data: result.booking,
+    cancellation: result.cancellation,
     promotedWaitlistEntry: result.promotedWaitlistEntry,
   });
+};
+
+/** What cancelling now would do to the money paid (shown before confirming). */
+export const getCancellationTerms = async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const existing = await prismaClient.bookings.findUnique({ where: { id }, select: { customerId: true, driverId: true } });
+  const party = existing ? await bookingPartyOf(existing, req.user) : null;
+  if (party === null || party === "driver") throw new NotFoundException(`Booking with ID ${id} not found`);
+  res.status(200).json({ success: true, data: await BookingService.getCancellationTerms(id) });
 };

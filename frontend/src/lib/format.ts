@@ -67,6 +67,10 @@ export const time12 = (hhmm: string) => {
   return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
 };
 
+/** "10:00 م ← 1:00 ص (تاني يوم)": a trip whose end is before its start ends the next morning. */
+export const timeRange = (start: string, end: string) =>
+  `${time12(start)} – ${time12(end)}${end && start && end < start ? " (تاني يوم)" : ""}`;
+
 /** "اليوم، 2:41 م" / "أمس، 6:15 م" / "10 أغسطس، 9:30 ص" for an ISO instant. */
 export const relativeStamp = (iso: string) => {
   const d = new Date(iso);

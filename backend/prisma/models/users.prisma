@@ -14,6 +14,8 @@ model Users {
   /// Set when a Super Admin creates the account or resets its password: the
   /// temporary password must be replaced at the next sign-in.
   mustChangePassword Boolean   @default(false)
+  /// When a temporary password (mustChangePassword) stops working.
+  tempPasswordExpiresAt DateTime?
   lastLoginAt        DateTime?
   /// Set by a Super Admin (Team page): can't sign in, history kept.
   disabledAt         DateTime?
@@ -85,4 +87,28 @@ model Drivers {
   vehicleDrivers      VehicleDrivers[]
   bookings            Bookings[]
   driverConversations Conversations[] @relation("DriverConversations")
+  documents           DriverDocuments[]
+}
+
+/// A driver's papers (ID, licence, criminal record), stored privately: only the
+/// driver and the dashboard team can open them. One per type; a new upload
+/// replaces the old one and goes back to review.
+model DriverDocuments {
+  id           String             @id @default(uuid())
+  driver       Drivers            @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId     String
+  type         DriverDocumentType
+  /// File name inside the private documents folder (never a public URL).
+  fileName     String
+  mimeType     String
+  size         Int
+  status       DocumentStatus     @default(PENDING)
+  /// Why it was rejected (shown to the driver).
+  reviewNote   String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @default(now()) @updatedAt
+
+  @@unique([driverId, type])
 }

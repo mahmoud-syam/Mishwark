@@ -27,6 +27,8 @@ const FIELD_LABELS: Record<string, string> = {
   basePrice: "سعر فتح الرحلة",
   pricePerKm: "سعر الكيلو",
   pricePerHour: "سعر الساعة",
+  weddingPrice: "سعر الزفاف",
+  vipPrice: "سعر VIP",
   description: "الوصف",
   luggage: "الشنط",
   features: "المميزات",
