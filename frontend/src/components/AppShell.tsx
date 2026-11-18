@@ -9,6 +9,7 @@ import {
   LogOut,
   Menu,
   Moon,
+  PanelRightClose,
   Radio,
   Settings,
   ShieldCheck,
@@ -33,29 +34,65 @@ type Item = { to: string; label: string; icon: ReactNode; end?: boolean; badge?:
  * The dashboard frame: a navy side menu (on the right, as the page is RTL)
  * and the page beside it. On small screens the menu opens from a button.
  */
+const SIDEBAR_KEY = "mw.sidebar";
+const DESKTOP = "(min-width: 64rem)";
+
+/** Remembered per browser; storage can be unavailable (private mode), so it falls back to open. */
+function readCollapsed() {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) === "closed";
+  } catch {
+    return false;
+  }
+}
+
 export default function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(readCollapsed);
   const loc = useLocation();
   useEffect(() => setOpen(false), [loc.pathname]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_KEY, collapsed ? "closed" : "open");
+    } catch {
+      /* not saved, still works for this visit */
+    }
+  }, [collapsed]);
+
+  // On a wide screen the menu button brings the side menu back in place;
+  // on a phone it opens it as a drawer, as before.
+  const openMenu = () => (window.matchMedia(DESKTOP).matches ? setCollapsed(false) : setOpen(true));
 
   return (
     <div className="flex min-h-dvh">
       {/* desktop */}
-      <aside className="hidden w-[248px] shrink-0 bg-[var(--c-sidebar)] lg:block">
-        <div className="sticky top-0 h-dvh">
-          <Sidebar />
+      <aside
+        className={cx(
+          "hidden shrink-0 overflow-hidden bg-[var(--c-sidebar)] transition-[width] duration-300 ease-out motion-reduce:transition-none lg:block",
+          collapsed ? "w-0" : "w-[248px]"
+        )}
+        aria-hidden={collapsed || undefined}
+        inert={collapsed || undefined}
+      >
+        <div className="sticky top-0 h-dvh w-[248px]">
+          <Sidebar onCollapse={() => setCollapsed(true)} />
         </div>
       </aside>
 
-      {/* mobile */}
-      <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between border-b border-line bg-surface/90 px-4 py-3 backdrop-blur lg:hidden">
+      {/* top bar: phones, and wide screens while the side menu is hidden */}
+      <div
+        className={cx(
+          "fixed inset-x-0 top-0 z-30 flex items-center justify-between border-b border-line bg-surface/90 px-4 py-3 backdrop-blur",
+          !collapsed && "lg:hidden"
+        )}
+      >
         <span className="flex items-center gap-2">
+          <button type="button" onClick={openMenu} className="rounded-lg p-2 text-cream hover:bg-raised" aria-label="فتح القايمة" title="فتح القايمة">
+            <Menu className="size-5" />
+          </button>
           <BrandMark size={28} />
           <span className="text-[17px] font-bold text-cream" dir="ltr">Mishwark</span>
         </span>
-        <button type="button" onClick={() => setOpen(true)} className="rounded-lg p-2 text-cream hover:bg-raised" aria-label="فتح القايمة">
-          <Menu className="size-5" />
-        </button>
       </div>
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="القايمة">
@@ -66,12 +103,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      <main className="min-w-0 flex-1 pt-14 lg:pt-0">{children}</main>
+      <main className={cx("min-w-0 flex-1 pt-14", !collapsed && "lg:pt-0")}>{children}</main>
     </div>
   );
 }
 
-function Sidebar({ onClose }: { onClose?: () => void }) {
+function Sidebar({ onClose, onCollapse }: { onClose?: () => void; onCollapse?: () => void }) {
   const { me, isSuperAdmin, logout } = useAuth();
   const { theme, toggle } = useTheme();
   // Shares the Overview's cache; refreshed every minute for the live-trips count.
@@ -104,6 +141,11 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
             Mishwark
           </span>
         </span>
+        {onCollapse && (
+          <button type="button" onClick={onCollapse} className="rounded-lg p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white" aria-label="إخفاء القايمة" title="إخفاء القايمة">
+            <PanelRightClose className="size-5" />
+          </button>
+        )}
         {onClose && (
           <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-white/70 hover:bg-white/10" aria-label="قفل القايمة">
             <X className="size-5" />
