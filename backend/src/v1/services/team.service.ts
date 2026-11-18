@@ -39,6 +39,7 @@ const memberSelect = {
   twoFactorEnabled: true,
   mustChangePassword: true,
   lastLoginAt: true,
+  disabledAt: true,
   createdAt: true,
   role: { select: { name: true } },
 } as const;
@@ -50,6 +51,7 @@ type MemberRow = {
   twoFactorEnabled: boolean;
   mustChangePassword: boolean;
   lastLoginAt: Date | null;
+  disabledAt: Date | null;
   createdAt: Date;
   role: { name: string };
 };
@@ -62,6 +64,7 @@ const shape = (m: MemberRow) => ({
   twoFactorEnabled: m.twoFactorEnabled,
   mustChangePassword: m.mustChangePassword,
   lastLoginAt: m.lastLoginAt,
+  disabledAt: m.disabledAt,
   createdAt: m.createdAt,
 });
 
@@ -72,10 +75,9 @@ export default class TeamService {
       select: memberSelect,
       orderBy: [{ createdAt: "asc" }],
     });
-    // Super Admins first, then admins; each by creation date.
-    return rows
-      .map(shape)
-      .sort((a, b) => Number(b.role === USER_ROLES.SUPER_ADMIN) - Number(a.role === USER_ROLES.SUPER_ADMIN));
+    // Active accounts first (Super Admins, then admins), disabled ones last; each by creation date.
+    const rank = (m: ReturnType<typeof shape>) => (m.disabledAt ? 2 : m.role === USER_ROLES.SUPER_ADMIN ? 0 : 1);
+    return rows.map(shape).sort((a, b) => rank(a) - rank(b));
   }
 
   /** A team member other than the one acting. */
@@ -128,6 +130,26 @@ export default class TeamService {
       data: { password: hashSync(password, 10), mustChangePassword: true, tokenVersion: { increment: 1 } },
     });
     return { member: shape({ ...m, mustChangePassword: true }), temporaryPassword: password };
+  }
+
+  /**
+   * Someone left: signed out everywhere and can't sign in; history and audit
+   * entries stay. Any account but your own, so an active Super Admin (you)
+   * always remains.
+   */
+  public static async disable(id: string, actorId: string) {
+    const m = await this.member(id, actorId);
+    if (m.disabledAt) return shape(m);
+    const disabledAt = new Date();
+    await prismaClient.users.update({ where: { id }, data: { disabledAt, tokenVersion: { increment: 1 } } });
+    return shape({ ...m, disabledAt });
+  }
+
+  public static async enable(id: string, actorId: string) {
+    const m = await this.member(id, actorId);
+    if (!m.disabledAt) return shape(m);
+    await prismaClient.users.update({ where: { id }, data: { disabledAt: null } });
+    return shape({ ...m, disabledAt: null });
   }
 
   /** New role applies right away: current sessions end so permissions are re-read. */

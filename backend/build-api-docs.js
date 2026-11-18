@@ -244,6 +244,8 @@ const BODY_EXAMPLES = {
   "/admin/team/{id}/reset-2fa": {},
   "/admin/team/{id}/reset-password": {},
   "/admin/team/{id}/role": { role: "SUPER_ADMIN" },
+  "/admin/team/{id}/disable": {},
+  "/admin/team/{id}/enable": {},
   "/auth/reset-2fa/{userId}": {},
 };
 
@@ -285,7 +287,7 @@ const ID_CAPTURE = {
 // 4. Descriptions + success responses per endpoint
 // ---------------------------------------------------------------
 const DESCRIPTIONS = {
-  "/auth/login": "Email/password sign-in, step 1. Never returns a session: it answers with the next step and a `loginToken` (signed, 5 minutes): `passwordChangeRequired` (temporary password: call /auth/set-password), `twoFactorSetupRequired` (with `secret` + `qrCodeDataURL`: call /auth/verify-2fa-setup) or `twoFactorRequired` (call /auth/verify-2fa). 400 on a wrong email or password.",
+  "/auth/login": "Email/password sign-in, step 1. Limits: 5 wrong passwords for one account from one device (IP) block that device from that account for 15 minutes (429, `errors.retryAfterSeconds`); the owner on another device is unaffected. 403 for a disabled account. Never returns a session: it answers with the next step and a `loginToken` (signed, 5 minutes): `passwordChangeRequired` (temporary password: call /auth/set-password), `twoFactorSetupRequired` (with `secret` + `qrCodeDataURL`: call /auth/verify-2fa-setup) or `twoFactorRequired` (call /auth/verify-2fa). 400 on a wrong email or password.",
   "/auth/set-password": "Sign-in step after a temporary password (accounts created or reset from the Team page): the user picks their own password (8+ characters, not the temporary one). Answers with the next step and a new `loginToken`. 400 if the pass is missing, expired or already used.",
   "/auth/signup": "Create a customer or driver account. Multipart/form-data — fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
   "/auth/otp/request": "Public. Sends a 4-digit OTP to the phone. In dev the code is returned as dev_otp.",
@@ -303,6 +305,8 @@ const DESCRIPTIONS = {
   "POST /admin/team": "Creates a dashboard account (Super Admin only). Returns `member` and a `temporaryPassword`, shown this once (only its hash is stored). At first sign-in the member picks their own password, then sets up 2FA. 409 if the email is taken. Audit-logged.",
   "/admin/team/{id}/reset-2fa": "Lost phone: the member sets up 2FA again at the next sign-in. Signs them out everywhere. Super Admin only; not on your own account (400) or on non-team accounts (404). Audit-logged.",
   "/admin/team/{id}/reset-password": "Forgotten password: returns a new `temporaryPassword` (shown once); the old password stops working and the member picks a new one at sign-in. Signs them out everywhere. Super Admin only. Audit-logged.",
+  "/admin/team/{id}/disable": "Disables a team account (someone left): signed out everywhere at once, can't sign in (403 \"This account is disabled\"), history and audit entries kept. Any account but your own, Super Admins included. Super Admin only. Audit-logged.",
+  "/admin/team/{id}/enable": "Enables a disabled team account again; the member signs in as before (password + 2FA). Super Admin only. Audit-logged.",
   "/admin/team/{id}/role": "Changes a member's role (ADMIN or SUPER_ADMIN). Signs them out so the new permissions apply. Super Admin only; not on your own account. Audit-logged.",
   "/bookings/estimate-price": "PUBLIC. Server-side price estimate. Distance and duration are recomputed from startPoint/endPoint; any distanceKm you send is only reported back under `comparison` and never priced. Price overrides (customPricePerKm and friends) are rejected. Send the Bearer token to include the caller's own discounts (packageId of their active package; first-booking referral discount). Admins may pass customerId to quote for a customer. Response adds packageDiscount and referralDiscount.",
   "/bookings/estimate-distance": "PUBLIC. Resolves startPoint/endPoint (coordinates or a place name) into distanceKm and durationMinutes. Coordinates are passed through; free text is geocoded via OpenRouteService. Without ORS_API_KEY the server falls back to a straight-line estimate and says so in `source` and `warning`.",

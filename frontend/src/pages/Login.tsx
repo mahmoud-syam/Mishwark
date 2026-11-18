@@ -24,6 +24,17 @@ const stepFrom = (r: LoginResponse): Step =>
       : { kind: "challenge", loginToken: r.loginToken };
 const EXPIRED = /expired|Sign in again/i;
 
+/** Blocked after too many wrong tries (429), or the account was disabled (403). */
+const signInError = (err: unknown): string | null => {
+  if (!(err instanceof ApiError)) return null;
+  if (err.status === 429) {
+    const m = err.message.match(/(\d+) minute/);
+    return `محاولات غلط كتير. استنى ${m ? `${m[1]} دقيقة` : "شوية"} وجرّب تاني.`;
+  }
+  if (err.status === 403 && /disabled/i.test(err.message)) return "الحساب ده موقوف. كلّم السوبر أدمن.";
+  return null;
+};
+
 export default function Login() {
   const { me, refresh } = useAuth();
   const nav = useNavigate();
@@ -50,7 +61,7 @@ export default function Login() {
       setCode("");
       setStep(stepFrom(r));
     } catch (err) {
-      setError(err instanceof ApiError && err.status < 500 ? "الإيميل أو الباسورد مش صح." : errorMessage(err));
+      setError(signInError(err) ?? (err instanceof ApiError && err.status < 500 ? "الإيميل أو الباسورد مش صح." : errorMessage(err)));
     } finally {
       setBusy(false);
     }
@@ -107,7 +118,7 @@ export default function Login() {
       nav(from, { replace: true });
     } catch (err) {
       if (err instanceof ApiError && EXPIRED.test(err.message)) return restart("انتهت مهلة الدخول. ادخل تاني.");
-      setError(err instanceof ApiError && err.status < 500 ? "الكود مش صح أو انتهت صلاحيته. جرّب الكود الجديد." : errorMessage(err));
+      setError(signInError(err) ?? (err instanceof ApiError && err.status < 500 ? "الكود مش صح أو انتهت صلاحيته. جرّب الكود الجديد." : errorMessage(err)));
     } finally {
       setBusy(false);
     }

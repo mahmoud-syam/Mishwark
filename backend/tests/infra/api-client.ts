@@ -26,6 +26,8 @@ export class ApiClient {
 
   constructor() {
     this.app = express();
+    // Lets a test act as another device by sending X-Forwarded-For.
+    this.app.set('trust proxy', true);
     this.app.use(cookieParser());
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));

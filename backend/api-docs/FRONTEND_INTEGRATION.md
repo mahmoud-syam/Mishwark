@@ -158,6 +158,15 @@ Then, depending on which you got:
 | `twoFactorSetupRequired` | `POST /auth/verify-2fa-setup` | `{ "loginToken", "token" }` — the 6-digit code; the secret travels inside the pass |
 | `twoFactorRequired` | `POST /auth/verify-2fa` | `{ "loginToken", "token" }` |
 
+**Limits (all sign-in steps, OTP included).** 5 wrong passwords or codes for
+one account from one device (IP) block that device from that account for 15
+minutes: **429** with `errors.retryAfterSeconds`, even for the right password.
+Show "too many attempts, try again in N minutes"; don't retry automatically.
+The account owner on another device is not affected. Besides that, `/auth/*`
+allows 100 requests per IP per 15 minutes and `/auth/otp/request` 10 (429
+with standard `RateLimit` headers). A disabled team account gets **403**
+"This account is disabled".
+
 > **Changed (17 Nov 2026):** these steps used to take `userId` (and, for
 > setup, a `secret` from the client). That let anyone who knew an account's
 > id attach their own authenticator and sign in without the password, so a

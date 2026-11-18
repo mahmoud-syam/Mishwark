@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { LoginSchema, SignupSchema, OtpRequestSchema, OtpVerifySchema, NewPasswordSchema, PasswordRule } from "../schemas/auth.schema";
 import { issueLoginTicket, readLoginTicket } from "../services/login-ticket.service";
+import SignInGuard from "../services/sign-in-guard.service";
 import prismaClient from "../utils/prismaClientHelper";
 import { compareSync, hashSync } from "bcrypt";
 import { BadRequestsException } from "../exceptions/bad-requests";
@@ -194,7 +195,7 @@ const nextSignInStep = async (user: { id: string; email: string | null; name: st
 /** Finds the account a pass belongs to; the pass is void once the account changed. */
 const ticketUser = async (userId: string, tokenVersion: number) => {
     const user = await prismaClient.users.findUnique({ where: { id: userId }, include: withRole });
-    if (!user || user.isDeleted || user.tokenVersion !== tokenVersion) {
+    if (!user || user.isDeleted || user.disabledAt || user.tokenVersion !== tokenVersion) {
         throw new BadRequestsException("Your sign-in expired. Sign in again", ErrorCodes.INVALID_CREDENTIALS);
     }
     return user;
@@ -219,6 +220,7 @@ const completeSignIn = async (res: Response, userId: string, data: { twoFactorSe
 export const login = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { email, password } = LoginSchema.parse(req.body);
+        SignInGuard.check(req, email);
 
         const user = await prismaClient.users.findUnique({
             where: {
@@ -228,8 +230,13 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         });
 
         if (!user || !compareSync(password, user.password)) {
+            SignInGuard.fail(req, email);
             throw new BadRequestsException("Invalid email or password", ErrorCodes.INVALID_CREDENTIALS);
         }
+        if (user.disabledAt) {
+            throw new ForbiddenException("This account is disabled. Contact your Super Admin");
+        }
+        SignInGuard.succeed(req, email);
 
         // Mandatory: a temporary password is replaced, then 2FA is set up or checked.
         return res.status(200).json(await nextSignInStep(user));
@@ -267,9 +274,13 @@ export const verifyAndEnable2FALogin = async (req: Request, res: Response, next:
         if (user.twoFactorEnabled || !ticket.secret) {
             throw new BadRequestsException("Your sign-in expired. Sign in again", ErrorCodes.INVALID_CREDENTIALS);
         }
+        const account = user.email ?? user.id;
+        SignInGuard.check(req, account);
         if (typeof totpToken !== "string" || !(await verify2FAToken(totpToken, ticket.secret))) {
+            SignInGuard.fail(req, account);
             throw new BadRequestsException("Invalid 2FA token", ErrorCodes.INVALID_CREDENTIALS);
         }
+        SignInGuard.succeed(req, account);
 
         await completeSignIn(res, user.id, { twoFactorSecret: ticket.secret, twoFactorEnabled: true });
     } catch (error) {
@@ -286,10 +297,14 @@ export const verify2FALogin = async (req: Request, res: Response, next: NextFunc
         if (!user.twoFactorEnabled || !user.twoFactorSecret) {
             throw new BadRequestsException("Your sign-in expired. Sign in again", ErrorCodes.INVALID_CREDENTIALS);
         }
-        // A wrong code changes nothing (live sessions stay signed in).
+        // A wrong code changes nothing (live sessions stay signed in), but counts as a wrong attempt.
+        const account = user.email ?? user.id;
+        SignInGuard.check(req, account);
         if (typeof totpToken !== "string" || !(await verify2FAToken(totpToken, user.twoFactorSecret))) {
+            SignInGuard.fail(req, account);
             throw new BadRequestsException("Invalid 2FA token", ErrorCodes.INVALID_CREDENTIALS);
         }
+        SignInGuard.succeed(req, account);
 
         await completeSignIn(res, user.id);
     } catch (error) {
@@ -518,6 +533,7 @@ export const otpRequest = async (req: Request, res: Response, next: NextFunction
 export const otpVerify = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { phoneNumber, code } = OtpVerifySchema.parse(req.body);
+        SignInGuard.check(req, phoneNumber);
 
         const user = await prismaClient.users.findUnique({
             where: { phoneNumber },
@@ -541,9 +557,14 @@ export const otpVerify = async (req: Request, res: Response, next: NextFunction)
             if (user.otpCode !== code) {
                 // Count the miss; after OTP_MAX_ATTEMPTS the code is dead.
                 await prismaClient.users.update({ where: { id: user.id }, data: { otpAttempts: { increment: 1 } } });
+                SignInGuard.fail(req, phoneNumber);
                 throw new BadRequestsException("Invalid OTP code", ErrorCodes.INVALID_CREDENTIALS);
             }
         }
+        if (user.disabledAt) {
+            throw new ForbiddenException("This account is disabled. Contact your Super Admin");
+        }
+        SignInGuard.succeed(req, phoneNumber);
 
         const updatedUser = await prismaClient.users.update({
             where: { id: user.id },

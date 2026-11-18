@@ -117,11 +117,14 @@ function MemberRow({ m, self, onPassword }: { m: TeamMember; self: boolean; onPa
     },
   });
   const role = useMutation({ mutationFn: (r: TeamRole) => api.patch(`/admin/team/${m.id}/role`, { role: r }), onSuccess: done });
-  const busy = reset2fa.isPending || resetPw.isPending || role.isPending;
-  const err = reset2fa.error ?? resetPw.error ?? role.error;
+  const disable = useMutation({ mutationFn: () => api.post(`/admin/team/${m.id}/disable`), onSuccess: done });
+  const enable = useMutation({ mutationFn: () => api.post(`/admin/team/${m.id}/enable`), onSuccess: done });
+  const busy = reset2fa.isPending || resetPw.isPending || role.isPending || disable.isPending || enable.isPending;
+  const err = reset2fa.error ?? resetPw.error ?? role.error ?? disable.error ?? enable.error;
+  const off = !!m.disabledAt;
 
   return (
-    <li className="flex flex-col gap-3 border-b border-line py-4 last:border-b-0">
+    <li className={cx("flex flex-col gap-3 border-b border-line py-4 last:border-b-0", off && "opacity-70")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <Avatar text={initials(m.name)} tone={m.role === "SUPER_ADMIN" ? "gold" : "wine"} />
@@ -134,7 +137,9 @@ function MemberRow({ m, self, onPassword }: { m: TeamMember; self: boolean; onPa
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
           <Badge tone={m.role === "SUPER_ADMIN" ? "gold" : "muted"}>{ROLE[m.role]}</Badge>
-          {m.mustChangePassword ? (
+          {off ? (
+            <Badge tone="rose">موقوف من {relativeStamp(m.disabledAt!)}</Badge>
+          ) : m.mustChangePassword ? (
             <Badge tone="gold">لسه ما دخلش بالباسورد المؤقت</Badge>
           ) : m.twoFactorEnabled ? (
             <Badge tone="mint">التحقق بخطوتين مفعّل</Badge>
@@ -144,7 +149,15 @@ function MemberRow({ m, self, onPassword }: { m: TeamMember; self: boolean; onPa
           <span className="text-muted">{m.lastLoginAt ? `آخر دخول ${relativeStamp(m.lastLoginAt)}` : "ما دخلش لسه"}</span>
         </div>
       </div>
-      {!self && (
+      {!self && off && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] text-muted">ما يقدرش يدخل. سجله وتعديلاته محفوظين.</span>
+          <Button size="sm" variant="primary" disabled={busy} onClick={() => enable.mutate()}>
+            إعادة تفعيل الحساب
+          </Button>
+        </div>
+      )}
+      {!self && !off && (
         <div className="flex flex-wrap items-center gap-2">
           <ConfirmButton label="🔐 إعادة ضبط التحقق بخطوتين" confirm="أكيد؟ هيعيد الإعداد في الدخول الجاي" busy={busy} onConfirm={() => reset2fa.mutate()} />
           <ConfirmButton label="🔑 باسورد مؤقت جديد" confirm="أكيد؟ الباسورد القديم هيتلغي" busy={busy} onConfirm={() => resetPw.mutate()} />
@@ -158,6 +171,7 @@ function MemberRow({ m, self, onPassword }: { m: TeamMember; self: boolean; onPa
             <option value="ADMIN">أدمن</option>
             <option value="SUPER_ADMIN">سوبر أدمن</option>
           </select>
+          <ConfirmButton label="⛔ إيقاف الحساب" confirm="أكيد؟ هيخرج فورًا ومش هيقدر يدخل" busy={busy} onConfirm={() => disable.mutate()} />
           {reset2fa.isSuccess && <span className="fade-in text-[11px] text-mint">اتعمل ✓ وخرج من كل الأجهزة</span>}
           {role.isSuccess && <span className="fade-in text-[11px] text-mint">الدور اتغيّر ✓</span>}
         </div>
@@ -182,13 +196,15 @@ export default function Team() {
   }
   const show = (name: string, password: string) => setShown({ name, password });
   const list = q.data ?? [];
-  const pending = list.filter((m) => m.mustChangePassword || !m.twoFactorEnabled).length;
+  const active = list.filter((m) => !m.disabledAt);
+  const pending = active.filter((m) => m.mustChangePassword || !m.twoFactorEnabled).length;
+  const disabledCount = list.length - active.length;
 
   return (
     <Page>
-      <PageHeader back="/" eyebrow="الإدارة" title="الفريق" actions={q.data && <span className="text-[11px] text-muted">{list.length} حساب{pending ? ` · ${pending} لسه ما كمّلوش التفعيل` : ""}</span>} />
+      <PageHeader back="/" eyebrow="الإدارة" title="الفريق" actions={q.data && <span className="text-[11px] text-muted">{active.length} حساب شغّال{pending ? ` · ${pending} لسه ما كمّلوش التفعيل` : ""}{disabledCount ? ` · ${disabledCount} موقوف` : ""}</span>} />
       <p className="text-[12px] leading-relaxed text-muted">
-        كل واحد في الفريق له حساب باسمه، والتحقق بخطوتين إجباري للكل. لو حد ضيّع موبايله أو نسي الباسورد، اعمل له إعادة ضبط من هنا. أي إعادة ضبط بتخرّجه من كل الأجهزة، وبتتسجل في سجل التعديلات.
+        كل واحد في الفريق له حساب باسمه، والتحقق بخطوتين إجباري للكل. لو حد ضيّع موبايله أو نسي الباسورد، اعمل له إعادة ضبط من هنا. ولو حد ساب الشغل، أوقف حسابه. أي إجراء بيخرّجه من كل الأجهزة، وبيتسجل في سجل التعديلات.
       </p>
       {shown && <TempPassword who={shown.name} password={shown.password} onDone={() => setShown(null)} />}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
