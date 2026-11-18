@@ -15,6 +15,7 @@ import { ReferralStatus } from "../../../generated/prisma";
 import { appSessionDays, authCookieOptions, clearAuthCookieOptions } from "../utils/authCookie";
 import fs from "fs";
 import { imageTypeOf } from "../middlewares/multer.middleware";
+import DriverDocumentService, { SIGNUP_FIELDS } from "../services/driver-document.service";
 
 const OTP_TTL_MINUTES = Number(process.env.OTP_TTL_MINUTES ?? 5);
 const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS ?? 5);
@@ -26,11 +27,14 @@ import { ForbiddenException } from "../utils/errors";
 import { z } from "zod";
 
 export const signup = async (req: Request, res: Response, next: NextFunction) => {
-    // Only the profile picture is used. Any other uploaded file used to stay on
-    // disk, publicly downloadable, without being linked anywhere: drop it now.
+    // The profile picture, and for a driver the papers (nationalIdFront,
+    // nationalIdBack, licenseFront, licenseBack, criminalRecord) which go to the
+    // private documents folder once the account exists. Anything else is dropped.
     const uploaded = (req.files as Express.Multer.File[] | undefined) ?? [];
     const picture = uploaded.find((f) => f.fieldname === "pic");
-    uploaded.filter((f) => f !== picture).forEach((f) => fs.rmSync(f.path, { force: true }));
+    const papers = uploaded.filter((f) => f !== picture && SIGNUP_FIELDS[f.fieldname]);
+    uploaded.filter((f) => f !== picture && !papers.includes(f)).forEach((f) => fs.rmSync(f.path, { force: true }));
+    const dropPapers = () => papers.forEach((f) => fs.rmSync(f.path, { force: true }));
     try {
         if (picture && (!picture.mimetype.startsWith("image/") || imageTypeOf(picture.path) !== picture.mimetype)) {
             throw new BadRequestsException("The profile picture must be a real JPG, PNG or WEBP image", ErrorCodes.UNPROCESSABLE_ENTITY);
@@ -97,6 +101,7 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
         const requestedRole = normalizeRoleName(role) ?? USER_ROLES.CUSTOMER;
         const roleRecord = await findOrCreateRole(requestedRole);
 
+        let createdDriverId: string | null = null;
         const user = await prismaClient.$transaction(async (prisma) => {
             const createdUser = await prisma.users.create({
                 data: {
@@ -121,7 +126,7 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
             // Conversations.driverId both reference Drivers.id, so a user with
             // the Driver role but no profile 404s on every /driver/* endpoint.
             if (requestedRole === USER_ROLES.DRIVER) {
-                await prisma.drivers.create({
+                createdDriverId = (await prisma.drivers.create({
                     data: {
                         userId: createdUser.id,
                         commissionRate: (await SettingsService.get()).defaultCommissionRate,
@@ -135,7 +140,8 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
                             }
                             : undefined,
                     },
-                });
+                    select: { id: true },
+                })).id;
             }
 
             // Signing up with a code used to set referredById only, so no
@@ -155,13 +161,29 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
             return createdUser;
         });
 
+        // A driver's papers, checked and stored privately. A bad file doesn't undo
+        // the signup: it is reported so the app can upload it again.
+        const documents: { field: string; status: string; error?: string }[] = [];
+        if (createdDriverId) {
+            for (const f of papers) {
+                try {
+                    await DriverDocumentService.save(createdDriverId, SIGNUP_FIELDS[f.fieldname], f);
+                    documents.push({ field: f.fieldname, status: "PENDING" });
+                } catch (err) {
+                    documents.push({ field: f.fieldname, status: "FAILED", error: (err as Error).message });
+                }
+            }
+        } else dropPapers();
+
         res.status(201).json({
             message: "User created successfully",
             user: { ...user, role: requestedRole },
+            ...(createdDriverId && { documents }),
         });
 
     } catch (error) {
         if (picture) fs.rmSync(picture.path, { force: true });
+        dropPapers();
         next(error);
     }
 }

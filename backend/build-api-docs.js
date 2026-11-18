@@ -109,6 +109,12 @@ const BODY_EXAMPLES = {
     // Required only when role is "driver".
     licenseNumber: "LIC-998877",
     licenseExpiry: "2030-12-31",
+    // Driver papers (optional here, can also be sent later to POST /driver/documents).
+    nationalIdFront: "",
+    nationalIdBack: "",
+    licenseFront: "",
+    licenseBack: "",
+    criminalRecord: "",
     // Optional referral code captured during signup.
     referralCode: "",
     // Legacy employee fields, still accepted for backwards compatibility.
@@ -237,6 +243,8 @@ const BODY_EXAMPLES = {
   "PATCH /admin/destinations/{id}": { prices: { CLASSIC: 2600 }, includedKm: 200 },
   "/admin/vehicles/{id}/drivers": { driverIds: ["{{driverId}}"], primaryDriverId: "{{driverId}}" },
   "/admin/vehicles/{id}/images": { images: "" },
+  "POST /driver/documents": { type: "NATIONAL_ID_FRONT", file: "" },
+  "/admin/driver-documents/{id}": { status: "REJECTED", note: "الصورة مش واضحة" },
   "/admin/vehicles/{id}/images/{imageId}/cover": {},
   "/admin/vehicles/{id}/maintenance": { maintenanceType: "صيانة دورية", startDate: "2026-12-01", endDate: "2026-12-02", cost: 1500, notes: "" },
   "/admin/maintenance/{id}/complete": { cost: 1450, notes: "Done" },
@@ -296,7 +304,7 @@ const ID_CAPTURE = {
 const DESCRIPTIONS = {
   "/auth/login": "Email/password sign-in, step 1. Limits: 5 wrong passwords for one account from one device (IP) block that device from that account for 15 minutes (429, `errors.retryAfterSeconds`); the owner on another device is unaffected. 403 for a disabled account. Never returns a session: it answers with the next step and a `loginToken` (signed, 5 minutes): `passwordChangeRequired` (temporary password: call /auth/set-password), `twoFactorSetupRequired` (with `secret` + `qrCodeDataURL`: call /auth/verify-2fa-setup) or `twoFactorRequired` (call /auth/verify-2fa). 400 on a wrong email or password.",
   "/auth/set-password": "Sign-in step after a temporary password (accounts created or reset from the Team page): the user picks their own password (8+ characters, not the temporary one). Answers with the next step and a new `loginToken`. 400 if the pass is missing, expired or already used.",
-  "/auth/signup": "Create a customer or driver account. Multipart/form-data — fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
+  "/auth/signup": "A driver can attach the papers here as file fields nationalIdFront, nationalIdBack, licenseFront, licenseBack, criminalRecord: they are stored privately and the response lists them in `documents` (PENDING, or FAILED with the reason; a bad file never undoes the signup). Other file fields are dropped. Create a customer or driver account. Multipart/form-data — fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
   "/auth/otp/request": "Public. Sends a 4-digit OTP to the phone; only phoneNumber is required (a new customer can give the name later with PATCH /auth/me). 403 for dashboard accounts. 01…, +20… and 0020… are the same number (stored as +20…). In dev the code is returned as dev_otp.",
   "/auth/otp/verify": "Public. Verifies the OTP and returns a JWT valid for APP_SESSION_DAYS (default 30) plus `profileComplete`. Dashboard accounts get 403 (they sign in with email, password and 2FA). Dev bypass code: 0000. Response drives role-based home screen.",
   "/auth/logout": "Signs out: clears the auth cookie and revokes the token sent with the request (it gets 401 afterwards). Always 200.",
@@ -326,6 +334,12 @@ const DESCRIPTIONS = {
   "POST /admin/destinations": "Adds a private-trip destination (settings:manage). `prices` per car category; `includedKm` null = Settings.tripIncludedKm. Audit-logged.",
   "PATCH /admin/destinations/{id}": "Edits a destination (settings:manage). `prices` is merged per category (send only the ones that change). `active: false` hides it from booking. Audit-logged.",
   "DELETE /admin/destinations/{id}": "Deletes a destination nobody booked; one with bookings is switched off instead (`deactivated: true`) so history keeps it. settings:manage. Audit-logged.",
+  "GET /driver/documents": "The signed-in driver's papers: every required type (NATIONAL_ID_FRONT, NATIONAL_ID_BACK, LICENSE_FRONT, LICENSE_BACK, CRIMINAL_RECORD) with `status` MISSING, PENDING, APPROVED or REJECTED (+ `reviewNote`, the reason to show), and `summary.state` (MISSING, PENDING, REJECTED, APPROVED). 403 for non-drivers.",
+  "POST /driver/documents": "Uploads one paper as multipart/form-data: `type` + `file` (JPG, PNG, WEBP or PDF, checked by content; 10 MB, 413 above). Replaces an earlier one of that type and puts it back to review (PENDING). Stored privately, never at a public URL. 201 with the document.",
+  "/driver/documents/{id}/file": "The driver's own paper (the dashboard team can open it too); 404 for anyone else. Sent inline with Cache-Control: private, no-store.",
+  "/admin/drivers/{id}/documents": "A driver's papers with their review state (same shape as GET /driver/documents).",
+  "/admin/driver-documents/{id}/file": "Opens a driver's paper (dashboard only).",
+  "/admin/driver-documents/{id}": "Approves or rejects a paper: `{ status: APPROVED }` or `{ status: REJECTED, note }` (the reason is required and shown to the driver). Audit-logged.",
   "/places/search": "PUBLIC. Place search for the booking map, anywhere in Egypt (OpenStreetMap through Photon). `q` (2-120 characters); optional `lat`/`lng` rank nearby places first (send the map's centre). Returns up to 8 `{ name, detail, label, latitude, longitude, kind }`; send `{ latitude, longitude, label }` as startPoint/endPoint. 502 when the provider is down (let the user drop a pin instead). Cached for a day; limited per IP (PLACES_RATE_LIMIT, default 300 per 15 minutes).",
   "/places/reverse": "PUBLIC. The address at a pin (`lat`, `lng`, inside Egypt; 400 otherwise), from Nominatim with Photon as fallback, in Arabic. Same shape as a search result, with the pin's own coordinates. If both providers are down the label is the coordinates.",
   "/admin/bookings/search": "Dashboard bookings page. `q` matches a reference (MW-1A2B3C), the customer's name or phone (01…, +20… or 0020…). Filters: `status`, `paymentStatus`, `scope` (upcoming = today onwards, soonest first [default]; past = latest first; all), `from`/`to` (YYYY-MM-DD), `page`, `limit` (max 100). Returns `data` (same shape as a day's bookings, plus cancellation fields), `counts` per status for the same search, and `pagination`.",
@@ -463,7 +477,7 @@ const openapiSchemas = {
   VehicleImagesBody: { type: "object", properties: { images: { type: "array", maxItems: 8, items: { type: "string", format: "binary" }, description: "JPG, PNG or WEBP, 5 MB each." } }, required: ["images"] },
   MaintenanceCreateBody: { type: "object", properties: { maintenanceType: { type: "string", maxLength: 100 }, startDate: { type: "string", format: "date" }, endDate: { type: "string", format: "date", description: "Defaults to startDate; at most 60 days." }, cost: { type: "number", minimum: 0 }, notes: { type: "string", maxLength: 500 } }, required: ["maintenanceType", "startDate"] },
   MaintenanceCompleteBody: { type: "object", properties: { cost: { type: "number", minimum: 0 }, notes: { type: "string", maxLength: 500 } } },
-  SignupBody: { type: "object", properties: { name: { type: "string" }, email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 }, pic: { type: "string" }, role: { type: "string", enum: ["customer", "driver"], default: "customer", description: "Account type. Admin roles cannot be self-assigned." }, licenseNumber: { type: "string", description: "Required when role is 'driver'." }, licenseExpiry: { type: "string", description: "Required when role is 'driver'." }, referralCode: { type: "string" }, phoneNumbers: { type: "array", items: { type: "object", properties: { number: { type: "string" } } } } }, required: ["name", "email", "password", "phoneNumbers"] },
+  SignupBody: { type: "object", properties: { name: { type: "string" }, email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 }, pic: { type: "string" }, role: { type: "string", enum: ["customer", "driver"], default: "customer", description: "Account type. Admin roles cannot be self-assigned." }, licenseNumber: { type: "string", description: "Required when role is 'driver'." }, licenseExpiry: { type: "string", description: "Required when role is 'driver'." }, nationalIdFront: { type: "string", format: "binary", description: "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`." }, nationalIdBack: { type: "string", format: "binary", description: "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`." }, licenseFront: { type: "string", format: "binary", description: "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`." }, licenseBack: { type: "string", format: "binary", description: "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`." }, criminalRecord: { type: "string", format: "binary", description: "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`." }, referralCode: { type: "string" }, phoneNumbers: { type: "array", items: { type: "object", properties: { number: { type: "string" } } } } }, required: ["name", "email", "password", "phoneNumbers"] },
   LoginBody: { type: "object", properties: { email: { type: "string", format: "email" }, password: { type: "string", minLength: 6 } }, required: ["email", "password"] },
   OtpRequest: { type: "object", properties: { phoneNumber: { type: "string", minLength: 8 } }, required: ["phoneNumber"] },
   OtpVerify: { type: "object", properties: { phoneNumber: { type: "string" }, code: { type: "string", minLength: 4, maxLength: 4 } }, required: ["phoneNumber", "code"] },
@@ -934,10 +948,10 @@ const LOGIN_STEP_ROUTES = new Set(["/auth/login", "/auth/set-password"]);
 // /auth/signup is the only route mounted behind multer, so it is the only one
 // that must be described as multipart/form-data. Declaring it as JSON makes
 // multer skip req.body entirely, so every field arrives undefined.
-const MULTIPART_ROUTES = new Set(["/auth/signup", "/admin/vehicles/{id}/images"]);
+const MULTIPART_ROUTES = new Set(["/auth/signup", "/admin/vehicles/{id}/images", "POST /driver/documents", "/driver/documents"]);
 
 // File fields must be sent as multipart `file` parts, not text.
-const MULTIPART_FILE_FIELDS = { "/auth/signup": new Set(["pic"]), "/admin/vehicles/{id}/images": new Set(["images"]) };
+const MULTIPART_FILE_FIELDS = { "/auth/signup": new Set(["pic", "nationalIdFront", "nationalIdBack", "licenseFront", "licenseBack", "criminalRecord"]), "/admin/vehicles/{id}/images": new Set(["images"]), "/driver/documents": new Set(["file"]) };
 
 // Shown in the Apidog sidebar next to each folder.
 const TAG_DESCRIPTIONS = {

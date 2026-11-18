@@ -22,6 +22,7 @@ import AuditService, { AuditActor } from "./audit.service";
 import PaymentService from "./payment.service";
 import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
 import FleetService from "./fleet.service";
+import DriverDocumentService from "./driver-document.service";
 import {
   addDays,
   addMonths,
@@ -254,7 +255,20 @@ export class AdminDashboardService {
       ? await prismaClient.drivers.findMany({ where: { id: { in: stranded.map((x) => x.driverId) } }, select: { id: true, fullName: true, status: true } })
       : [];
 
+    // Drivers with papers waiting for review.
+    const papersWaiting = await prismaClient.driverDocuments.groupBy({ by: ["driverId"], where: { status: "PENDING" }, _count: { _all: true } });
+    const papersDrivers = papersWaiting.length
+      ? await prismaClient.drivers.findMany({ where: { id: { in: papersWaiting.map((x) => x.driverId) } }, select: { id: true, fullName: true } })
+      : [];
+
     const alerts = [
+      ...papersWaiting.map((x) => ({
+        type: "documents_pending" as const,
+        severity: "warning" as const,
+        entityId: x.driverId,
+        driverName: papersDrivers.find((d) => d.id === x.driverId)?.fullName ?? "",
+        documents: x._count._all,
+      })),
       ...stranded.map((x) => {
         const d = strandedDrivers.find((v) => v.id === x.driverId);
         return {
@@ -327,6 +341,7 @@ export class AdminDashboardService {
     const ids = drivers.map((d) => d.id);
     const userIds = drivers.map((d) => d.userId);
 
+    const docRows = await prismaClient.driverDocuments.findMany({ where: { driverId: { in: ids } }, select: { driverId: true, type: true, status: true } });
     const [monthAgg, completedAgg, ratingAgg, complaintAgg] = await Promise.all([
       prismaClient.bookings.groupBy({
         by: ["driverId"],
@@ -371,6 +386,7 @@ export class AdminDashboardService {
           monthRevenue: m?._sum.totalPrice ?? 0,
           monthTrips: m?._count._all ?? 0,
           totalTrips: completedAgg.find((a) => a.driverId === d.id)?._count._all ?? 0,
+          documents: DriverDocumentService.summarize(docRows.filter((x) => x.driverId === d.id)),
         };
       })
       .sort((a, b) => b.monthRevenue - a.monthRevenue || b.totalTrips - a.totalTrips)

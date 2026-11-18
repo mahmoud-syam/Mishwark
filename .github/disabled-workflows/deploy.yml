@@ -9,6 +9,8 @@
 #   ~/AcsWebsite/AcsWebsite-backend/            API (dist/, prisma/, package.json, .env)
 #   ~/AcsWebsite/AcsWebsite-backend/dashboard-dist/   dashboard build
 # Set DASHBOARD_DIST=./dashboard-dist in the server's .env.
+# Drivers' papers live in DRIVER_DOCUMENTS_DIR (default ./storage/driver-documents):
+# keep that folder out of the files the deploy replaces, and back it up.
 
 # name: Deploy to VPS
 

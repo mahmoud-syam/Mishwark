@@ -6,6 +6,8 @@
 
 # Runtime files
 /uploads
+# Private driver papers (DRIVER_DOCUMENTS_DIR). Never commit, keep on a persistent volume.
+/storage
 *.xlsx
 
 # Local experiments

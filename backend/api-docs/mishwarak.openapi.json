@@ -79,7 +79,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Create a customer or driver account. Multipart/form-data - fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
+        "summary": "A driver can attach the papers here as file fields nationalIdFront, nationalIdBack, licenseFront, licenseBack, criminalRecord: they are stored privately and the response lists them in `documents` (PENDING, or FAILED with the reason; a bad file never undoes the signup). Other file fields are dropped. Create a customer or driver account. Multipart/form-data - fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
         "responses": {
           "200": {
             "description": "Success",
@@ -158,6 +158,36 @@
                     "description": "Required when role is 'driver'.",
                     "example": "2030-12-31"
                   },
+                  "nationalIdFront": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`.",
+                    "example": ""
+                  },
+                  "nationalIdBack": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`.",
+                    "example": ""
+                  },
+                  "licenseFront": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`.",
+                    "example": ""
+                  },
+                  "licenseBack": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`.",
+                    "example": ""
+                  },
+                  "criminalRecord": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`.",
+                    "example": ""
+                  },
                   "referralCode": {
                     "type": "string",
                     "example": ""
@@ -188,7 +218,7 @@
             }
           }
         },
-        "description": "Create a customer or driver account. Multipart/form-data - fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
+        "description": "A driver can attach the papers here as file fields nationalIdFront, nationalIdBack, licenseFront, licenseBack, criminalRecord: they are stored privately and the response lists them in `documents` (PENDING, or FAILED with the reason; a bad file never undoes the signup). Other file fields are dropped. Create a customer or driver account. Multipart/form-data - fields may arrive as JSON strings or files. The `role` flag defaults to 'customer'; admin roles cannot be self-assigned.",
         "operationId": "post_auth_signup"
       }
     },
@@ -2216,6 +2246,158 @@
         },
         "description": "GET /driver/stats",
         "operationId": "get_driver_stats"
+      }
+    },
+    "/driver/documents": {
+      "get": {
+        "tags": [
+          "Drivers"
+        ],
+        "summary": "The signed-in driver's papers: every required type (NATIONAL_ID_FRONT, NATIONAL_ID_BACK, LICENSE_FRONT, LICENSE_BACK, CRIMINAL_RECORD) with `status` MISSING, PENDING, APPROVED or REJECTED (+ `reviewNote`, the reason to show), and `summary.state` (MISSING, PENDING, REJECTED, APPROVED). 403 for non-drivers.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "The signed-in driver's papers: every required type (NATIONAL_ID_FRONT, NATIONAL_ID_BACK, LICENSE_FRONT, LICENSE_BACK, CRIMINAL_RECORD) with `status` MISSING, PENDING, APPROVED or REJECTED (+ `reviewNote`, the reason to show), and `summary.state` (MISSING, PENDING, REJECTED, APPROVED). 403 for non-drivers.",
+        "operationId": "get_driver_documents"
+      },
+      "post": {
+        "tags": [
+          "Drivers"
+        ],
+        "summary": "Uploads one paper as multipart/form-data: `type` + `file` (JPG, PNG, WEBP or PDF, checked by content; 10 MB, 413 above). Replaces an earlier one of that type and puts it back to review (PENDING). Stored privately, never at a public URL. 201 with the document.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Uploads one paper as multipart/form-data: `type` + `file` (JPG, PNG, WEBP or PDF, checked by content; 10 MB, 413 above). Replaces an earlier one of that type and puts it back to review (PENDING). Stored privately, never at a public URL. 201 with the document.",
+        "operationId": "post_driver_documents"
+      }
+    },
+    "/driver/documents/{id}/file": {
+      "get": {
+        "tags": [
+          "Drivers"
+        ],
+        "summary": "The driver's own paper (the dashboard team can open it too); 404 for anyone else. Sent inline with Cache-Control: private, no-store.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "The driver's own paper (the dashboard team can open it too); 404 for anyone else. Sent inline with Cache-Control: private, no-store.",
+        "operationId": "get_driver_documents_id_file"
       }
     },
     "/driver/{id}": {
@@ -7519,6 +7701,180 @@
         "operationId": "post_admin_team_id_enable"
       }
     },
+    "/admin/drivers/{id}/documents": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "A driver's papers with their review state (same shape as GET /driver/documents).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "A driver's papers with their review state (same shape as GET /driver/documents).",
+        "operationId": "get_admin_drivers_id_documents"
+      }
+    },
+    "/admin/driver-documents/{id}/file": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Opens a driver's paper (dashboard only).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Opens a driver's paper (dashboard only).",
+        "operationId": "get_admin_driver_documents_id_file"
+      }
+    },
+    "/admin/driver-documents/{id}": {
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Approves or rejects a paper: `{ status: APPROVED }` or `{ status: REJECTED, note }` (the reason is required and shown to the driver). Audit-logged.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Approves or rejects a paper: `{ status: APPROVED }` or `{ status: REJECTED, note }` (the reason is required and shown to the driver). Audit-logged.",
+        "operationId": "patch_admin_driver_documents_id"
+      }
+    },
     "/admin/destinations": {
       "get": {
         "tags": [
@@ -8197,6 +8553,31 @@
           "licenseExpiry": {
             "type": "string",
             "description": "Required when role is 'driver'."
+          },
+          "nationalIdFront": {
+            "type": "string",
+            "format": "binary",
+            "description": "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`."
+          },
+          "nationalIdBack": {
+            "type": "string",
+            "format": "binary",
+            "description": "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`."
+          },
+          "licenseFront": {
+            "type": "string",
+            "format": "binary",
+            "description": "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`."
+          },
+          "licenseBack": {
+            "type": "string",
+            "format": "binary",
+            "description": "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`."
+          },
+          "criminalRecord": {
+            "type": "string",
+            "format": "binary",
+            "description": "Driver paper (JPG, PNG, WEBP or PDF, 10 MB). Stored privately; result in `documents`."
           },
           "referralCode": {
             "type": "string"

@@ -1,3 +1,4 @@
+import DriverDocumentsPanel from "../components/DriverDocuments";
 import { useState, type FormEvent } from "react";
 import { Coins, Percent, Route, Wallet } from "lucide-react";
 import { Link, useParams } from "react-router";
@@ -146,6 +147,7 @@ export default function DriverAnalytics() {
         </div>
 
         <div className="flex min-w-0 flex-col gap-6">
+          {id && <DriverDocumentsPanel driverId={id} />}
           <Panel title="ملخص شامل">
             {!d ? (
               <Skeleton className="h-40" />

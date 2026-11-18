@@ -1,3 +1,5 @@
+import { Link } from "react-router";
+import { DocumentsBadge } from "../components/DriverDocuments";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
 import type { DriverStatus, DriverSummary } from "../lib/types";
@@ -36,6 +38,11 @@ export default function Drivers() {
           {q.data!.map((d, i) => (
             <div key={d.id} className="card flex flex-col gap-2 p-3">
               <DriverCard d={d} tone={tones[i % 3]} />
+              {d.documents && (
+                <Link to={`/drivers/${d.id}`} className="px-1">
+                  <DocumentsBadge s={d.documents} />
+                </Link>
+              )}
               <label className="flex items-center justify-between gap-2 px-1 text-[13px] text-muted">
                 الحالة
                 {d.status === "ONTRIP" ? (
