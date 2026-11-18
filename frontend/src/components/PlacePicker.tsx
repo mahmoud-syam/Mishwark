@@ -172,6 +172,8 @@ export function PlacePickerDialog({
     m.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noreferrer">Leaflet</a>');
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
+      // OSM's tile policy needs a Referer; send the site's origin only.
+      referrerPolicy: "strict-origin-when-cross-origin",
       attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
     }).addTo(m);
     if (other) L.marker([other.latitude, other.longitude], { icon: pinIcon(which === "from" ? "to" : "from", true), interactive: false }).addTo(m);
