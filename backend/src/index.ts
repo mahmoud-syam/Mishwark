@@ -61,6 +61,8 @@ app.use('/api/v1/auth', perIp(Number(process.env.AUTH_RATE_LIMIT ?? 100)));
 app.use('/api/v1/auth/otp/request', perIp(Number(process.env.OTP_REQUEST_RATE_LIMIT ?? 10)));
 // Place search calls OpenStreetMap services on the visitor's behalf.
 app.use('/api/v1/places', perIp(Number(process.env.PLACES_RATE_LIMIT ?? 300)));
+// Public price/distance estimates call the routing service (a paid key when set).
+app.use(['/api/v1/bookings/estimate-price', '/api/v1/bookings/estimate-distance'], perIp(Number(process.env.ESTIMATE_RATE_LIMIT ?? 300)));
 
 app.use(cookieParser());
 

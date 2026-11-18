@@ -628,9 +628,27 @@ export const changePassword = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+/**
+ * Without an SMS provider the code is returned in the response (dev_otp) so the
+ * apps can be tested. In production that would let anyone sign in as any phone
+ * number, so it is refused there unless OTP_DEV_RESPONSE=true is set on purpose
+ * (a closed test server, never the public one).
+ */
+/** "0000" works outside production, or in production only when OTP_TEST_BYPASS=true. */
+export const otpBypassAllowed = (nodeEnv?: string, flag?: string) => nodeEnv !== "production" || flag === "true";
+
+export const otpDelivery = (o: { smsConfigured: boolean; nodeEnv?: string; devResponse?: string }): "sms" | "response" | "refuse" =>
+    o.smsConfigured ? "sms" : o.nodeEnv !== "production" || o.devResponse === "true" ? "response" : "refuse";
+const delivery = () => otpDelivery({ smsConfigured: SmsService.isConfigured(), nodeEnv: process.env.NODE_ENV, devResponse: process.env.OTP_DEV_RESPONSE });
+const otpInResponse = () => delivery() === "response";
+
 export const otpRequest = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { phoneNumber, role, name, licenseNumber } = OtpRequestSchema.parse(req.body);
+        if (delivery() === "refuse") {
+            console.error("[sms] OTP requested in production with no SMS provider configured (SMS_PROVIDER).");
+            return res.status(503).json({ message: "Sign-in by SMS is not available right now. Please try again later.", errorCode: ErrorCodes.INTERNAL_EXCEPTION, errors: null });
+        }
 
         const existingUser = await prismaClient.users.findUnique({
             where: { phoneNumber },
@@ -723,7 +741,7 @@ export const otpRequest = async (req: Request, res: Response, next: NextFunction
         res.status(200).json({
             message: "OTP sent successfully",
             userId,
-            ...(!SmsService.isConfigured() && { dev_otp: otpCode }),
+            ...(otpInResponse() && { dev_otp: otpCode }),
         });
     } catch (error) {
         next(error);
@@ -747,7 +765,7 @@ export const otpVerify = async (req: Request, res: Response, next: NextFunction)
         // "0000" is a testing bypass. It must never work in production, where it
         // would let anyone sign in as any phone number. Set OTP_TEST_BYPASS=true
         // to keep it on a non-production server used by the app testers.
-        const bypassAllowed = process.env.NODE_ENV !== "production" || process.env.OTP_TEST_BYPASS === "true";
+        const bypassAllowed = otpBypassAllowed(process.env.NODE_ENV, process.env.OTP_TEST_BYPASS);
         const isBypass = bypassAllowed && code === "0000";
         if (!isBypass) {
             const expired = !user.otpCode || !user.otpExpiresAt || user.otpExpiresAt.getTime() < Date.now();

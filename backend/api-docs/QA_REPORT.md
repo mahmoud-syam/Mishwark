@@ -19,7 +19,7 @@ The mobile apps are not in this repository, so both apps were simulated through 
 | API sweep (functional, ownership, no-auth, robustness) | 357 / 357 passing |
 | Bugs found and fixed | 17 |
 | Product decisions taken and implemented | 7 + SMS/OTP hardening |
-| Backend test suite | 387 / 387 passing |
+| Backend test suite | 398 / 398 passing |
 
 All dashboard numbers matched the database exactly at every step: revenue,
 pending bookings, live trips, payments, driver and customer analytics,
@@ -184,6 +184,22 @@ Found while testing them:
 | # | Severity | Problem | Fix |
 |---|---|---|---|
 | F-57 | Medium | A team member couldn't change their own name, photo or password; only a Super Admin could reset a password, and that endpoint didn't ask for the current one. | Profile page (click your name in the side menu): name, photo (`PUT/DELETE /auth/me/photo`, real-image check, random file name, old file deleted unless another account uses it) and password (`POST /auth/me/password`: current password required and counted toward the lockout, other sessions signed out, this one kept). Photos show in the side menu and on the Team page. |
+
+### Full-cycle app review (2026-11-19)
+
+The whole customer and driver journey was replayed as an attacker would (112 checks: sign-in, bookings, money, trips, reviews, chat, uploads, leaks, headers, concurrency). Fixed:
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-59 | Critical | In production without an SMS provider, `POST /auth/otp/request` returned the sign-in code in the response: anyone could sign in as any phone number. | Refused (503) in production until SMS is set up, unless `OTP_DEV_RESPONSE=true` is set on purpose for a closed test server. |
+| F-60 | High | Two bookings for overlapping times (also a night trip and an early trip the next day) sent at the same moment were both saved: the car (or driver) double-booked. | Each booking takes a lock on the car and then on the driver before checking, so the second waits and then sees the first (409). |
+| F-61 | High | Several cancels of a paid booking sent together each refunded the deposit (22.02 refunded 4 times). | The cancel claims the booking atomically; only one refunds, the rest change nothing. |
+| F-62 | High | Two pending payments each for the full price could both be confirmed: the booking showed twice its price paid. | Confirmation is checked against what is already confirmed, one at a time per booking (400 above the price). The dashboard marks a refused payment as failed instead of leaving it pending. |
+| F-63 | Medium | Reviews sent at the same moment could save two reviews of one trip. | Unique (booking, side) in the database (migration keeps the first of any duplicates); a second one is 409. |
+| F-64 | Medium | A driver could set any link as his photo (loaded in the dashboard), an invalid licence date or an unknown status. | `PUT /driver/profile` takes only name, licence number and a real date; the photo goes through the checked upload; unknown statuses are 400. The account name follows the driver's name. |
+| F-65 | Medium | Trip-status and status changes checked the booking's state before the caller, so an outsider could tell a booking exists and its state. | Who first: outsiders get 404, the customer 403. |
+| F-66 | Low | No length limits: 20 000-character reviews and 50 000-character chat messages were saved; blank chat messages too. A 3 MB body was a 500. | Review 1000, chat 1 to 2000 characters (422); body over the limit is 413. |
+| F-67 | Low | The waitlist took past dates and dates beyond the booking limit; someone else's entry answered 400 (confirming it exists). | Dates checked like bookings; others' entries are 404. Public estimates are rate-limited (300 per 15 min per IP). |
 
 ### Complaints and reviews (2026-11-18)
 
