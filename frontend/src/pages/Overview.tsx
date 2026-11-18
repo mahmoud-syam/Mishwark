@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CalendarCheck, Car, ChevronLeft, Gauge, Lock, MessageSquareWarning, Plus, Star, UserX, Wallet, Wrench } from "lucide-react";
+import { AlertTriangle, CalendarCheck, Car, ChevronLeft, FileCheck, Gauge, Lock, MessageSquareWarning, Plus, Star, UserX, Wallet, Wrench } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import type { BookingListItem, DayDetails, DriverSummary, Overview as OverviewData } from "../lib/types";
@@ -126,6 +126,13 @@ function AlertsStrip({ data }: { data?: OverviewData }) {
             {icon("bg-wine/12 text-rose", <UserX />)}
             <span>
               {a.driverName} {a.driverStatus === "ONLEAVE" ? "في إجازة" : "خارج الخدمة"} وعليه {a.trips} {a.trips === 1 ? "رحلة جاية" : "رحلات جاية"} (أولها {dayMonth(a.firstDate)}). انقلها لسواق تاني
+            </span>
+          </Link>
+        ) : a.type === "documents_pending" ? (
+          <Link key={i} to={`/drivers/${a.entityId}`} className={row}>
+            {icon("bg-gold/15 text-gold", <FileCheck />)}
+            <span>
+              {a.driverName} رفع {a.documents === 1 ? "مستند" : `${a.documents} مستندات`} مستنية مراجعتك
             </span>
           </Link>
         ) : a.type === "no_driver" ? (

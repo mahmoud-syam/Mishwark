@@ -43,7 +43,7 @@ export const errorMiddleware = (error: any, req: Request, res: Response, _next: 
     // Upload limits (multer): too large / too many files is the client's error.
     if (error?.name === "MulterError") {
         const tooBig = error.code === "LIMIT_FILE_SIZE";
-        const message = tooBig ? "Each photo must be 5 MB or smaller" : error.code === "LIMIT_FILE_COUNT" ? "Too many files in one upload" : "Invalid upload";
+        const message = tooBig ? "The file is too large (photos up to 5 MB, documents up to 10 MB)" : error.code === "LIMIT_FILE_COUNT" ? "Too many files in one upload" : "Invalid upload";
         return res.status(tooBig ? 413 : 400).json({ message, errorCode: ErrorCodes.UNPROCESSABLE_ENTITY, errors: null });
     }
 

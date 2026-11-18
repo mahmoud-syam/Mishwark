@@ -285,6 +285,34 @@ characters (422 otherwise).
 
 ---
 
+### Driver documents (ID, licence, criminal record)
+
+A driver uploads five papers: `NATIONAL_ID_FRONT`, `NATIONAL_ID_BACK`,
+`LICENSE_FRONT`, `LICENSE_BACK`, `CRIMINAL_RECORD`. JPG, PNG, WEBP or PDF, up to
+10 MB, checked by the file's content (a renamed file is a 400). They are stored
+privately: no public URL, only the driver and the dashboard team can open them.
+
+Two ways, use either:
+
+1. **With signup** (`POST /auth/signup`, role `driver`): file fields
+   `nationalIdFront`, `nationalIdBack`, `licenseFront`, `licenseBack`,
+   `criminalRecord`. The response lists them in `documents`
+   (`[{ field, status: "PENDING" }]`, or `"FAILED"` with `error`); a bad file
+   doesn't undo the signup, upload it again with option 2.
+2. **After signing in** (the OTP flow): one paper per request.
+
+```http
+POST /driver/documents          multipart/form-data: type=LICENSE_FRONT, file=<photo>
+GET  /driver/documents          → { documents: [{ type, status, reviewNote, uploadedAt, id }], summary: { state } }
+GET  /driver/documents/:id/file → the paper itself (driver's own only)
+```
+
+`status` per paper: `MISSING`, `PENDING` (waiting for the office), `APPROVED`,
+`REJECTED` with `reviewNote` (show it: "الصورة مش واضحة"). Uploading the same
+type again replaces it and sends it back to review. `summary.state` is the
+overall picture for a "your papers" screen: `MISSING` → `PENDING` → `APPROVED`,
+or `REJECTED` when one needs re-uploading.
+
 ## Roles and permissions
 
 Role names are uppercase and match the enum exactly: `SUPER_ADMIN`, `ADMIN`,

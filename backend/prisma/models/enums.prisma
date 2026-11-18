@@ -168,3 +168,19 @@ enum ServiceType {
   TRIP
   VIP
 }
+
+/// Papers a driver uploads.
+enum DriverDocumentType {
+  NATIONAL_ID_FRONT
+  NATIONAL_ID_BACK
+  LICENSE_FRONT
+  LICENSE_BACK
+  CRIMINAL_RECORD
+}
+
+/// Review state of a driver document.
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
