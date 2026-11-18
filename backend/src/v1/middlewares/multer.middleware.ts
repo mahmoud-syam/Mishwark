@@ -2,6 +2,7 @@ import { Request } from "express";
 import fs from "fs";
 import multer, { FileFilterCallback } from "multer";
 import path from "path";
+import { randomUUID } from "crypto";
 import { uuid } from "uuidv4"
 import { BadRequestException } from "../utils/errors";
 
@@ -99,6 +100,21 @@ export const vehicleImageUpload = multer({
     else cb(new BadRequestException(`Unsupported file type: ${file.mimetype}. Use JPG, PNG or WEBP.`));
   },
   limits: { fileSize: 5 * 1024 * 1024, files: 8 },
+});
+
+// A team member's or app user's own photo (profile page): images only, saved as
+// uploads/employees/pic-<random>, the only names served from that folder.
+export const EMPLOYEE_PHOTOS_FOLDER = EMP_UPLOADS_FOLDER;
+export const profilePhotoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, EMP_UPLOADS_FOLDER),
+    filename: (_req, file, cb) => cb(null, `pic-${randomUUID()}${IMAGE_EXT[file.mimetype] ?? ""}`),
+  }),
+  fileFilter: (_req, file, cb) => {
+    if (IMAGE_EXT[file.mimetype]) cb(null, true);
+    else cb(new BadRequestException(`Unsupported file type: ${file.mimetype}. Use JPG, PNG or WEBP.`));
+  },
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
 });
 
 /**

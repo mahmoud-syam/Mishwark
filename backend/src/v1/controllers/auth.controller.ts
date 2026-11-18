@@ -14,7 +14,8 @@ import SettingsService from "../services/settings.service";
 import { ReferralStatus } from "../../../generated/prisma";
 import { appSessionDays, authCookieOptions, clearAuthCookieOptions } from "../utils/authCookie";
 import fs from "fs";
-import { imageTypeOf } from "../middlewares/multer.middleware";
+import { EMPLOYEE_PHOTOS_FOLDER, imageTypeOf } from "../middlewares/multer.middleware";
+import path from "path";
 import DriverDocumentService, { SIGNUP_FIELDS } from "../services/driver-document.service";
 
 const OTP_TTL_MINUTES = Number(process.env.OTP_TTL_MINUTES ?? 5);
@@ -353,9 +354,10 @@ const DASHBOARD_NO_OTP = "Dashboard accounts sign in with email, password and 2F
 /** A customer who signed up with the phone number only has it as their name. */
 const profileComplete = (u: { name: string; phoneNumber: string | null }) => !!u.name.trim() && u.name !== u.phoneNumber;
 
-const meShape = (u: { id: string; name: string; email: string | null; phoneNumber: string | null; preferredLanguage?: string }, role: unknown) => ({
+const meShape = (u: { id: string; name: string; email: string | null; phoneNumber: string | null; preferredLanguage?: string; pic?: string }, role: unknown) => ({
     id: u.id,
     name: u.name,
+    pic: u.pic ?? "",
     email: u.email,
     phoneNumber: u.phoneNumber,
     preferredLanguage: u.preferredLanguage ?? "ar",
@@ -365,8 +367,8 @@ const meShape = (u: { id: string; name: string; email: string | null; phoneNumbe
 
 export const me = async (req: Request, res: Response) => {
     const u = req.user!;
-    const row = await prismaClient.users.findUnique({ where: { id: u.id }, select: { preferredLanguage: true } });
-    res.status(200).json(meShape({ ...(u as any), preferredLanguage: row?.preferredLanguage }, u.role));
+    const row = await prismaClient.users.findUnique({ where: { id: u.id }, select: { preferredLanguage: true, pic: true } });
+    res.status(200).json(meShape({ ...(u as any), preferredLanguage: row?.preferredLanguage, pic: row?.pic }, u.role));
 };
 
 const UpdateMeSchema = z
@@ -398,11 +400,103 @@ export const updateMe = async (req: Request, res: Response, next: NextFunction) 
         const updated = await prismaClient.users.update({
             where: { id: u.id },
             data: input,
-            select: { id: true, name: true, email: true, phoneNumber: true, preferredLanguage: true },
+            select: ME_SELECT,
         });
         // A driver's name shows on trips from the driver record too.
         if (input.name) await prismaClient.drivers.updateMany({ where: { userId: u.id }, data: { fullName: input.name } });
         res.status(200).json(meShape(updated, u.role));
+    } catch (error) {
+        next(error);
+    }
+};
+
+const ME_SELECT = { id: true, name: true, email: true, phoneNumber: true, preferredLanguage: true, pic: true } as const;
+const OWN_PHOTO = /^\/uploads\/employees\/(pic-[\w.-]+)$/;
+
+/** Deletes a replaced photo file, unless another account still points at it. */
+const dropPhotoFile = async (pic: string | null | undefined, userId: string) => {
+    const m = pic ? OWN_PHOTO.exec(pic) : null;
+    if (!m) return;
+    const [users, drivers] = await Promise.all([
+        prismaClient.users.count({ where: { pic, id: { not: userId } } }),
+        prismaClient.drivers.count({ where: { pic, userId: { not: userId } } }),
+    ]);
+    if (users + drivers === 0) fs.rmSync(path.join(EMPLOYEE_PHOTOS_FOLDER, m[1]), { force: true });
+};
+
+/**
+ * The signed-in user's own photo (multipart field `photo`): JPG, PNG or WEBP,
+ * checked by content, 5 MB. Replaces the previous one.
+ */
+export const updateMyPhoto = async (req: Request, res: Response, next: NextFunction) => {
+    const file = req.file;
+    let saved = false;
+    try {
+        if (!file) throw new BadRequestsException("Choose a photo (field `photo`)", ErrorCodes.UNPROCESSABLE_ENTITY);
+        if (imageTypeOf(file.path) !== file.mimetype) {
+            throw new BadRequestsException("The photo must be a real JPG, PNG or WEBP image", ErrorCodes.UNPROCESSABLE_ENTITY);
+        }
+        const u = req.user!;
+        const before = await prismaClient.users.findUnique({ where: { id: u.id }, select: { pic: true } });
+        const pic = `/uploads/employees/${file.filename}`;
+        const updated = await prismaClient.users.update({ where: { id: u.id }, data: { pic }, select: ME_SELECT });
+        saved = true;
+        await prismaClient.drivers.updateMany({ where: { userId: u.id }, data: { pic } });
+        await dropPhotoFile(before?.pic, u.id);
+        res.status(200).json(meShape(updated, u.role));
+    } catch (error) {
+        if (file && !saved) fs.rmSync(file.path, { force: true });
+        next(error);
+    }
+};
+
+export const removeMyPhoto = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const u = req.user!;
+        const before = await prismaClient.users.findUnique({ where: { id: u.id }, select: { pic: true } });
+        const updated = await prismaClient.users.update({ where: { id: u.id }, data: { pic: "" }, select: ME_SELECT });
+        await prismaClient.drivers.updateMany({ where: { userId: u.id }, data: { pic: "" } });
+        await dropPhotoFile(before?.pic, u.id);
+        res.status(200).json(meShape(updated, u.role));
+    } catch (error) {
+        next(error);
+    }
+};
+
+const MyPasswordSchema = z
+    .object({ currentPassword: z.string().min(1, "Enter your current password"), newPassword: PasswordRule })
+    .strict();
+
+/**
+ * A dashboard account changes its own password. The current password is
+ * required (and counts toward the sign-in lockout). Every other session is
+ * signed out; this one carries on with a fresh token.
+ */
+export const changeMyPassword = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { currentPassword, newPassword } = MyPasswordSchema.parse(req.body ?? {});
+        const u = req.user!;
+        if (!isAdminRole(u.role?.name)) throw new ForbiddenException("This account signs in with a phone code and has no password");
+        const user = await prismaClient.users.findUnique({ where: { id: u.id }, select: { id: true, email: true, password: true } });
+        if (!user) throw new BadRequestsException("User not found", ErrorCodes.USER_NOT_FOUND);
+        const account = user.email ?? user.id;
+        SignInGuard.check(req, account);
+        if (!user.password || !compareSync(currentPassword, user.password)) {
+            SignInGuard.fail(req, account);
+            throw new BadRequestsException("The current password is wrong", ErrorCodes.INVALID_CREDENTIALS);
+        }
+        SignInGuard.succeed(req, account);
+        if (compareSync(newPassword, user.password)) {
+            throw new BadRequestsException("Choose a password different from the current one", ErrorCodes.UNPROCESSABLE_ENTITY);
+        }
+        const updated = await prismaClient.users.update({
+            where: { id: u.id },
+            data: { password: hashSync(newPassword, 10), mustChangePassword: false, tempPasswordExpiresAt: null, tokenVersion: { increment: 1 } },
+            include: withRole,
+        });
+        const token = jwt.sign({ user: buildTokenUser(updated) }, process.env.JWT_SECRET as string, { expiresIn: "24h" });
+        res.cookie("token", token, authCookieOptions());
+        res.status(200).json({ message: "Password changed. Other sessions were signed out" });
     } catch (error) {
         next(error);
     }

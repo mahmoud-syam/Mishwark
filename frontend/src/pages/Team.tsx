@@ -129,7 +129,7 @@ function MemberRow({ m, self, onPassword }: { m: TeamMember; self: boolean; onPa
     <li className={cx("flex flex-col gap-3 border-b border-line py-4 last:border-b-0", off && "opacity-70")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <Avatar text={initials(m.name)} tone={m.role === "SUPER_ADMIN" ? "gold" : "wine"} />
+          <Avatar text={initials(m.name)} src={m.pic || null} tone={m.role === "SUPER_ADMIN" ? "gold" : "wine"} />
           <div className="flex min-w-0 flex-col">
             <span className="truncate text-[15px] font-bold text-cream">
               {m.name} {self && <span className="text-[13px] font-normal text-muted">(إنت)</span>}

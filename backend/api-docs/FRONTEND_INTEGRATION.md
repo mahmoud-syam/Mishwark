@@ -142,8 +142,9 @@ device, or a disabled account still end it at once (401: sign in again).
 `profileComplete` is false while the account has no name yet (signed up with
 the phone number only).
 
-**Profile.** `GET /auth/me` returns `{ id, name, email, phoneNumber,
-preferredLanguage, role, profileComplete }`. The signed-in user updates their
+**Profile.** `GET /auth/me` returns `{ id, name, pic, email, phoneNumber,
+preferredLanguage, role, profileComplete }` (`pic` is a path such as
+`/uploads/employees/pic-<uuid>.jpg`, or `""`). The signed-in user updates their
 own details with:
 
 ```http
@@ -155,6 +156,16 @@ All fields optional; `email: null` clears it. Name 2 to 80 characters (422),
 an email already used by another account is **409**, unknown fields (like
 `phoneNumber`, which is the sign-in and can't change here) are **422**.
 Returns the same shape as `GET /auth/me`.
+
+The user's own photo (optional, any account):
+
+```http
+PUT    /auth/me/photo   multipart/form-data: photo=<JPG, PNG or WEBP, 5 MB>
+DELETE /auth/me/photo
+```
+
+Both return the same shape as `GET /auth/me`. A file that isn't really an
+image is a 400; above 5 MB is a 413.
 
 This is the **only** flow that returns the JWT in the body. The code `0000` is
 accepted as a testing bypass outside production only (or when the server sets

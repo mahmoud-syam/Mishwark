@@ -10,6 +10,8 @@ export interface Me {
   name: string;
   email: string | null;
   phoneNumber: string | null;
+  /** Own photo path ("/uploads/employees/pic-…"), or "" for none. */
+  pic?: string;
   role: { id: string; name: "SUPER_ADMIN" | "ADMIN" | "CUSTOMER" | "DRIVER"; permissions: string[] } | null;
 }
 
@@ -317,6 +319,7 @@ export interface TeamMember {
   id: string;
   name: string;
   email: string | null;
+  pic: string;
   role: TeamRole;
   twoFactorEnabled: boolean;
   mustChangePassword: boolean;
