@@ -242,3 +242,10 @@
     animation: drawer-in 220ms var(--ease-out) both;
   }
 }
+
+/* Booking map: OpenStreetMap tiles dimmed to match the dark theme. */
+[data-theme="dark"] .map-surface .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.6);
+}
+.map-surface { background: var(--c-raised); font-family: inherit; }
+.map-surface .leaflet-control-attribution { font-size: 10px; }

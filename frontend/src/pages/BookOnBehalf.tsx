@@ -5,7 +5,8 @@ import { api, ApiError, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import type { CustomerAnalytics, CustomerHit, Vehicle } from "../lib/types";
 import { egp, initials, maskPhone, num, todayKey } from "../lib/format";
-import { EVENT_TYPES, SAVED_PLACES, toPlaceValue } from "../lib/places";
+import { EVENT_TYPES } from "../lib/places";
+import { LocationField, type PlacePoint } from "../components/PlacePicker";
 import { Avatar, Button, cx, ErrorBox, Field, fieldControl, Page, PageHeader, Panel, Skeleton, Toggle } from "../components/ui";
 
 interface Estimate {
@@ -43,8 +44,8 @@ export default function BookOnBehalf() {
   const [date, setDate] = useState(todayKey());
   const [startTime, setStartTime] = useState("19:00");
   const [endTime, setEndTime] = useState("22:00");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [from, setFrom] = useState<PlacePoint | null>(null);
+  const [to, setTo] = useState<PlacePoint | null>(null);
   const [driverId, setDriverId] = useState("");
   const [eventType, setEventType] = useState("");
   const [override, setOverride] = useState("");
@@ -79,8 +80,9 @@ export default function BookOnBehalf() {
   // The API lists only cars in service with a driver; maintenance is checked for the chosen date.
   const bookable = vehicles.data ?? [];
 
-  const fromValue = toPlaceValue(from);
-  const toValue = toPlaceValue(to);
+  // Exact coordinates from the map, with the name shown to the driver and customer.
+  const fromValue = from;
+  const toValue = to;
   const estimateKey = useDebounced(JSON.stringify([vehicleId, fromValue, toValue, customer?.id ?? null]), 450);
   const estimate = useQuery({
     queryKey: ["estimate", estimateKey],
@@ -158,12 +160,8 @@ export default function BookOnBehalf() {
             <Field label="التاريخ">
               <input className={`${fieldControl} ltr text-right`} type="date" min={todayKey()} value={date} onChange={(e) => setDate(e.target.value)} required />
             </Field>
-            <Field label="من">
-              <input className={fieldControl} list="saved-places" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="نقطة الانطلاق" required />
-            </Field>
-            <Field label="إلى">
-              <input className={fieldControl} list="saved-places" value={to} onChange={(e) => setTo(e.target.value)} placeholder="الوجهة" required />
-            </Field>
+            <LocationField which="from" value={from} other={to} onChange={setFrom} />
+            <LocationField which="to" value={to} other={from} onChange={setTo} />
             <Field label="الميعاد">
               <div className="flex items-center gap-2">
                 <input
@@ -197,17 +195,12 @@ export default function BookOnBehalf() {
               <input className={fieldControl} list="event-types" value={eventType} onChange={(e) => setEventType(e.target.value)} placeholder="زفة فرح، استقبال مطار…" />
             </Field>
           </div>
-          <datalist id="saved-places">
-            {SAVED_PLACES.map((p) => (
-              <option key={p.label} value={p.label} />
-            ))}
-          </datalist>
           <datalist id="event-types">
             {EVENT_TYPES.map((t) => (
               <option key={t} value={t} />
             ))}
           </datalist>
-          <p className="mt-2.5 text-[12px] text-muted">الأماكن المحفوظة بتتسعّر بالمسافة الفعلية. أي مكان تاني بيتحدد على الخريطة من السيرفر.</p>
+          <p className="mt-2.5 text-[12px] text-muted">دوس على "من" أو "إلى" عشان تدور على أي مكان في مصر أو تحط دبوس على الخريطة. السعر بيتحسب بالمسافة الفعلية بين النقطتين.</p>
         </Panel>
 
         <Panel title="٣. السعر والدفع">

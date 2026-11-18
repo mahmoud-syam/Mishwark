@@ -59,6 +59,8 @@ const tooMany = { message: 'Too many requests. Try again in a few minutes', erro
 const perIp = (limit: number) => rateLimit({ windowMs: 15 * 60 * 1000, limit, standardHeaders: 'draft-8', legacyHeaders: false, message: tooMany });
 app.use('/api/v1/auth', perIp(Number(process.env.AUTH_RATE_LIMIT ?? 100)));
 app.use('/api/v1/auth/otp/request', perIp(Number(process.env.OTP_REQUEST_RATE_LIMIT ?? 10)));
+// Place search calls OpenStreetMap services on the visitor's behalf.
+app.use('/api/v1/places', perIp(Number(process.env.PLACES_RATE_LIMIT ?? 300)));
 
 app.use(cookieParser());
 
@@ -116,10 +118,11 @@ app.use("/api/v1", rootRouterV1);
 // (backend/ and frontend/ side by side). A deployment can set its own path.
 const DASHBOARD_DIST = path.resolve(process.cwd(), process.env.DASHBOARD_DIST || '../frontend/dist');
 if (fs.existsSync(DASHBOARD_DIST)) {
-    // The dashboard only loads its own files (plus data: images such as the 2FA QR).
+    // The dashboard only loads its own files (plus data: images such as the 2FA QR, and map tiles).
     app.use('/dashboard', helmet.contentSecurityPolicy({
         directives: {
-            'img-src': ["'self'", 'data:', 'blob:'],
+            // OpenStreetMap tiles for the booking map.
+            'img-src': ["'self'", 'data:', 'blob:', 'https://tile.openstreetmap.org'],
             'upgrade-insecure-requests': isProduction ? [] : null,
         },
     }));

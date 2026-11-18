@@ -397,6 +397,29 @@ if sent — pricing is server-authoritative. Distance and duration are always
 recomputed server-side. Any `distanceKm` you send is only echoed back under
 `comparison` and never priced, so don't bother computing it client-side.
 
+### Choosing places on a map
+
+`startPoint` / `endPoint` should be exact coordinates with a name:
+`{ "latitude": 30.0749, "longitude": 31.3462, "label": "قاعة الماسة، مدينة نصر" }`.
+The API offers place search and pin-to-address on OpenStreetMap data, no key
+needed on your side (no account required either):
+
+```http
+GET /places/search?q=قاعة الماسة&lat=30.04&lng=31.23   // lat/lng = map centre, optional
+→ [{ "name": "قاعة الماسة", "detail": "مدينة نصر، القاهرة", "label": "قاعة الماسة، مدينة نصر، القاهرة",
+     "latitude": 30.0749, "longitude": 31.3462, "kind": "amenity:events_venue" }]
+
+GET /places/reverse?lat=30.07212&lng=31.33181      // after the user drops or drags a pin
+→ { "name": "...", "detail": "...", "label": "...", "latitude": 30.07212, "longitude": 31.33181 }
+```
+
+Search as the user types (debounce ~350 ms, at least 2 characters). Egypt
+only. Search returns **502** when the provider is down: let the user drop a pin
+instead. Reverse never fails for a point in Egypt (worst case the label is the
+coordinates); let the user edit the label ("البوابة 2"). For the map itself use
+OpenStreetMap tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png` with the
+"© OpenStreetMap" credit) or any map SDK; only the coordinates matter to the API.
+
 ### Creating a booking
 
 ```http

@@ -12,6 +12,7 @@ import referralRouter from "./referral.routes";
 import walletRouter from "./wallet.routes";
 import notificationRouter from "./notification.routes";
 import adminRouter from "./admin.routes";
+import placesRouter from "./places.routes";
 
 const rootRouterV1: Router = Router();
 
@@ -28,5 +29,6 @@ rootRouterV1.use("/referrals", referralRouter);
 rootRouterV1.use("/wallet", walletRouter);
 rootRouterV1.use("/notifications", notificationRouter);
 rootRouterV1.use("/admin", adminRouter);
+rootRouterV1.use("/places", placesRouter);
 
 export default rootRouterV1;
