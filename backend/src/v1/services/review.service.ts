@@ -54,19 +54,25 @@ export class ReviewService {
       throw new ConflictException("You have already reviewed this booking");
     }
 
-    const review = await prismaClient.reviews.create({
-      data: {
-        bookingId: data.bookingId,
-        reviewerId,
-        revieweeId,
-        reviewerType: data.reviewerType,
-        overallRating: data.overallRating,
-        vehicleRating: data.vehicleRating || null,
-        punctualityRating: data.punctualityRating || null,
-        comment: data.comment || null,
-        visibleAt: null,
-      },
-    });
+    // The unique (booking, direction) rule settles two reviews sent at once.
+    const review = await prismaClient.reviews
+      .create({
+        data: {
+          bookingId: data.bookingId,
+          reviewerId,
+          revieweeId,
+          reviewerType: data.reviewerType,
+          overallRating: data.overallRating,
+          vehicleRating: data.vehicleRating || null,
+          punctualityRating: data.punctualityRating || null,
+          comment: data.comment || null,
+          visibleAt: null,
+        },
+      })
+      .catch((e: any) => {
+        if (e?.code === "P2002") throw new ConflictException("You have already reviewed this booking");
+        throw e;
+      });
 
     await this.checkAndReleaseBlindReviews(data.bookingId);
 

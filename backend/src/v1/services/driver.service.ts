@@ -1,3 +1,4 @@
+import { z } from "zod";
 import prismaClient from "../utils/prismaClientHelper";
 import {
   DriverStatus,
@@ -9,6 +10,14 @@ import {
   ForbiddenException,
   NotFoundException,
 } from "../utils/errors";
+
+const DriverProfileSchema = z
+  .object({
+    fullName: z.string().trim().min(2, "Name is too short").max(80),
+    licenseNumber: z.string().trim().min(3).max(40),
+    licenseExpiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "licenseExpiry must be YYYY-MM-DD").refine((d) => !Number.isNaN(Date.parse(d)), "Invalid date"),
+  })
+  .partial(); // other fields are ignored, not refused, so older app versions keep working
 
 export class DriverService {
   public static async getDriverProfile(userId: string) {
@@ -39,18 +48,23 @@ export class DriverService {
       throw new NotFoundException(`Driver profile not found for user ${userId}`);
     }
 
-    return await prismaClient.drivers.update({
+    // Only these, checked. `pic` used to take any text (an outside link would
+    // then load in the dashboard); the photo is uploaded with PUT /auth/me/photo.
+    const input = DriverProfileSchema.parse(data ?? {});
+    const updated = await prismaClient.drivers.update({
       where: { id: driver.id },
       data: {
-        ...(data.fullName && { fullName: data.fullName }),
-        ...(data.licenseNumber && { licenseNumber: data.licenseNumber }),
-        ...(data.licenseExpiry && { licenseExpiry: new Date(data.licenseExpiry) }),
-        ...(data.pic && { pic: data.pic }),
+        ...(input.fullName && { fullName: input.fullName }),
+        ...(input.licenseNumber && { licenseNumber: input.licenseNumber }),
+        ...(input.licenseExpiry && { licenseExpiry: new Date(`${input.licenseExpiry}T00:00:00.000Z`) }),
       },
       include: {
         user: { select: { id: true, name: true, email: true, phoneNumber: true } },
       },
     });
+    // The account name shows in the dashboard and on reviews; keep it in step.
+    if (input.fullName) await prismaClient.users.update({ where: { id: userId }, data: { name: input.fullName } });
+    return updated;
   }
 
   public static async toggleDriverStatus(userId: string, status: DriverStatus) {
@@ -59,6 +73,9 @@ export class DriverService {
       throw new NotFoundException(`Driver profile not found for user ${userId}`);
     }
 
+    if (!Object.values(DriverStatus).includes(status)) {
+      throw new BadRequestException(`status must be one of ${Object.values(DriverStatus).filter((x) => x !== DriverStatus.ONTRIP).join(", ")}`);
+    }
     if (status === DriverStatus.ONTRIP) {
       throw new BadRequestException("Cannot manually set status to ONTRIP; this is managed by trip lifecycle");
     }

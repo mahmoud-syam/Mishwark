@@ -1,3 +1,5 @@
+import SettingsService from "./settings.service";
+import { addDays, dateKey } from "../utils/businessTime";
 import prismaClient from "../utils/prismaClientHelper";
 import {
   WaitlistStatus,
@@ -16,10 +18,29 @@ export class WaitlistService {
     requestedDate: string;
     requestedTime?: string;
   }) {
+    // Same window as a booking: not in the past, not beyond the advance limit.
+    const today = dateKey();
+    if (typeof data.requestedDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(data.requestedDate) || Number.isNaN(Date.parse(data.requestedDate))) {
+      throw new BadRequestException("requestedDate must be a date (YYYY-MM-DD)");
+    }
+    if (data.requestedDate < today) {
+      throw new BadRequestException("You can't join the waitlist for a past date");
+    }
+    const { maxAdvanceBookingDays } = await SettingsService.get();
+    if (data.requestedDate > addDays(today, maxAdvanceBookingDays)) {
+      throw new BadRequestException(`Trips can be booked up to ${maxAdvanceBookingDays} days ahead`);
+    }
+    if (data.requestedTime !== undefined && data.requestedTime !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(data.requestedTime))) {
+      throw new BadRequestException("requestedTime must be HH:mm");
+    }
+    if (typeof data.vehicleId !== "string" || !data.vehicleId) {
+      throw new BadRequestException("vehicleId is required");
+    }
+
     const vehicle = await prismaClient.vehicles.findUnique({
       where: { id: data.vehicleId },
     });
-    if (!vehicle) {
+    if (!vehicle || vehicle.retiredAt) {
       throw new NotFoundException(`Vehicle with ID ${data.vehicleId} not found`);
     }
 
@@ -104,8 +125,9 @@ export class WaitlistService {
       throw new NotFoundException(`Waitlist entry with ID ${waitlistId} not found`);
     }
 
+    // Someone else's entry: not found, so the error doesn't confirm it exists.
     if (entry.customerId !== customerId) {
-      throw new BadRequestException("You can only cancel your own waitlist entries");
+      throw new NotFoundException(`Waitlist entry with ID ${waitlistId} not found`);
     }
 
     await prismaClient.waitlist.update({

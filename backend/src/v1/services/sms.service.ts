@@ -75,7 +75,7 @@ export const smsProvider = (): SmsProvider | null => {
   cached = kind === "twilio" ? twilio() : kind === "http" ? http() : null;
   if (kind && !cached) console.warn(`[sms] SMS_PROVIDER=${kind} is set but its settings are incomplete; SMS is disabled.`);
   if (!cached && process.env.NODE_ENV === "production") {
-    console.warn("[sms] No SMS provider configured in production: OTP codes are returned in the API response (dev_otp). Configure SMS_PROVIDER before launch.");
+    console.warn("[sms] No SMS provider configured in production: sign-in by SMS is refused (503) until SMS_PROVIDER is set.");
   }
   return cached;
 };

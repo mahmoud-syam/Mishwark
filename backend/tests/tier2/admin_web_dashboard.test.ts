@@ -4,7 +4,7 @@ import { BookingStatus, TripStatus } from '../../generated/prisma';
 import { seedDatabase, resetDatabase, isDatabaseConnected } from '../infra/db-setup';
 import { generateAdminToken, generateRiderToken } from '../infra/auth-helper';
 import { createApiClient } from '../infra/api-client';
-import { dateKey, zonedToInstant, addDays } from '../../src/v1/utils/businessTime';
+import { dateKey, timeKey, zonedToInstant, addDays } from '../../src/v1/utils/businessTime';
 
 /**
  * Integration tests for the admin web-dashboard endpoints and the
@@ -100,15 +100,17 @@ describe('Tier 2: Admin web dashboard endpoints, audit trail & booking authoriza
   test('ADM-WEB-06: live trips flag a trip that overran its planned duration', async () => {
     if (!(await setup())) return;
     const api = createApiClient();
-    const today = dateKey();
+    // Scheduled at the minute it started (40 minutes ago), so the test also
+    // holds just after midnight (a fixed 00:00 start failed until 00:40).
     const startedAt = new Date(Date.now() - 40 * 60_000);
+    const today = dateKey(startedAt);
     const booking = await prismaClient.bookings.create({
       data: {
         customerId: ctx.seed.riderUser.id,
         vehicleId: ctx.seed.vehicle.id,
         driverId: ctx.seed.driverProfile.id,
         bookingDate: today,
-        startTime: '00:00',
+        startTime: timeKey(startedAt),
         endTime: '23:59',
         durationMinutes: 20,
         status: BookingStatus.CONFIRMED,
@@ -132,6 +134,19 @@ describe('Tier 2: Admin web dashboard endpoints, audit trail & booking authoriza
     const bad = await api.get('/admin/days/16-11-2026', { token: ctx.admin });
     expect(bad.status >= 400 && bad.status < 500).toBe(true);
 
+    // Its own booking today (not the live-trip one, which may fall on yesterday after midnight).
+    await prismaClient.bookings.create({
+      data: {
+        customerId: ctx.seed.riderUser.id,
+        vehicleId: ctx.seed.vehicle.id,
+        driverId: ctx.seed.driverProfile.id,
+        bookingDate: dateKey(),
+        startTime: '23:00',
+        endTime: '23:30',
+        status: BookingStatus.CONFIRMED,
+        totalPrice: 500,
+      },
+    });
     const ok = await api.get(`/admin/days/${dateKey()}`, { token: ctx.admin });
     expect(ok.status).toBe(200);
     expect(ok.body.data.stats.total).toBeGreaterThanOrEqual(1);

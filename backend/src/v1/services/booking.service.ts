@@ -30,6 +30,7 @@ import { getDriverIdForUser } from "./role.service";
 import { isAdminRole, normalizeRoleName, USER_ROLES } from "../constants/roles";
 import { addDays, dateKey, timeKey, zonedToInstant } from "../utils/businessTime";
 import { isOvernight, minutesOf, nearbyDays, slotSpan, spansClash, tripMinutes } from "../utils/slots";
+import { lockKeys, SCHEDULE_TX } from "../utils/locks";
 import ReferralService from "./referral.service";
 import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
 import DiscountService from "./discount.service";
@@ -239,6 +240,9 @@ export class BookingService {
       spansClash(span, slotSpan(t.bookingDate, t.startTime, t.endTime), settings.bookingBufferMinutes);
 
     const created = await prismaClient.$transaction(async (tx) => {
+      // One booking at a time per car: without this, two requests for
+      // overlapping times both passed the checks below and both were saved.
+      await lockKeys(tx, [`vehicle:${data.vehicleId}`]);
       // 1. Vehicle check
       const vehicle = await tx.vehicles.findUnique({
         where: { id: data.vehicleId },
@@ -303,7 +307,9 @@ export class BookingService {
         overlaps: clashes,
       });
 
-      // 3d. Re-check the car AND the chosen driver together
+      // 3d. Re-check the car AND the chosen driver together, once no other
+      // booking for this driver (on another car) can be in progress.
+      await lockKeys(tx, [`driver:${driverId}`]);
       const existingBookings = await tx.bookings.findMany({
         where: {
           bookingDate: { in: nearbyDays(data.bookingDate) },
@@ -425,7 +431,7 @@ export class BookingService {
       });
 
       return newBooking;
-    });
+    }, SCHEDULE_TX);
 
     // The package's total is the sum of its bookings' (discounted) prices.
     if (created.packageId) await PackageService.recalculatePackageTotal(created.packageId);
@@ -492,8 +498,11 @@ export class BookingService {
       // 1. Update Booking status to CANCELLED, settling the deposit by the
       //    cancellation policy. A refund is credited to the customer's wallet.
       const terms = BookingService.cancellationTerms(booking, freeCancellationHours, opts.refundDeposit);
-      const updatedBooking = await tx.bookings.update({
-        where: { id: bookingId },
+      // Claim the cancellation atomically: of several cancels arriving together
+      // only one changes the row, so the deposit is refunded once. (Each used to
+      // read "not cancelled yet" and refund it again.)
+      const claimed = await tx.bookings.updateMany({
+        where: { id: bookingId, status: { not: BookingStatus.CANCELLED } },
         data: {
           status: BookingStatus.CANCELLED,
           cancelledAt: new Date(),
@@ -502,6 +511,10 @@ export class BookingService {
           depositRefunded: terms.refund,
         },
       });
+      const updatedBooking = await tx.bookings.findUniqueOrThrow({ where: { id: bookingId }, include: { customer: true, vehicle: true, driver: true } });
+      if (claimed.count === 0) {
+        return { booking: updatedBooking, promotedWaitlistEntry: null, cancellation: null };
+      }
       if (terms.refund > 0) {
         await tx.walletTransactions.create({
           data: {
@@ -614,14 +627,9 @@ export class BookingService {
       throw new NotFoundException(`Booking with ID ${bookingId} not found`);
     }
 
-    if (!isValidBookingTransition(booking.status, newStatus)) {
-      throw new BadRequestException(
-        `Invalid status transition from ${booking.status} to ${newStatus}`
-      );
-    }
-
-    // Authorization. Previously any signed-in user could confirm, complete or
-    // cancel any booking by id.
+    // Authorization first, so someone with no part in the booking can't learn
+    // that it exists or what state it is in from the error.
+    // Previously any signed-in user could confirm, complete or cancel any booking by id.
     if (user) {
       const party = await bookingPartyOf(booking, user);
       if (party === null) {
@@ -637,6 +645,12 @@ export class BookingService {
       if (!allowed[party].includes(newStatus)) {
         throw new ForbiddenException(`You cannot set this booking to ${newStatus}`);
       }
+    }
+
+    if (!isValidBookingTransition(booking.status, newStatus)) {
+      throw new BadRequestException(
+        `Invalid status transition from ${booking.status} to ${newStatus}`
+      );
     }
 
     // Cancelling must release the vehicle day and promote the waitlist, exactly
@@ -672,19 +686,9 @@ export class BookingService {
       throw new NotFoundException(`Booking with ID ${bookingId} not found`);
     }
 
-    if (booking.status === BookingStatus.CANCELLED) {
-      throw new BadRequestException("Cannot update trip status on a cancelled booking");
-    }
-
-    if (!isValidTripTransition(booking.tripStatus, newTripStatus)) {
-      throw new BadRequestException(
-        `Invalid trip status transition from ${booking.tripStatus} to ${newTripStatus}`
-      );
-    }
-
-    // Role boundary check: only admins and the assigned driver may advance a trip.
-    // A missing role fails closed - previously `if (user && user.role)` let a
-    // role-less user through entirely.
+    // Role boundary check first: only admins and the assigned driver may advance
+    // a trip. The booking's customer is told no; anyone else gets 404 so the
+    // error doesn't reveal the booking or its state. A missing role fails closed.
     if (user) {
         const roleName = normalizeRoleName(
             typeof user.role === "string" ? user.role : user.role?.name
@@ -695,9 +699,22 @@ export class BookingService {
             const isAssignedDriver = driverId !== null && driverId === booking.driverId;
 
             if (!isAssignedDriver) {
-                throw new ForbiddenException("Only the assigned driver or an admin can update trip status");
+                if (user.id === booking.customerId) {
+                    throw new ForbiddenException("Only the assigned driver or an admin can update trip status");
+                }
+                throw new NotFoundException(`Booking with ID ${bookingId} not found`);
             }
         }
+    }
+
+    if (booking.status === BookingStatus.CANCELLED) {
+      throw new BadRequestException("Cannot update trip status on a cancelled booking");
+    }
+
+    if (!isValidTripTransition(booking.tripStatus, newTripStatus)) {
+      throw new BadRequestException(
+        `Invalid trip status transition from ${booking.tripStatus} to ${newTripStatus}`
+      );
     }
 
     // A trip runs only on a confirmed booking (deposit paid, or confirmed by the

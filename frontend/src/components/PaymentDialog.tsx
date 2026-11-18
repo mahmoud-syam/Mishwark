@@ -45,7 +45,13 @@ export default function PaymentDialog({ booking, onClose }: { booking: Booking; 
   const record = useMutation({
     mutationFn: async () => {
       const p = await api.post<{ id: string }>("/payments", { bookingId: booking.id, amount: Number(amount), paymentMethod: method });
-      await api.patch(`/payments/${p.id}/status`, { status: "SUCCESS" });
+      try {
+        await api.patch(`/payments/${p.id}/status`, { status: "SUCCESS" });
+      } catch (e) {
+        // Don't leave a pending payment behind when the confirmation is refused.
+        await api.patch(`/payments/${p.id}/status`, { status: "FAILED" }).catch(() => undefined);
+        throw e;
+      }
     },
     onSuccess: () => {
       refresh();
@@ -162,8 +168,17 @@ export default function PaymentDialog({ booking, onClose }: { booking: Booking; 
           </form>
         )}
 
-        {err && <ErrorBox error={err instanceof ApiError ? err.message : errorMessage(err)} />}
+        {err && <ErrorBox error={paymentError(err)} />}
       </div>
     </dialog>
   );
+}
+
+/** The API answers in English; the ones the office can hit here, in Arabic. */
+function paymentError(err: unknown) {
+  if (!(err instanceof ApiError)) return errorMessage(err);
+  const over = /over the booking's price: ([\d.]+) left|exceeds remaining balance \(([\d.]+)\)/.exec(err.message);
+  if (over) return `المبلغ ده أكتر من الباقي على الحجز. الباقي ${over[1] ?? over[2]} ج.م.`;
+  if (/booking is cancelled/i.test(err.message)) return "الحجز ده اتلغى، ماينفعش يتسجل عليه دفع.";
+  return err.message;
 }
