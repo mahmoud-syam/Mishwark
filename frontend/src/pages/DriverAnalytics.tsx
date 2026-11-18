@@ -18,6 +18,7 @@ import {
   Empty,
   ErrorBox,
   KeyValue,
+  LinkButton,
   Page,
   PageHeader,
   Panel,
@@ -179,6 +180,9 @@ export default function DriverAnalytics() {
               </>
             )}
           </Panel>
+          <LinkButton to={`/reviews?driver=${id}&tab=all`} className="w-full py-3 text-[14px]">
+            التقييمات والشكاوى بالتفصيل
+          </LinkButton>
           <Button onClick={exportReport} disabled={!d} className="w-full py-3">
             تصدير التقرير Excel
           </Button>

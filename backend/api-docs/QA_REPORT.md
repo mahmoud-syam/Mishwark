@@ -19,7 +19,7 @@ The mobile apps are not in this repository, so both apps were simulated through 
 | API sweep (functional, ownership, no-auth, robustness) | 357 / 357 passing |
 | Bugs found and fixed | 17 |
 | Product decisions taken and implemented | 7 + SMS/OTP hardening |
-| Backend test suite | 379 / 379 passing |
+| Backend test suite | 387 / 387 passing |
 
 All dashboard numbers matched the database exactly at every step: revenue,
 pending bookings, live trips, payments, driver and customer analytics,
@@ -184,6 +184,12 @@ Found while testing them:
 | # | Severity | Problem | Fix |
 |---|---|---|---|
 | F-57 | Medium | A team member couldn't change their own name, photo or password; only a Super Admin could reset a password, and that endpoint didn't ask for the current one. | Profile page (click your name in the side menu): name, photo (`PUT/DELETE /auth/me/photo`, real-image check, random file name, old file deleted unless another account uses it) and password (`POST /auth/me/password`: current password required and counted toward the lockout, other sessions signed out, this one kept). Photos show in the side menu and on the Team page. |
+
+### Complaints and reviews (2026-11-18)
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-58 | High | A complaint on the home page opened the driver's page, which showed only a count: not who complained, what they wrote or on which trip. Reviews couldn't be listed at all, and a complaint stayed "new" for 7 days and then vanished whether or not anyone dealt with it. | Complaints page (`/reviews`, `GET /admin/reviews`): every review with the customer (name, phone, link), the driver, the comment, the sub-ratings and the trip (link to the booking); search and filters; drivers' ratings of customers too. A complaint stays open until someone writes what was done (`PATCH /admin/reviews/:id`, audit-logged); open complaints drive the home alert (which now names the customer and opens that complaint) and a count in the menu. Links from the driver and customer pages. |
 
 ### Driver documents (2026-11-18)
 

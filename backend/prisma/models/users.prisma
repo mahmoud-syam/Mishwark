@@ -45,6 +45,7 @@ model Users {
   payments               Payments[]
   reviewsGiven           Reviews[]                @relation("ReviewsGiven")
   reviewsReceived        Reviews[]                @relation("ReviewsReceived")
+  reviewsHandled         Reviews[]                @relation("ReviewsHandled")
   waitlists              Waitlist[]
   customerConversations  Conversations[]          @relation("CustomerConversations")
   sentMessages           Messages[]

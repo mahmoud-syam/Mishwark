@@ -23,6 +23,7 @@ import PaymentService from "./payment.service";
 import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
 import FleetService from "./fleet.service";
 import DriverDocumentService from "./driver-document.service";
+import ReviewAdminService from "./review-admin.service";
 import {
   addDays,
   addMonths,
@@ -165,7 +166,6 @@ export class AdminDashboardService {
     const weekStart = addDays(today, -6);
     const now = new Date();
     const maintenanceHorizon = new Date(now.getTime() + cfg.maintenanceAlertDays * 86_400_000);
-    const complaintsSince = new Date(now.getTime() - 7 * 86_400_000);
 
     const [
       todayBookings,
@@ -206,16 +206,8 @@ export class AdminDashboardService {
         include: { vehicle: { select: { id: true, make: true, model: true } } },
         orderBy: { scheduledDate: "asc" },
       }),
-      prismaClient.reviews.findMany({
-        where: {
-          reviewerType: ReviewerType.CUSTOMER_TO_DRIVER,
-          overallRating: { lte: cfg.complaintMaxRating },
-          createdAt: { gte: complaintsSince },
-        },
-        include: { reviewee: { select: { id: true, name: true, drivers: { select: { id: true } } } } },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-      }),
+      // Open complaints (not yet marked handled), newest first.
+      ReviewAdminService.openComplaints(5),
       prismaClient.bookings.count({ where: { tripStatus: { in: LIVE_TRIP_STATUSES }, status: { not: BookingStatus.CANCELLED } } }),
       prismaClient.bookings.count({ where: { status: BookingStatus.PENDING, bookingDate: { gte: today } } }),
     ]);
@@ -298,13 +290,16 @@ export class AdminDashboardService {
           entityId: v.id,
           vehicleName: vehicleName(v),
         })),
-      ...complaints.map((r) => ({
+      ...complaints.rows.map((r) => ({
         type: "complaint" as const,
         severity: "danger" as const,
-        entityId: r.reviewee.drivers?.id ?? r.reviewee.id,
+        entityId: r.reviewee.driverId ?? r.reviewee.userId,
+        reviewId: r.id,
         driverName: r.reviewee.name,
+        customerName: r.reviewer.name,
         rating: r.overallRating,
-        bookingId: r.bookingId,
+        comment: r.comment,
+        bookingId: r.booking?.id ?? "",
       })),
     ];
 
@@ -322,6 +317,7 @@ export class AdminDashboardService {
         occupancyRate: operational > 0 ? round((usedSlots / (operational * 7)) * 100) : 0,
         liveTrips,
         pendingBookings,
+        openComplaints: complaints.count,
       },
       weeklyRevenue,
       alerts,
