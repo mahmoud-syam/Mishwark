@@ -185,6 +185,18 @@ Found while testing them:
 |---|---|---|---|
 | F-57 | Medium | A team member couldn't change their own name, photo or password; only a Super Admin could reset a password, and that endpoint didn't ask for the current one. | Profile page (click your name in the side menu): name, photo (`PUT/DELETE /auth/me/photo`, real-image check, random file name, old file deleted unless another account uses it) and password (`POST /auth/me/password`: current password required and counted toward the lockout, other sessions signed out, this one kept). Photos show in the side menu and on the Team page. |
 
+### Second full-cycle review (2026-11-20)
+
+The customer, driver and office journeys were replayed again: every endpoint as each role, numbers checked against the database, the app's figures against the dashboard's. Fixed:
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-72 | Critical | Cancelling a booking (`DELETE /bookings/:id`) returned the customer's full account row: password hash, current OTP code, 2FA secret and token version, to whoever cancelled (the customer or the office). It also returned the driver's commission and licence. | The cancel loads only the booking and answers with the same per-party view as `GET /bookings/:id`. A guard on every `/api/v1` response now drops password, OTP, 2FA-secret and token-version fields, whatever a handler returns. |
+| F-73 | High | Blind reviews weren't blind: the driver could read a customer's review straight away (booking reviews, review by id, booking detail). Reviews were never released after 48 hours, and the driver's rating was never updated (the function had no callers). | The reviewee sees a review only once both sides reviewed or 48 hours passed; a 10-minute job releases due reviews; every release recomputes the driver's rating. |
+| F-74 | Medium | The customer had no way to reach the driver (no phone in the booking), while the driver got the customer's email as well as their phone, in the detail and the list. | The customer gets the driver's phone while the booking is confirmed and the trip not done; the driver gets the customer's name and phone only. |
+| F-75 | Medium | The driver app's income and trips didn't match the dashboard (completed only versus confirmed or completed up to today), and its average rating counted unreleased reviews. "Today" in the app and the old stats used the UTC date (yesterday until 2 a.m.). | Same definitions as the dashboard (`earningTrips`), rating from released customer reviews (`reviewsCount`), Cairo's date. |
+| F-76 | Low | Notifications showed dates as 2026-12-11. | Written out: "الجمعة، 11 ديسمبر الساعة 6:00 م" / "Fri 11 Dec at 6:00 PM". |
+
 ### Old per-km pricing removed (2026-11-20)
 
 The app hasn't been released, so the per-km pricing kept for "older app versions" was removed: the price to open a trip, per km and per hour (per car and per car type), and the peak multiplier. Every booking is priced by its service from the Pricing page; without a service it is a private trip. The Settings table, the car page's old prices and the database columns are gone (migration `20261120200000_remove_per_km_pricing`). Demo bookings are weddings priced the same way.

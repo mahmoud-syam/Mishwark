@@ -124,6 +124,9 @@ describe('Tier 2: Booking ownership, reviews, chat & payments authorization', ()
     const rv = await prismaClient.reviews.create({ data: { bookingId: b.id, reviewerId: ctx.seed.riderUser.id, revieweeId: ctx.seed.driverUser.id, reviewerType: 'CUSTOMER_TO_DRIVER', overallRating: 4 } });
     expect((await api.get(`/reviews/${rv.id}`, { token: ctx.other })).status).toBe(404);
     expect((await api.get(`/reviews/booking/${b.id}`, { token: ctx.other })).status).toBe(404);
+    // Blind review: the driver reads it once it is released, not before.
+    expect((await api.get(`/reviews/${rv.id}`, { token: ctx.driver })).status).toBe(404);
+    await prismaClient.reviews.update({ where: { id: rv.id }, data: { visibleAt: new Date() } });
     expect((await api.get(`/reviews/${rv.id}`, { token: ctx.driver })).status).toBe(200);
 
     const wl = await prismaClient.waitlist.create({ data: { customerId: ctx.seed.riderUser.id, vehicleId: ctx.seed.vehicle.id, requestedDate: addDays(dateKey(), 5), position: 1 } });

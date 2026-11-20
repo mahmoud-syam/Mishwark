@@ -457,14 +457,10 @@ export class BookingService {
   public static async cancelBooking(bookingId: string, cancelledByUserId?: string, opts: { refundDeposit?: boolean } = {}) {
     const { freeCancellationHours } = await SettingsService.get();
     const result = await prismaClient.$transaction(async (tx) => {
-      const booking = await tx.bookings.findUnique({
-        where: { id: bookingId },
-        include: {
-          customer: true,
-          vehicle: true,
-          driver: true,
-        },
-      });
+      // Only the booking's own columns are needed here. (This used to load the
+      // full customer row, password hash and 2FA secret included, and hand it
+      // back to whoever cancelled.)
+      const booking = await tx.bookings.findUnique({ where: { id: bookingId } });
 
       if (!booking) {
         throw new NotFoundException(`Booking with ID ${bookingId} not found`);
@@ -496,7 +492,7 @@ export class BookingService {
           depositRefunded: terms.refund,
         },
       });
-      const updatedBooking = await tx.bookings.findUniqueOrThrow({ where: { id: bookingId }, include: { customer: true, vehicle: true, driver: true } });
+      const updatedBooking = await tx.bookings.findUniqueOrThrow({ where: { id: bookingId } });
       if (claimed.count === 0) {
         return { booking: updatedBooking, promotedWaitlistEntry: null, cancellation: null };
       }
@@ -840,7 +836,7 @@ export class BookingService {
           select: { id: true, email: true, name: true, phoneNumber: true },
         },
         driver: {
-          select: { id: true, fullName: true, status: true },
+          select: { id: true, fullName: true, status: true, rating: true, pic: true, user: { select: { phoneNumber: true, pic: true } } },
         },
         payments: true,
         reviews: true,
