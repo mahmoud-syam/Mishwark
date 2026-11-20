@@ -89,6 +89,7 @@ const MOUNTS = {
   admin: "/admin",
   places: "/places",
   pricing: "/pricing",
+  device: "/devices",
 };
 
 // ---------------------------------------------------------------
@@ -246,6 +247,8 @@ const BODY_EXAMPLES = {
   "/auth/me/photo": { photo: "" },
   "/auth/me/password": { currentPassword: "secret123", newPassword: "a-new-password" },
   "POST /driver/documents": { type: "NATIONAL_ID_FRONT", file: "" },
+  "POST /devices": { token: "fcm-registration-token-from-firebase", platform: "android", appVersion: "1.0.0" },
+  "DELETE /devices": { token: "fcm-registration-token-from-firebase" },
   "/admin/reviews/{id}": { handled: true, note: "كلمنا العميل واعتذرنا، ونبّهنا على السواق" },
   "/admin/driver-documents/{id}": { status: "REJECTED", note: "الصورة مش واضحة" },
   "/admin/vehicles/{id}/images/{imageId}/cover": {},
@@ -344,6 +347,10 @@ const DESCRIPTIONS = {
   "GET /admin/reviews/{id}": "One review, same shape as the list.",
   "PATCH /admin/reviews/{id}": "Marks a complaint handled with what was done (`{ handled: true, note }`, note 3+ characters, 422 otherwise) or opens it again (`{ handled: false }`). 400 for a review that isn't a complaint. Open complaints feed the home alerts and `kpis.openComplaints`. Audit-logged.",
   "PUT /driver/profile": "The signed-in driver updates `fullName`, `licenseNumber`, `licenseExpiry` (YYYY-MM-DD); other fields are ignored (the photo is PUT /auth/me/photo). A new licence number or expiry sends both licence photos back to review: the reply's `documentsBackToReview` says how many.",
+  "GET /devices": "The signed-in account's registered phones (platform, app version, last seen). Tokens are never returned.",
+  "POST /devices": "Registers this phone for push notifications: `{ token, platform: android|ios|web, appVersion? }`. Call after every sign-in and whenever Firebase gives the app a new token. A token belongs to one account: signing in as someone else on the same phone moves it. Up to 10 phones per account (oldest dropped). 201.",
+  "DELETE /devices": "Stops pushes to this phone: `{ token }` in the body (or ?token=). Only your own tokens. Signing out with `POST /auth/logout { deviceToken }` does the same.",
+  "GET /admin/integrations": "Which outside services the server has: `{ sms, push, roadDistances, production }` (yes/no only, never keys).",
   "GET /driver/documents": "The signed-in driver's papers: every required type (NATIONAL_ID_FRONT, NATIONAL_ID_BACK, LICENSE_FRONT, LICENSE_BACK, CRIMINAL_RECORD) with `status` MISSING, PENDING, APPROVED or REJECTED (+ `reviewNote`, the reason to show), and `summary.state` (MISSING, PENDING, REJECTED, APPROVED). 403 for non-drivers.",
   "POST /driver/documents": "Uploads one paper as multipart/form-data: `type` + `file` (JPG, PNG, WEBP or PDF, checked by content; 10 MB, 413 above). Replaces an earlier one of that type and puts it back to review (PENDING). Stored privately, never at a public URL. 201 with the document.",
   "/driver/documents/{id}/file": "The driver's own paper (the dashboard team can open it too); 404 for anyone else. Sent inline with Cache-Control: private, no-store.",

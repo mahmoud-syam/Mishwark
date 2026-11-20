@@ -46,6 +46,7 @@ model Users {
   reviewsGiven           Reviews[]                @relation("ReviewsGiven")
   reviewsReceived        Reviews[]                @relation("ReviewsReceived")
   reviewsHandled         Reviews[]                @relation("ReviewsHandled")
+  deviceTokens           DeviceTokens[]
   waitlists              Waitlist[]
   customerConversations  Conversations[]          @relation("CustomerConversations")
   sentMessages           Messages[]

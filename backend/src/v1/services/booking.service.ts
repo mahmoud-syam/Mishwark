@@ -31,6 +31,7 @@ import { isAdminRole, normalizeRoleName, USER_ROLES } from "../constants/roles";
 import { addDays, dateKey, timeKey, zonedToInstant } from "../utils/businessTime";
 import { isOvernight, minutesOf, nearbyDays, slotSpan, spansClash, tripMinutes } from "../utils/slots";
 import { lockKeys, SCHEDULE_TX } from "../utils/locks";
+import Notify from "./notify.service";
 import ReferralService from "./referral.service";
 import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
 import DiscountService from "./discount.service";
@@ -435,6 +436,7 @@ export class BookingService {
 
     // The package's total is the sum of its bookings' (discounted) prices.
     if (created.packageId) await PackageService.recalculatePackageTotal(created.packageId);
+    Notify.later(() => Notify.bookingCreated(created, authenticatedUser?.id));
     return created;
   }
 
@@ -471,7 +473,7 @@ export class BookingService {
 
   public static async cancelBooking(bookingId: string, cancelledByUserId?: string, opts: { refundDeposit?: boolean } = {}) {
     const { freeCancellationHours } = await SettingsService.get();
-    return await prismaClient.$transaction(async (tx) => {
+    const result = await prismaClient.$transaction(async (tx) => {
       const booking = await tx.bookings.findUnique({
         where: { id: bookingId },
         include: {
@@ -594,24 +596,22 @@ export class BookingService {
           },
         });
 
-        // Queue a ScheduledNotifications push notification
-        await tx.scheduledNotifications.create({
-          data: {
-            bookingId: booking.id,
-            recipientId: topEntry.customerId,
-            recipientType: NotificationRecipientType.CUSTOMER,
-            notificationType: NotificationType.SYSTEM,
-            channel: NotificationChannel.PUSH,
-            title: "Waitlist Promotion Notice",
-            body: "A vehicle you were waiting for has become available. Complete your booking within 24 hours!",
-            scheduledAt: now,
-            status: NotificationStatus.SCHEDULED,
-          },
-        });
+        // The customer is told once the cancellation is saved (below).
       }
 
       return { booking: updatedBooking, promotedWaitlistEntry, cancellation: terms };
     });
+    // Only the request that actually cancelled tells people (not the repeats).
+    if (result.cancellation) {
+      const b = result.booking;
+      const refund = result.cancellation.refund;
+      const promoted = result.promotedWaitlistEntry;
+      Notify.later(async () => {
+        await Notify.bookingCancelled(b, cancelledByUserId, refund);
+        if (promoted) await Notify.waitlistAvailable(promoted.customerId, b);
+      });
+    }
+    return result;
   }
 
   public static async updateBookingStatus(
@@ -668,6 +668,9 @@ export class BookingService {
 
     if (newStatus === BookingStatus.COMPLETED) {
       await BookingService.rewardReferral(bookingId);
+    }
+    if (newStatus === BookingStatus.CONFIRMED && booking.status !== BookingStatus.CONFIRMED) {
+      Notify.later(() => Notify.bookingConfirmed(updated));
     }
 
     return updated;
@@ -764,6 +767,7 @@ export class BookingService {
     if (updated.status === BookingStatus.COMPLETED) {
       await BookingService.rewardReferral(bookingId);
     }
+    Notify.later(() => Notify.tripStatus(updated, newTripStatus));
 
     // Update driver status dynamically
     if (booking.driverId) {

@@ -10,6 +10,8 @@ import path from 'path';
 import fs from 'fs';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
+import Notify from './v1/services/notify.service';
+import PushService from './v1/services/push.service';
 
 const OPENAPI_SPEC_PATH = path.join(process.cwd(), 'api-docs', 'mishwarak.openapi.json');
 
@@ -145,4 +147,7 @@ app.use(errorMiddleware);
 
 app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`Server is running on port ${PORT}`);
+    // Trip reminders (and any push still waiting) go out every minute.
+    if (process.env.NOTIFICATIONS_WORKER !== 'off') Notify.startWorker();
+    console.log(`[push] ${PushService.isConfigured() ? 'Firebase push is on' : 'push is off (no FCM_SERVICE_ACCOUNT_*): notifications go to the in-app inbox only'}`);
 })

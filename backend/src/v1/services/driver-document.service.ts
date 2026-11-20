@@ -147,14 +147,14 @@ export class DriverDocumentService {
   }
 
   public static async review(id: string, status: "APPROVED" | "REJECTED", note: string | undefined, reviewerId: string) {
-    const d = await prismaClient.driverDocuments.findUnique({ where: { id }, include: { driver: { select: { fullName: true } } } });
+    const d = await prismaClient.driverDocuments.findUnique({ where: { id }, include: { driver: { select: { fullName: true, userId: true } } } });
     if (!d) throw new NotFoundException("Document not found");
     if (status === "REJECTED" && !note?.trim()) throw new BadRequestException("Write why it was rejected, the driver will see it");
     const row = await prismaClient.driverDocuments.update({
       where: { id },
       data: { status, reviewNote: status === "REJECTED" ? note!.trim() : null, reviewedById: reviewerId, reviewedAt: new Date() },
     });
-    return { before: d, after: shape(row), driverName: d.driver.fullName };
+    return { before: d, after: shape(row), driverName: d.driver.fullName, driverUserId: d.driver.userId };
   }
 }
 

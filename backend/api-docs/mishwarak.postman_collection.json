@@ -4722,6 +4722,46 @@
           ]
         },
         {
+          "name": "GET /admin/integrations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/integrations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations"
+              ]
+            },
+            "description": "Which outside services the server has: `{ sms, push, roadDistances, production }` (yes/no only, never keys)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "GET /admin/overview",
           "request": {
             "method": "GET",
@@ -6969,6 +7009,137 @@
             "description": "PUBLIC. Every price and rule the apps need before booking: `origin` (where private trips start), `depositRate`, `wedding` and `vip` ({ defaultPrice, includedHours, includedKm, extraHourPrice, extraKmPrice }; a car's own price is `weddingPrice` / `vipPrice` on the vehicle), `trip` ({ includedKm, extraKmPrice, otherPrices per car category }) and the active `destinations` with their price per category. The final price always comes from POST /bookings/estimate-price."
           },
           "response": []
+        }
+      ]
+    },
+    {
+      "name": "Devices",
+      "item": [
+        {
+          "name": "GET /devices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices"
+              ]
+            },
+            "description": "The signed-in account's registered phones (platform, app version, last seen). Tokens are never returned."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /devices",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"fcm-registration-token-from-firebase\",\n  \"platform\": \"android\",\n  \"appVersion\": \"1.0.0\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Registers this phone for push notifications: `{ token, platform: android|ios|web, appVersion? }`. Call after every sign-in and whenever Firebase gives the app a new token. A token belongs to one account: signing in as someone else on the same phone moves it. Up to 10 phones per account (oldest dropped). 201."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE /devices",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices"
+              ]
+            },
+            "description": "Stops pushes to this phone: `{ token }` in the body (or ?token=). Only your own tokens. Signing out with `POST /auth/logout { deviceToken }` does the same."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('token')) {",
+                  "  console.warn('No token in environment. Run POST /auth/otp/verify (code 0000) first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

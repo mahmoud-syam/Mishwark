@@ -514,10 +514,13 @@ export const logout = async (req: Request, res: Response, next: NextFunction) =>
             try {
                 const t = jwt.verify(raw, process.env.JWT_SECRET as string) as any;
                 if (t?.user?.id && typeof t.user.tokenVersion === "number") {
-                    await prismaClient.users.updateMany({
+                    const revoked = await prismaClient.users.updateMany({
                         where: { id: t.user.id, tokenVersion: t.user.tokenVersion },
                         data: { tokenVersion: { increment: 1 } },
                     });
+                    // The phone signing out stops getting this account's pushes.
+                    const deviceToken = typeof req.body?.deviceToken === "string" ? req.body.deviceToken : null;
+                    if (revoked.count && deviceToken) await prismaClient.deviceTokens.deleteMany({ where: { token: deviceToken, userId: t.user.id } });
                 }
             } catch { /* expired or invalid: nothing to revoke */ }
         }
@@ -538,6 +541,8 @@ export const logoutAllDevices = async (req: Request, res: Response, next: NextFu
                 tokenVersion: { increment: 1 }
             }
         });
+        // Signed out everywhere: no phone keeps getting this account's pushes.
+        await prismaClient.deviceTokens.deleteMany({ where: { userId } });
 
         res.clearCookie("token", clearAuthCookieOptions());
         res.status(200).json({ message: "Successfully logged out from all devices" });

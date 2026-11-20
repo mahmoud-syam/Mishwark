@@ -1,3 +1,4 @@
+import Notify from "../services/notify.service";
 import { Request, Response } from "express";
 import { z } from "zod";
 import { AuditAction, DriverDocumentType } from "../../../generated/prisma";
@@ -85,5 +86,7 @@ export const reviewDocument = async (req: Request, res: Response) => {
     entityLabel: `${TYPE_LABEL[r.before.type]}: ${r.driverName}`,
     details: `status: ${r.before.status} → ${status}${status === "REJECTED" ? ` · ${note}` : ""}`,
   });
+  // The driver hears the result (with the reason when rejected), unless nothing changed.
+  if (r.before.status !== status) Notify.later(() => Notify.documentReviewed(r.driverUserId, r.before.type, status, note));
   res.json({ success: true, data: r.after });
 };

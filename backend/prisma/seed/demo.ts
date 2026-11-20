@@ -101,7 +101,9 @@ async function cleanup() {
   await prisma.walletTransactions.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.vehicleAvailability.deleteMany({ where: { OR: [{ vehicleId: { in: vehicleIds } }, { bookingId: { in: bookingIds } }] } });
   await prisma.tripLocations.deleteMany({ where: { bookingId: { in: bookingIds } } });
-  await prisma.scheduledNotifications.deleteMany({ where: { bookingId: { in: bookingIds } } });
+  // Notifications now come from every booking, trip and paper step, also ones
+  // made on demo accounts while trying the dashboard.
+  await prisma.scheduledNotifications.deleteMany({ where: { OR: [{ bookingId: { in: bookingIds } }, { recipientId: { in: userIds } }] } });
   await prisma.bookings.deleteMany({ where: { id: { in: bookingIds } } });
   await prisma.vehicleMaintenance.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
   await prisma.vehicleDrivers.deleteMany({ where: { OR: [{ vehicleId: { in: vehicleIds } }, { driverId: { in: driverIds } }] } });
@@ -493,9 +495,22 @@ async function main() {
     });
     return [...pending, ...more];
   };
+  // The random data may leave a customer with no trips ahead; a package needs
+  // some, so take the preferred customer if they have any, else the next who does.
+  const used = new Set<string>();
+  const packageOwner = async (preferred: (typeof customers)[number]) => {
+    for (const c of [preferred, ...customers]) {
+      if (used.has(c.id)) continue;
+      if ((await upcomingPending(c.id)).length) {
+        used.add(c.id);
+        return c;
+      }
+    }
+    return preferred;
+  };
   const demoPackages = [
-    { customer: customers[1], name: "زفة فرح — 3 عربيات", type: PackageType.MULTI_CAR, pct: 0 },
-    { customer: customers[6], name: "خطوبة وكتب كتاب", type: PackageType.MULTI_EVENT, pct: 10 },
+    { customer: await packageOwner(customers[1]), name: "زفة فرح — 3 عربيات", type: PackageType.MULTI_CAR, pct: 0 },
+    { customer: await packageOwner(customers[6]), name: "خطوبة وكتب كتاب", type: PackageType.MULTI_EVENT, pct: 10 },
   ];
   for (const dp of demoPackages) {
     const pkg = await prisma.packages.create({

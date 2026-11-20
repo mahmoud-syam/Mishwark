@@ -11,7 +11,29 @@ model ScheduledNotifications {
   body             String?
   scheduledAt      DateTime
   sentAt           DateTime?
+  // SCHEDULED: not delivered yet (a reminder before its time, or a push on
+  // its way). SENT: due and delivered (pushed to the user's devices when
+  // push is set up). FAILED: the push failed. CANCELLED: no longer relevant.
   status           NotificationStatus        @default(SCHEDULED)
+  /// When the user opened it in the app (unread while null).
+  readAt           DateTime?
   createdAt        DateTime                  @default(now())
   updatedAt        DateTime                  @default(now()) @updatedAt
+
+  @@index([recipientId, scheduledAt])
+  @@index([status, scheduledAt])
+}
+
+/// A phone the app registered for push notifications (Firebase token).
+model DeviceTokens {
+  id         String         @id @default(uuid())
+  user       Users          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  token      String         @unique
+  platform   DevicePlatform
+  appVersion String?
+  lastSeenAt DateTime       @default(now())
+  createdAt  DateTime       @default(now())
+
+  @@index([userId])
 }

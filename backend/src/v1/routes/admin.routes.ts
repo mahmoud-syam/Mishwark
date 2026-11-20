@@ -55,6 +55,9 @@ import {
 import { PERMISSIONS } from "../constants/roles";
 import { adminDocumentFile, adminDriverDocuments, reviewDocument } from "../controllers/driver-document.controller";
 import { getReview, handleReview, listReviews } from "../controllers/review-admin.controller";
+import { SmsService } from "../services/sms.service";
+import PushService from "../services/push.service";
+import MapsService from "../services/maps.service";
 import { createDestination, deleteDestination, listDestinations, updateDestination } from "../controllers/destination.controller";
 import { createTeamMember, disableTeamMember, enableTeamMember, listTeam, requireSuperAdmin, resetTeamMember2FA, resetTeamMemberPassword, setTeamMemberRole } from "../controllers/team.controller";
 
@@ -74,6 +77,18 @@ adminRouter.patch("/drivers/:id/status", errorHandler(toggleDriverStatus));
 adminRouter.get("/users", errorHandler(listUsers));
 adminRouter.patch("/users/role", errorHandler(updateUserRole));
 adminRouter.get("/settings", errorHandler(getSystemSettings));
+// Which outside services are set up (SMS, push, road distances): yes/no only, never the keys.
+adminRouter.get("/integrations", errorHandler(async (_req, res) => {
+  res.json({
+    success: true,
+    data: {
+      sms: SmsService.isConfigured(),
+      push: PushService.isConfigured(),
+      roadDistances: MapsService.isConfigured,
+      production: process.env.NODE_ENV === "production",
+    },
+  });
+}));
 
 // Web dashboard
 adminRouter.get("/overview", errorHandler(getOverview));
