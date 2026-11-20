@@ -1,6 +1,9 @@
 import { z } from "zod";
 import prismaClient from "../utils/prismaClientHelper";
+import DriverDocumentService from "./driver-document.service";
+import AuditService from "./audit.service";
 import {
+  AuditAction,
   DriverStatus,
   BookingStatus,
   TripStatus,
@@ -64,7 +67,25 @@ export class DriverService {
     });
     // The account name shows in the dashboard and on reviews; keep it in step.
     if (input.fullName) await prismaClient.users.update({ where: { id: userId }, data: { name: input.fullName } });
-    return updated;
+
+    // A new licence number or expiry isn't what the office approved: the
+    // licence photos go back to review, and the change is in the audit log.
+    const changed: string[] = [];
+    if (input.licenseNumber && input.licenseNumber !== driver.licenseNumber) changed.push(`licenseNumber: ${driver.licenseNumber || "—"} → ${input.licenseNumber}`);
+    const oldExpiry = driver.licenseExpiry ? driver.licenseExpiry.toISOString().slice(0, 10) : null;
+    if (input.licenseExpiry && input.licenseExpiry !== oldExpiry) changed.push(`licenseExpiry: ${oldExpiry ?? "—"} → ${input.licenseExpiry}`);
+    let documentsBackToReview = 0;
+    if (changed.length) {
+      documentsBackToReview = await DriverDocumentService.reopenLicence(driver.id, "بيانات الرخصة اتغيرت من الأبليكيشن: راجع الصور على الرقم والتاريخ الجديد");
+      await AuditService.record({ id: userId, name: updated.fullName || updated.user.name }, {
+        action: AuditAction.UPDATE,
+        entityType: "driver",
+        entityId: driver.id,
+        entityLabel: `سائق: ${updated.fullName || updated.user.name}`,
+        details: `${changed.join(" · ")} (by the driver${documentsBackToReview ? `, licence papers back to review` : ""})`,
+      });
+    }
+    return { ...updated, documentsBackToReview };
   }
 
   public static async toggleDriverStatus(userId: string, status: DriverStatus) {

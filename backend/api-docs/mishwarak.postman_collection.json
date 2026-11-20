@@ -1798,7 +1798,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "The signed-in driver updates `fullName`, `licenseNumber`, `licenseExpiry` (YYYY-MM-DD); other fields are ignored (the photo is PUT /auth/me/photo). A new licence number or expiry sends both licence photos back to review: the reply's `documentsBackToReview` says how many."
           },
           "response": [],
           "event": [

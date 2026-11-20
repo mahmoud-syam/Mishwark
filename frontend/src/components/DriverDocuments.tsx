@@ -62,12 +62,23 @@ export function DocumentsBadge({ s }: { s: DocSummary }) {
 export default function DriverDocumentsPanel({ driverId }: { driverId: string }) {
   const q = useQuery({
     queryKey: ["driver-documents", driverId],
-    queryFn: () => api.get<{ documents: Doc[]; summary: DocSummary }>(`/admin/drivers/${driverId}/documents`),
+    queryFn: () => api.get<{ documents: Doc[]; summary: DocSummary; licence?: { number: string; expiry: string | null } }>(`/admin/drivers/${driverId}/documents`),
   });
   const s = q.data?.summary;
   return (
     <Panel title="المستندات" tag={s && <DocumentsBadge s={s} />} bodyClassName="flex flex-col gap-2">
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
+      {q.data?.licence && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl border border-line bg-raised px-3 py-2 text-[13px]">
+          <span className="text-muted">
+            رقم الرخصة: <b className="text-cream" dir="ltr">{q.data.licence.number || "—"}</b>
+          </span>
+          <span className="text-muted">
+            تنتهي: <b className="text-cream" dir="ltr">{q.data.licence.expiry ?? "—"}</b>
+          </span>
+          <span className="text-[12px] text-muted">قارنهم بصور الرخصة قبل القبول.</span>
+        </div>
+      )}
       {q.isPending ? (
         <Skeleton className="h-40" />
       ) : (
@@ -112,6 +123,7 @@ function DocRow({ d, driverId }: { d: Doc; driverId: string }) {
             {d.uploadedAt ? `اترفع ${relativeStamp(d.uploadedAt)}${isPdf ? " · PDF" : ""}` : "السواق لسه ما رفعهوش من التطبيق"}
           </div>
           {d.status === "REJECTED" && d.reviewNote && <div className="text-[12px] text-rose">السبب: {d.reviewNote}</div>}
+          {d.status === "PENDING" && d.reviewNote && <div className="text-[12px] font-bold text-gold">{d.reviewNote}</div>}
         </div>
         <Badge tone={st.tone}>{st.label}</Badge>
       </div>

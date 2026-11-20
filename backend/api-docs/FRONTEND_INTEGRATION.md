@@ -318,6 +318,11 @@ GET  /driver/documents          → { documents: [{ type, status, reviewNote, up
 GET  /driver/documents/:id/file → the paper itself (driver's own only)
 ```
 
+If the driver changes his licence number or expiry (`PUT /driver/profile`),
+both licence photos go back to `PENDING` with a `reviewNote` saying why, and the
+reply has `documentsBackToReview` (how many). Tell the driver his licence is
+being checked again.
+
 `status` per paper: `MISSING`, `PENDING` (waiting for the office), `APPROVED`,
 `REJECTED` with `reviewNote` (show it: "الصورة مش واضحة"). Uploading the same
 type again replaces it and sends it back to review. `summary.state` is the
