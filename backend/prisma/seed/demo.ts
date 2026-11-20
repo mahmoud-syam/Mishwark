@@ -10,6 +10,7 @@
  * run when NODE_ENV=production.
  */
 import "dotenv/config";
+import { priceService } from "../../src/v1/services/service-pricing.service";
 import {
   AuditAction,
   AvailabilityStatus,
@@ -20,6 +21,7 @@ import {
   PaymentStatus,
   ReferralStatus,
   ReviewerType,
+  ServiceType,
   TripStatus,
   VehicleCategory,
   VehicleStatus,
@@ -146,14 +148,15 @@ async function main() {
   const plates = ["أ ب ج", "د هـ و", "ز ح ط", "ي ك ل", "م ن س", "ع ف ص", "ق ر ش", "ت ث خ", "ذ ض ظ", "غ أ ب", "ج د ر"];
   const vehicles = [];
   for (let i = 0; i < fleetSpec.length; i++) {
-    const [make, model, category, year, capacity, color, basePrice, pricePerKm] = fleetSpec[i];
+    // refPrice only sets how premium the car is (its wedding / VIP price).
+    const [make, model, category, year, capacity, color, refPrice] = fleetSpec[i];
     vehicles.push(
       await prisma.vehicles.create({
         data: {
-          make, model, category, year, capacity, color, basePrice, pricePerKm, pricePerHour: 0,
+          make, model, category, year, capacity, color,
           // Wedding price per car (the cheaper ones keep the default from the Pricing page).
-          weddingPrice: basePrice >= 1700 ? Math.round(basePrice * 0.9 / 50) * 50 : null,
-          vipPrice: basePrice >= 2000 ? Math.round(basePrice * 1.6 / 50) * 50 : null,
+          weddingPrice: refPrice >= 1700 ? Math.round(refPrice * 0.9 / 50) * 50 : null,
+          vipPrice: refPrice >= 2000 ? Math.round(refPrice * 1.6 / 50) * 50 : null,
           plateNumber: `${plates[i]} ${123 + i * 111}·D`,
           description: `${DEMO_TAG} عربية ${category === VehicleCategory.CLASSIC ? "كلاسيك" : "لوكس"} مجهزة للمناسبات`,
           status: VehicleStatus.AVAILABLE,
@@ -161,7 +164,7 @@ async function main() {
           features:
             category === VehicleCategory.CLASSIC
               ? ["زينة فرح", "مياه مجانية"]
-              : ["تكييف", "مقاعد جلد", "مياه مجانية", ...(basePrice >= 2000 ? ["واي فاي", "إضاءة أجواء"] : []), ...(capacity >= 6 ? ["شاشات خلفية"] : [])],
+              : ["تكييف", "مقاعد جلد", "مياه مجانية", ...(refPrice >= 2000 ? ["واي فاي", "إضاءة أجواء"] : []), ...(capacity >= 6 ? ["شاشات خلفية"] : [])],
         },
       })
     );
@@ -326,8 +329,13 @@ async function main() {
     if (to === from) to = PLACES[(PLACES.indexOf(from) + 3) % PLACES.length];
     const km = Math.max(3, Math.round(haversineKm(from, to) * 1.3 * 10) / 10);
     const minutes = Math.round(km * 2.2 + 10);
-    const distancePrice = Math.round(km * v.pricePerKm);
-    const total = Math.round((v.basePrice + distancePrice) / 50) * 50;
+    // Demo trips are weddings, priced like the app prices them (Pricing page defaults).
+    const priced = priceService({
+      basePrice: v.weddingPrice ?? 1500, baseCode: "wedding", includedHours: 4, extraHourPrice: 300,
+      bookedMinutes: 180, includedKm: 50, extraKmPrice: 50, distanceKm: km, depositRate: 20,
+    });
+    const total = priced.breakdown.totalPrice;
+    const distancePrice = priced.breakdown.distancePrice;
     const scheduled = zonedToInstant(s.date, s.time);
     const started = s.trip === TripStatus.NOTSTARTED ? null : new Date(scheduled.getTime() + (s.startedDelta ?? 0) * 60_000);
     const paid = s.status === BookingStatus.COMPLETED;
@@ -338,7 +346,8 @@ async function main() {
         eventType: s.eventType ?? pick(EVENTS), startPoint: from.label, endPoint: to.label,
         startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng, distanceSource: "haversine",
         distanceKm: km, durationMinutes: minutes, bookingDate: s.date, startTime: s.time, endTime: addMinutes(s.time, 180),
-        status: s.status, tripStatus: s.trip, basePrice: v.basePrice, distancePrice, totalPrice: total,
+        status: s.status, tripStatus: s.trip, basePrice: priced.breakdown.basePrice, distancePrice, totalPrice: total,
+        serviceType: ServiceType.WEDDING, priceLines: priced.lines as any,
         depositRequired: Math.round(total * 0.2),
         depositPaid: paid ? total : s.status === BookingStatus.CONFIRMED ? Math.round(total * 0.2) : 0,
         paymentStatus: paid ? PaymentStatus.PAID : s.status === BookingStatus.CONFIRMED ? PaymentStatus.PARTIALLY_PAID : PaymentStatus.UNPAID,

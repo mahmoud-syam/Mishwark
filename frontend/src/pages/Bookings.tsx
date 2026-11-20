@@ -276,7 +276,7 @@ function BookingDialog({ b, onClose }: { b: BookingRow; onClose: () => void }) {
           <Info k="العميل" v={<Link to={`/customers/${b.customer.id}`} className="font-bold hover:text-gold">{b.customer.name}</Link>} sub={<span className="ltr">{b.customer.phoneNumber}</span>} />
           <Info k="العربية" v={<Link to={`/fleet/${b.vehicle.id}`} className="font-bold hover:text-gold">{b.vehicle.name}</Link>} sub={<span className="ltr">{b.vehicle.plateNumber}</span>} />
           <Info k="السائق" v={<Link to={`/drivers/${b.driver.id}`} className="font-bold hover:text-gold">{b.driver.fullName}</Link>} />
-          <Info k="الخدمة" v={b.serviceType ? SERVICE_LABEL[b.serviceType] : "تسعير قديم بالكيلو"} sub={[b.eventType, b.packageId ? "جزء من باقة" : ""].filter(Boolean).join(" · ") || undefined} />
+          <Info k="الخدمة" v={b.serviceType ? SERVICE_LABEL[b.serviceType] : "—"} sub={[b.eventType, b.packageId ? "جزء من باقة" : ""].filter(Boolean).join(" · ") || undefined} />
           <div className="col-span-2 rounded-xl border border-line bg-raised px-3 py-2.5">
             <div className="text-[12px] text-muted">الطريق</div>
             <div className="mt-0.5 font-bold">{b.startPoint} ← {b.endPoint}</div>

@@ -1248,7 +1248,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"vehicleCategory\": \"VAN\",\n  \"startPoint\": {\n    \"latitude\": 30.0444,\n    \"longitude\": 31.2357\n  },\n  \"endPoint\": {\n    \"latitude\": 31.2001,\n    \"longitude\": 29.9187\n  },\n  \"distanceKm\": 25,\n  \"durationMinutes\": 120,\n  \"isPeakHour\": false,\n  \"surgeMultiplier\": 1,\n  \"packageDiscount\": 10,\n  \"referralDiscount\": 5,\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"packageId\": \"\",\n  \"referralCode\": \"\"\n}",
+              "raw": "{\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"serviceType\": \"WEDDING\",\n  \"startPoint\": {\n    \"latitude\": 30.0444,\n    \"longitude\": 31.2357\n  },\n  \"endPoint\": {\n    \"latitude\": 30.0911,\n    \"longitude\": 31.3253\n  },\n  \"startTime\": \"18:00\",\n  \"endTime\": \"23:00\",\n  \"packageId\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1284,7 +1284,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"basePrice\": 100,\n    \"distancePrice\": 30,\n    \"timePrice\": 20,\n    \"surgeMultiplier\": 1,\n    \"discountAmount\": 5,\n    \"totalPrice\": 145,\n    \"depositPaid\": 30\n  },\n  \"route\": {\n    \"distanceKm\": 230,\n    \"durationMinutes\": 165,\n    \"source\": \"openrouteservice\",\n    \"start\": {\n      \"latitude\": 30.0444,\n      \"longitude\": 31.2357\n    },\n    \"end\": {\n      \"latitude\": 31.2001,\n      \"longitude\": 29.9187\n    }\n  },\n  \"comparison\": {\n    \"serverDistanceKm\": 230,\n    \"serverDurationMinutes\": 165,\n    \"claimedDistanceKm\": null,\n    \"claimedDurationMinutes\": null,\n    \"distanceDifferenceKm\": null,\n    \"withinTolerance\": true\n  }\n}"
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"basePrice\": 1500,\n    \"distancePrice\": 0,\n    \"packageDiscount\": 0,\n    \"referralDiscount\": 0,\n    \"totalPrice\": 1800,\n    \"depositRequired\": 360\n  },\n  \"serviceType\": \"WEDDING\",\n  \"lines\": [\n    {\n      \"code\": \"wedding\",\n      \"amount\": 1500,\n      \"includedHours\": 4,\n      \"includedKm\": 50\n    },\n    {\n      \"code\": \"extra_hours\",\n      \"amount\": 300,\n      \"quantity\": 1,\n      \"unitPrice\": 300\n    }\n  ],\n  \"bookedMinutes\": 300,\n  \"depositRate\": 20\n}"
             }
           ]
         },
@@ -1371,7 +1371,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"customerId\": \"\",\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"driverId\": \"\",\n  \"bookingDate\": \"2026-09-15\",\n  \"startTime\": \"10:00\",\n  \"endTime\": \"12:00\",\n  \"startPoint\": {\n    \"latitude\": 30.0444,\n    \"longitude\": 31.2357\n  },\n  \"endPoint\": {\n    \"latitude\": 31.2001,\n    \"longitude\": 29.9187\n  },\n  \"distanceKm\": 30,\n  \"durationMinutes\": 120,\n  \"notes\": \"Airport pickup\",\n  \"driverNotes\": \"\",\n  \"packageId\": \"\",\n  \"eventType\": \"wedding\",\n  \"isPeakHour\": false,\n  \"surgeMultiplier\": 1\n}",
+              "raw": "{\n  \"customerId\": \"\",\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"driverId\": \"\",\n  \"bookingDate\": \"2026-09-15\",\n  \"startTime\": \"10:00\",\n  \"endTime\": \"12:00\",\n  \"startPoint\": {\n    \"latitude\": 30.0444,\n    \"longitude\": 31.2357\n  },\n  \"endPoint\": {\n    \"latitude\": 31.2001,\n    \"longitude\": 29.9187\n  },\n  \"distanceKm\": 30,\n  \"durationMinutes\": 120,\n  \"notes\": \"Airport pickup\",\n  \"driverNotes\": \"\",\n  \"packageId\": \"\",\n  \"eventType\": \"wedding\",\n  \"serviceType\": \"WEDDING\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5572,7 +5572,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"make\": \"Mercedes\",\n  \"model\": \"S-Class\",\n  \"year\": 2024,\n  \"plateNumber\": \"أ ب ج 123\",\n  \"color\": \"Black\",\n  \"capacity\": 4,\n  \"category\": \"LUXURY\",\n  \"basePrice\": 0,\n  \"pricePerKm\": 0,\n  \"pricePerHour\": 0,\n  \"luggage\": 3,\n  \"features\": [\n    \"تكييف\",\n    \"واي فاي\"\n  ],\n  \"description\": \"Luxury car for weddings\"\n}",
+              "raw": "{\n  \"make\": \"Mercedes\",\n  \"model\": \"S-Class\",\n  \"year\": 2024,\n  \"plateNumber\": \"أ ب ج 123\",\n  \"color\": \"Black\",\n  \"capacity\": 4,\n  \"category\": \"LUXURY\",\n  \"weddingPrice\": 1800,\n  \"vipPrice\": null,\n  \"luggage\": 3,\n  \"features\": [\n    \"تكييف\",\n    \"واي فاي\"\n  ],\n  \"description\": \"Luxury car for weddings\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5622,7 +5622,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"basePrice\": 1800,\n  \"luggage\": 3,\n  \"features\": [\n    \"تكييف\",\n    \"مقاعد جلد\"\n  ]\n}",
+              "raw": "{\n  \"weddingPrice\": 1800,\n  \"luggage\": 3,\n  \"features\": [\n    \"تكييف\",\n    \"مقاعد جلد\"\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6440,7 +6440,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"depositRate\": 25,\n  \"bookingBufferMinutes\": 45,\n  \"categoryRates\": {\n    \"CAR\": {\n      \"basePrice\": 60,\n      \"pricePerKm\": 10,\n      \"pricePerHour\": 25\n    }\n  }\n}",
+              "raw": "{\n  \"depositRate\": 25,\n  \"bookingBufferMinutes\": 45,\n  \"weddingDefaultPrice\": 1600,\n  \"tripOtherPrices\": {\n    \"CAR\": 1100\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"

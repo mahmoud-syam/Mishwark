@@ -188,12 +188,13 @@ describe('Tier 2: pricing by service type (wedding, private trip, VIP)', () => {
     expect((await ctx.api.put('/admin/settings', { originLat: 48.85 }, { token: ctx.su })).status).toBe(422);
   });
 
-  test('SVC-10: a request without serviceType keeps the older per-km price (apps not updated yet)', async () => {
+  test('SVC-10: without serviceType it is priced as a private trip (the per-km price is gone)', async () => {
     if (!(await setup())) return;
-    const c = await car({ basePrice: 500, pricePerKm: 10 });
+    const c = await car();
     const q = await quote({ vehicleId: c, startPoint: HALL, endPoint: HOTEL });
     expect(q.status).toBe(200);
-    expect(q.body.lines).toBe(undefined);
-    expect(q.body.data.basePrice).toBe(500);
+    expect(q.body.serviceType).toBe('TRIP');
+    expect(q.body.lines[0].code).toBe('trip_other');
+    expect((await quote({ startPoint: HALL, endPoint: HOTEL })).status).toBe(422);
   });
 });

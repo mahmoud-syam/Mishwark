@@ -43,7 +43,7 @@ describe('Tier 2: full-cycle app review fixes', () => {
     return { driverId: u.drivers!.id, userId: u.id, token };
   };
   const car = async (driverIds?: string[]) => {
-    const c = (await ctx.api.post('/admin/vehicles', { make: 'Kia', model: 'K5', year: 2024, plateNumber: `FIX-${++n}`, capacity: 4, category: 'LUXURY', basePrice: 500 }, { token: ctx.su })).body.data;
+    const c = (await ctx.api.post('/admin/vehicles', { make: 'Kia', model: 'K5', year: 2024, plateNumber: `FIX-${++n}`, capacity: 4, category: 'LUXURY' }, { token: ctx.su })).body.data;
     const ids = driverIds ?? [(await driver()).driverId];
     expect((await ctx.api.put(`/admin/vehicles/${c.id}/drivers`, { driverIds: ids }, { token: ctx.su })).status).toBe(200);
     return c.id as string;

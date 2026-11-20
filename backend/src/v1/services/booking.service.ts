@@ -24,7 +24,6 @@ import {
   ForbiddenException,
   NotFoundException,
 } from "../utils/errors";
-import { PricingService, calculateEstimatedPrice } from "./pricing.service";
 import MapsService, { LocationInput, RouteResult, toCoordinates } from "./maps.service";
 import { getDriverIdForUser } from "./role.service";
 import { isAdminRole, normalizeRoleName, USER_ROLES } from "../constants/roles";
@@ -255,11 +254,11 @@ export class BookingService {
         throw new BadRequestException("This car is no longer available");
       }
       // Service pricing decides the default points too (a trip starts at the company).
-      const service = data.serviceType
-        ? await ServicePricing.resolve(tx, { serviceType: data.serviceType, vehicleId: data.vehicleId, destinationId: data.destinationId, startPoint: data.startPoint, endPoint: data.endPoint }, settings)
-        : null;
-      const startPoint = service ? service.startPoint : data.startPoint;
-      const endPoint = service ? service.endPoint : data.endPoint;
+      // Every booking is priced by its service (a private trip when none is given).
+      const serviceType = data.serviceType ?? ServiceType.TRIP;
+      const service = await ServicePricing.resolve(tx, { serviceType, vehicleId: data.vehicleId, destinationId: data.destinationId, startPoint: data.startPoint, endPoint: data.endPoint }, settings);
+      const startPoint = service.startPoint;
+      const endPoint = service.endPoint;
       if (
         (await FleetService.maintenanceOn(tx, vehicle.id, data.bookingDate)) ||
         (overnight && (await FleetService.maintenanceOn(tx, vehicle.id, addDays(data.bookingDate, 1))))
@@ -343,32 +342,16 @@ export class BookingService {
       const pkg = await DiscountService.resolvePackage(tx, data.packageId, customerId, true);
       const referralDiscount = await DiscountService.referralDiscount(tx, customerId);
 
-      // 7. Price: by service type (fixed prices, itemised), or the older per-km formula.
-      const servicePrice = service
-        ? priceService({
-            ...service.input,
-            bookedMinutes: tripMinutes(data.startTime, data.endTime),
-            distanceKm: route.distanceKm,
-            packageDiscountPercent: pkg?.discountPercentage ?? 0,
-            referralDiscount,
-            depositRate: settings.depositRate,
-          })
-        : null;
-      const priceEstimate = servicePrice ? { ...servicePrice.breakdown, depositPaid: servicePrice.depositRequired } : calculateEstimatedPrice({
+      // 7. Price: by service type (fixed prices, itemised).
+      const servicePrice = priceService({
+        ...service.input,
+        bookedMinutes: tripMinutes(data.startTime, data.endTime),
+        distanceKm: route.distanceKm,
         packageDiscountPercent: pkg?.discountPercentage ?? 0,
         referralDiscount,
-        vehicleCategory: vehicle.category,
-        distanceKm: route.distanceKm,
-        durationMinutes: route.durationMinutes,
-        // The client's surgeMultiplier is ignored: the peak surge comes from Settings.
-        isPeakHour: data.isPeakHour,
         depositRate: settings.depositRate,
-        peakSurgeMultiplier: settings.peakSurgeMultiplier,
-        categoryRates: settings.categoryRates,
-        basePrice: vehicle.basePrice > 0 ? vehicle.basePrice : undefined,
-        pricePerKm: vehicle.pricePerKm > 0 ? vehicle.pricePerKm : undefined,
-        pricePerHour: vehicle.pricePerHour > 0 ? vehicle.pricePerHour : undefined,
       });
+      const priceEstimate = { ...servicePrice.breakdown, depositPaid: servicePrice.depositRequired };
 
       // 7. Create Booking Record
       const newBooking = await tx.bookings.create({
@@ -380,9 +363,9 @@ export class BookingService {
           eventType: data.eventType || "",
           startPoint: describePoint(startPoint),
           endPoint: describePoint(endPoint),
-          serviceType: data.serviceType ?? null,
-          destinationId: service?.destination?.id ?? null,
-          priceLines: servicePrice ? (servicePrice.lines as unknown as Prisma.InputJsonValue) : undefined,
+          serviceType,
+          destinationId: service.destination?.id ?? null,
+          priceLines: servicePrice.lines as unknown as Prisma.InputJsonValue,
           distanceKm: route.distanceKm,
           durationMinutes: route.durationMinutes,
           startLat: route.start.latitude,

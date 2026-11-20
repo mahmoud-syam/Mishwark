@@ -2,7 +2,6 @@ import { Request, Response } from "express";
 import BookingService, { ListBookingsParams, bookingPartyOf } from "../services/booking.service";
 import prismaClient from "../utils/prismaClientHelper";
 import { ForbiddenException, NotFoundException } from "../utils/errors";
-import PricingService from "../services/pricing.service";
 import ServicePricing from "../services/service-pricing.service";
 import { isAdminRole, normalizeRoleName } from "../constants/roles";
 import MapsService from "../services/maps.service";
@@ -26,33 +25,23 @@ export const calculatePrice = async (req: Request, res: Response) => {
   const user: any = (req as any).user;
   const roleName = normalizeRoleName(user?.role?.name);
   const forCustomer = input.customerId && roleName && isAdminRole(roleName) ? input.customerId : user?.id;
-  if (input.serviceType) {
-    // Wedding / private trip / VIP: fixed prices with itemised lines.
-    const q = await ServicePricing.quote(
-      { serviceType: input.serviceType, vehicleId: input.vehicleId!, destinationId: input.destinationId, startPoint: input.startPoint, endPoint: input.endPoint, startTime: input.startTime, endTime: input.endTime, packageId: input.packageId },
-      forCustomer
-    );
-    return res.status(200).json({
-      success: true,
-      data: q.breakdown,
-      serviceType: q.serviceType,
-      lines: q.lines,
-      bookedMinutes: q.bookedMinutes,
-      depositRate: q.depositRate,
-      destination: q.destination,
-      startPoint: q.startPoint,
-      endPoint: q.endPoint,
-      route: { distanceKm: q.route.distanceKm, durationMinutes: q.route.durationMinutes, source: q.route.source, start: q.route.start, end: q.route.end, warning: q.route.warning },
-      comparison: null,
-    });
-  }
-  const quote = await PricingService.quote(input, forCustomer);
-
+  // Wedding / private trip / VIP: fixed prices with itemised lines (a private
+  // trip when no service is given).
+  const q = await ServicePricing.quote(
+    { serviceType: input.serviceType, vehicleId: input.vehicleId, destinationId: input.destinationId, startPoint: input.startPoint, endPoint: input.endPoint, startTime: input.startTime, endTime: input.endTime, packageId: input.packageId },
+    forCustomer
+  );
   res.status(200).json({
     success: true,
-    data: quote.breakdown,
-    route: quote.route,
-    comparison: quote.comparison,
+    data: q.breakdown,
+    serviceType: q.serviceType,
+    lines: q.lines,
+    bookedMinutes: q.bookedMinutes,
+    depositRate: q.depositRate,
+    destination: q.destination,
+    startPoint: q.startPoint,
+    endPoint: q.endPoint,
+    route: { distanceKm: q.route.distanceKm, durationMinutes: q.route.durationMinutes, source: q.route.source, start: q.route.start, end: q.route.end, warning: q.route.warning },
   });
 };
 

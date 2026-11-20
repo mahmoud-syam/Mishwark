@@ -52,8 +52,6 @@ model SystemSettings {
   referralRewardAmount      Float    @default(25)
   /// Amount taken off the first booking of a customer who joined with a referral code.
   referredDiscountAmount    Float    @default(25)
-  /// Price multiplier for peak-hour bookings.
-  peakSurgeMultiplier       Float    @default(1.25)
 
   // Dashboard alerts
   vipSpendThreshold         Float    @default(15000)
@@ -61,10 +59,6 @@ model SystemSettings {
   punctualityGraceMinutes   Int      @default(10)
   complaintMaxRating        Int      @default(2)
   maintenanceAlertDays      Int      @default(7)
-
-  /// Default prices per vehicle category: { CAR: { basePrice, pricePerKm, pricePerHour }, ... }.
-  /// Null = built-in defaults. A vehicle's own prices still override these.
-  categoryRates             Json?
 
   updatedAt                 DateTime @updatedAt
 }

@@ -44,7 +44,7 @@ describe('Tier 2: booking rules, deposit policy, temporary passwords', () => {
     return u.drivers!.id;
   };
   const car = async (driverIds?: string[]) => {
-    const c = (await ctx.api.post('/admin/vehicles', { make: 'Kia', model: 'K5', year: 2024, plateNumber: `POL-${++n}`, capacity: 4, category: 'LUXURY', basePrice: 500 }, { token: ctx.su })).body.data;
+    const c = (await ctx.api.post('/admin/vehicles', { make: 'Kia', model: 'K5', year: 2024, plateNumber: `POL-${++n}`, capacity: 4, category: 'LUXURY' }, { token: ctx.su })).body.data;
     expect((await ctx.api.put(`/admin/vehicles/${c.id}/drivers`, { driverIds: driverIds ?? [await driver()] }, { token: ctx.su })).status).toBe(200);
     return c.id as string;
   };

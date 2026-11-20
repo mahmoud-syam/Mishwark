@@ -75,7 +75,7 @@ describe('Tier 2: push notifications', () => {
     return { driverId: u.drivers!.id, userId: u.id, token };
   };
   const car = async (driverId: string) => {
-    const c = (await ctx.api.post('/admin/vehicles', { make: 'Kia', model: 'K5', year: 2024, plateNumber: `PUSH-${++n}`, capacity: 4, category: 'LUXURY', basePrice: 500 }, { token: ctx.su })).body.data;
+    const c = (await ctx.api.post('/admin/vehicles', { make: 'Kia', model: 'K5', year: 2024, plateNumber: `PUSH-${++n}`, capacity: 4, category: 'LUXURY' }, { token: ctx.su })).body.data;
     expect((await ctx.api.put(`/admin/vehicles/${c.id}/drivers`, { driverIds: [driverId] }, { token: ctx.su })).status).toBe(200);
     return c.id as string;
   };

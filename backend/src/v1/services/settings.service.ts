@@ -12,18 +12,6 @@ import { VehicleCategory } from "../../../generated/prisma/client";
  * value for up to CACHE_TTL_MS.
  */
 
-export type CategoryRate = { basePrice: number; pricePerKm: number; pricePerHour: number };
-export type CategoryRates = Record<VehicleCategory, CategoryRate>;
-
-export const DEFAULT_CATEGORY_RATES: CategoryRates = {
-  [VehicleCategory.CAR]: { basePrice: 50, pricePerKm: 10, pricePerHour: 25 },
-  [VehicleCategory.VAN]: { basePrice: 150, pricePerKm: 15, pricePerHour: 40 },
-  [VehicleCategory.BUS]: { basePrice: 300, pricePerKm: 25, pricePerHour: 60 },
-  [VehicleCategory.TRUCK]: { basePrice: 250, pricePerKm: 20, pricePerHour: 50 },
-  [VehicleCategory.CLASSIC]: { basePrice: 200, pricePerKm: 18, pricePerHour: 45 },
-  [VehicleCategory.LUXURY]: { basePrice: 350, pricePerKm: 30, pricePerHour: 75 },
-};
-
 /** Trip to a place that isn't on the destinations list, per category (Pricing page). */
 export const DEFAULT_TRIP_OTHER_PRICES: Record<VehicleCategory, number> = {
   [VehicleCategory.CAR]: 1000,
@@ -64,13 +52,11 @@ export interface BusinessSettings {
   defaultCommissionRate: number;
   referralRewardAmount: number;
   referredDiscountAmount: number;
-  peakSurgeMultiplier: number;
   vipSpendThreshold: number;
   delayAlertMinutes: number;
   punctualityGraceMinutes: number;
   complaintMaxRating: number;
   maintenanceAlertDays: number;
-  categoryRates: CategoryRates;
 }
 
 /** The values the API used before they became settings. */
@@ -102,13 +88,11 @@ export const DEFAULT_SETTINGS: BusinessSettings = {
   defaultCommissionRate: 20,
   referralRewardAmount: 25,
   referredDiscountAmount: 25,
-  peakSurgeMultiplier: 1.25,
   vipSpendThreshold: 15000,
   delayAlertMinutes: 5,
   punctualityGraceMinutes: 10,
   complaintMaxRating: 2,
   maintenanceAlertDays: 7,
-  categoryRates: DEFAULT_CATEGORY_RATES,
 };
 
 export const SETTING_KEYS = [
@@ -137,7 +121,6 @@ export const SETTING_KEYS = [
   "defaultCommissionRate",
   "referralRewardAmount",
   "referredDiscountAmount",
-  "peakSurgeMultiplier",
   "vipSpendThreshold",
   "delayAlertMinutes",
   "punctualityGraceMinutes",
@@ -146,7 +129,6 @@ export const SETTING_KEYS = [
 ] as const;
 
 const money = z.number().min(0).max(1_000_000);
-const rateSchema = z.object({ basePrice: money, pricePerKm: money, pricePerHour: money }).strict();
 
 /** PUT /admin/settings body. Every field optional; unknown keys refused. */
 export const updateSettingsSchema = z
@@ -178,13 +160,11 @@ export const updateSettingsSchema = z
     defaultCommissionRate: z.number().min(0).max(100),
     referralRewardAmount: money,
     referredDiscountAmount: money,
-    peakSurgeMultiplier: z.number().min(1).max(5),
     vipSpendThreshold: money,
     delayAlertMinutes: z.number().int().min(1).max(240),
     punctualityGraceMinutes: z.number().int().min(0).max(240),
     complaintMaxRating: z.number().int().min(1).max(4),
     maintenanceAlertDays: z.number().int().min(1).max(90),
-    categoryRates: z.partialRecord(z.nativeEnum(VehicleCategory), rateSchema),
     // Older toggles kept on the same row.
     performanceHistoryVisible: z.boolean(),
     evaluationsVisible: z.boolean(),
@@ -197,18 +177,6 @@ export type UpdateSettingsInput = z.infer<typeof updateSettingsSchema>;
 
 const CACHE_TTL_MS = 30_000;
 let cache: { value: BusinessSettings; at: number } | null = null;
-
-/** Merges stored category rates over the defaults, ignoring anything malformed. */
-const mergeRates = (stored: unknown): CategoryRates => {
-  const merged = { ...DEFAULT_CATEGORY_RATES };
-  if (stored && typeof stored === "object") {
-    for (const cat of Object.values(VehicleCategory)) {
-      const parsed = rateSchema.safeParse((stored as Record<string, unknown>)[cat]);
-      if (parsed.success) merged[cat] = parsed.data;
-    }
-  }
-  return merged;
-};
 
 /** A { CATEGORY: price } map over defaults, ignoring anything that isn't a price. */
 export const mergeCategoryPrices = (stored: unknown, defaults: Record<VehicleCategory, number>): Record<VehicleCategory, number> => {
@@ -227,7 +195,6 @@ const toBusiness = (row: any): BusinessSettings => {
   for (const key of SETTING_KEYS) {
     if (typeof row?.[key] === "number" && Number.isFinite(row[key])) out[key] = row[key];
   }
-  out.categoryRates = mergeRates(row?.categoryRates);
   out.tripOtherPrices = mergeCategoryPrices(row?.tripOtherPrices, DEFAULT_TRIP_OTHER_PRICES);
   if (typeof row?.originLabel === "string" && row.originLabel.trim()) out.originLabel = row.originLabel;
   return out;
@@ -271,11 +238,6 @@ export class SettingsService {
 
   public static async update(input: UpdateSettingsInput) {
     const data: any = { ...input };
-    if (input.categoryRates) {
-      // A partial map updates only the categories sent.
-      const current = mergeRates((await this.getRow()).categoryRates);
-      data.categoryRates = { ...current, ...input.categoryRates };
-    }
     if (input.tripOtherPrices) {
       const current = mergeCategoryPrices((await this.getRow()).tripOtherPrices, DEFAULT_TRIP_OTHER_PRICES);
       data.tripOtherPrices = { ...current, ...input.tripOtherPrices };
