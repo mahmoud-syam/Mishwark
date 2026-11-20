@@ -18,9 +18,11 @@ export const createReview = async (req: Request, res: Response) => {
 };
 
 export const getReviewById = async (req: Request, res: Response) => {
-  const r = await prismaClient.reviews.findUnique({ where: { id: paramStr(req.params.id) }, select: { reviewerId: true, revieweeId: true } });
+  const r = await prismaClient.reviews.findUnique({ where: { id: paramStr(req.params.id) }, select: { reviewerId: true, revieweeId: true, visibleAt: true } });
   if (!r) throw new NotFoundException("Review not found");
   assertOwnerOrAdmin(req.user, [r.reviewerId, r.revieweeId], "Review");
+  // The person reviewed can't read it before it is released (blind reviews).
+  if (req.user?.id === r.revieweeId && !ReviewService.isReleased(r)) throw new NotFoundException("Review not found");
   const review = await ReviewService.getReviewById(paramStr(req.params.id));
   res.status(200).json({ success: true, data: review });
 };

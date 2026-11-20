@@ -1,4 +1,5 @@
 import express, { Express } from 'express';
+import { stripSecretsMiddleware } from "./v1/middlewares/strip-secrets.middleware";
 
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -12,6 +13,7 @@ import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import Notify from './v1/services/notify.service';
 import PushService from './v1/services/push.service';
+import ReviewService from './v1/services/review.service';
 
 const OPENAPI_SPEC_PATH = path.join(process.cwd(), 'api-docs', 'mishwarak.openapi.json');
 
@@ -114,6 +116,8 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, {
 }));
 
 
+// Never send password hashes, OTP codes or 2FA secrets, whatever a handler returns.
+app.use("/api/v1", stripSecretsMiddleware);
 app.use("/api/v1", rootRouterV1);
 
 // Admin web dashboard (frontend/, built by `npm run dashboard:build`). Served
@@ -148,6 +152,12 @@ app.use(errorMiddleware);
 app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`Server is running on port ${PORT}`);
     // Trip reminders (and any push still waiting) go out every minute.
-    if (process.env.NOTIFICATIONS_WORKER !== 'off') Notify.startWorker();
+    if (process.env.NOTIFICATIONS_WORKER !== 'off') {
+        Notify.startWorker();
+        // Reviews that waited 48 hours for the other side are shown, and ratings updated.
+        const release = () => ReviewService.releaseDue().catch((e) => console.error('[reviews] release:', e.message));
+        setInterval(release, 10 * 60_000).unref();
+        release();
+    }
     console.log(`[push] ${PushService.isConfigured() ? 'Firebase push is on' : 'push is off (no FCM_SERVICE_ACCOUNT_*): notifications go to the in-app inbox only'}`);
 })

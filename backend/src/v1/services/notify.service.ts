@@ -24,6 +24,12 @@ const fmtTime = (hhmm: string, lang: Lang) => {
   return lang === "ar" ? `${h12}:${String(m).padStart(2, "0")} ${pm ? "م" : "ص"}` : `${h12}:${String(m).padStart(2, "0")} ${pm ? "PM" : "AM"}`;
 };
 
+/** "الخميس 11 ديسمبر" / "Thu 11 Dec" (Cairo calendar day). */
+const fmtDate = (dateKey: string, lang: Lang) =>
+  new Intl.DateTimeFormat(lang === "ar" ? "ar-EG-u-nu-latn" : "en-GB", { weekday: lang === "ar" ? "long" : "short", day: "numeric", month: lang === "ar" ? "long" : "short", timeZone: "Africa/Cairo" }).format(
+    new Date(`${dateKey}T12:00:00Z`)
+  );
+
 /** Short, plain texts. {ref} = MW-XXXXXX, {when} = date and time. */
 const TEXTS: Record<string, Record<Lang, (p: Params) => Text>> = {
   NEW_TRIP: {
@@ -193,7 +199,7 @@ export const Notify = {
   // ------------------------------------------------------------ events
   async whenOf(b: Booking, userId: string) {
     const lang = await this.langOf(userId);
-    return { when: `${b.bookingDate} ${fmtTime(b.startTime, lang)}`, time: fmtTime(b.startTime, lang), ref: bookingRef(b.id) };
+    return { when: `${fmtDate(b.bookingDate, lang)} ${lang === "ar" ? "الساعة" : "at"} ${fmtTime(b.startTime, lang)}`, time: fmtTime(b.startTime, lang), ref: bookingRef(b.id) };
   },
 
   async driverUserId(driverId: string | null) {
