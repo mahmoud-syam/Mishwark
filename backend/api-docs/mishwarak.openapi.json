@@ -2010,7 +2010,7 @@
         "tags": [
           "Drivers"
         ],
-        "summary": "PUT /driver/profile",
+        "summary": "The signed-in driver updates `fullName`, `licenseNumber`, `licenseExpiry` (YYYY-MM-DD); other fields are ignored (the photo is PUT /auth/me/photo). A new licence number or expiry sends both licence photos back to review: the reply's `documentsBackToReview` says how many.",
         "security": [
           {
             "bearerAuth": []
@@ -2065,7 +2065,7 @@
             }
           }
         },
-        "description": "PUT /driver/profile",
+        "description": "The signed-in driver updates `fullName`, `licenseNumber`, `licenseExpiry` (YYYY-MM-DD); other fields are ignored (the photo is PUT /auth/me/photo). A new licence number or expiry sends both licence photos back to review: the reply's `documentsBackToReview` says how many.",
         "operationId": "put_driver_profile"
       }
     },

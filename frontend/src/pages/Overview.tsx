@@ -132,7 +132,9 @@ function AlertsStrip({ data }: { data?: OverviewData }) {
           <Link key={i} to={`/drivers/${a.entityId}`} className={row}>
             {icon("bg-gold/15 text-gold", <FileCheck />)}
             <span>
-              {a.driverName} رفع {a.documents === 1 ? "مستند" : `${a.documents} مستندات`} مستنية مراجعتك
+              {a.licenceChanged
+                ? `${a.driverName} غيّر بيانات الرخصة: ${a.documents === 1 ? "مستند" : `${a.documents} مستندات`} محتاجة مراجعة تاني`
+                : `${a.driverName} رفع ${a.documents === 1 ? "مستند" : `${a.documents} مستندات`} مستنية مراجعتك`}
             </span>
           </Link>
         ) : a.type === "no_driver" ? (

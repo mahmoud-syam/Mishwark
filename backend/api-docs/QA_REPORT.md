@@ -19,7 +19,7 @@ The mobile apps are not in this repository, so both apps were simulated through 
 | API sweep (functional, ownership, no-auth, robustness) | 357 / 357 passing |
 | Bugs found and fixed | 17 |
 | Product decisions taken and implemented | 7 + SMS/OTP hardening |
-| Backend test suite | 398 / 398 passing |
+| Backend test suite | 399 / 399 passing |
 
 All dashboard numbers matched the database exactly at every step: revenue,
 pending bookings, live trips, payments, driver and customer analytics,
@@ -184,6 +184,12 @@ Found while testing them:
 | # | Severity | Problem | Fix |
 |---|---|---|---|
 | F-57 | Medium | A team member couldn't change their own name, photo or password; only a Super Admin could reset a password, and that endpoint didn't ask for the current one. | Profile page (click your name in the side menu): name, photo (`PUT/DELETE /auth/me/photo`, real-image check, random file name, old file deleted unless another account uses it) and password (`POST /auth/me/password`: current password required and counted toward the lockout, other sessions signed out, this one kept). Photos show in the side menu and on the Team page. |
+
+### Licence re-review (2026-11-20)
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-68 | Medium | A driver could change his licence number or expiry from the app after the office approved his licence photos; the photos stayed "approved" for details nobody checked. | Either change sends both licence photos back to review (with the reason), audit-logs the old and new values, and the home alert says the licence changed. The papers panel shows the licence number and expiry beside the photos. |
 
 ### Full-cycle app review (2026-11-19)
 
