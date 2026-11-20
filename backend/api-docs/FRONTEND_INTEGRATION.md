@@ -595,6 +595,18 @@ GET /bookings/:id
 
 `page` and `limit` arrive as strings and are coerced server-side.
 
+**What each side sees** (`GET /bookings/:id`, the list, and the response of
+`DELETE /bookings/:id`):
+
+- **Customer:** `driver` is `{ id, fullName, status, rating, pic, phoneNumber }`.
+  `phoneNumber` is filled only while the booking is `CONFIRMED` and the trip
+  isn't completed; otherwise it is `null`. Show a "call the driver" button when
+  it isn't null.
+- **Driver:** `customer` is `{ id, name, phoneNumber }` only (no email).
+- **Office (admin):** everything.
+- `reviews` on a booking only include the caller's own review and reviews that
+  have been released (see Reviews).
+
 ---
 
 ## Driver
@@ -624,6 +636,13 @@ from the admin.
 `GET /driver/stats` returns trip counts, `totalRevenue` (gross),
 `commissionRate`, `companyShare` and `netEarnings` (gross minus the company's
 commission, the same split the admin dashboard shows).
+
+**Changed:** the money now follows the dashboard's definition: confirmed or
+completed trips up to today, counted in `earningTrips`. `completedTrips` is
+still completed trips only. `averageRating` (one decimal) and the new
+`reviewsCount` only count released customer reviews, so they match `rating`.
+`todayTrips` and `filter=today` use Cairo's date (they used the UTC date, which
+showed yesterday between midnight and 2 a.m.).
 
 ---
 
@@ -748,6 +767,14 @@ GET /reviews/:id
 
 Ratings are integers 1–5. `reviewerType` must match the caller's side
 (`CUSTOMER_TO_DRIVER` or `DRIVER_TO_CUSTOMER`); the server enforces this.
+
+**Blind reviews:** a review is hidden from the person it is about until both
+sides have reviewed the trip, or 48 hours have passed (the server releases it
+by itself, every 10 minutes). Before that, the reviewee gets it from none of
+`GET /reviews/booking/:id`, `GET /reviews/:id` (404) or the booking's
+`reviews`. The writer always sees their own. The driver's `rating` is updated
+when a review is released. In the app, after submitting, show "your review will
+appear once the other side reviews, or within 48 hours".
 
 ```http
 GET   /chat/booking/:bookingId            get or fetch the booking's conversation

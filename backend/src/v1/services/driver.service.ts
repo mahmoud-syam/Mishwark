@@ -7,7 +7,9 @@ import {
   DriverStatus,
   BookingStatus,
   TripStatus,
+  ReviewerType,
 } from "../../../generated/prisma";
+import { dateKey } from "../utils/businessTime";
 import {
   BadRequestException,
   ForbiddenException,
@@ -125,7 +127,7 @@ export class DriverService {
     const limit = params.limit && params.limit > 0 ? params.limit : 10;
     const skip = (page - 1) * limit;
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = dateKey(); // Cairo's day
     const where: any = { driverId: driver.id };
 
     if (params.filter === "today") {
@@ -166,7 +168,8 @@ export class DriverService {
       throw new NotFoundException(`Driver profile not found for user ${userId}`);
     }
 
-    const today = new Date().toISOString().split("T")[0];
+    // Cairo's day, not UTC's: between midnight and 2am the UTC date is still yesterday.
+    const today = dateKey();
 
     const [totalTrips, completedTrips, todayTrips, totalRevenue, averageRating] = await Promise.all([
       prismaClient.bookings.count({
@@ -178,13 +181,19 @@ export class DriverService {
       prismaClient.bookings.count({
         where: { driverId: driver.id, bookingDate: today, status: { not: BookingStatus.CANCELLED } },
       }),
+      // Same money the dashboard shows for this driver: confirmed or completed
+      // trips up to today (AdminDashboardService.driverAnalytics).
       prismaClient.bookings.aggregate({
-        where: { driverId: driver.id, status: BookingStatus.COMPLETED },
+        where: { driverId: driver.id, status: { in: [BookingStatus.CONFIRMED, BookingStatus.COMPLETED] }, bookingDate: { lte: today } },
         _sum: { totalPrice: true },
+        _count: { _all: true },
       }),
+      // Only what customers wrote about the driver, and only once released
+      // (blind reviews), so it matches the rating on the profile.
       prismaClient.reviews.aggregate({
-        where: { revieweeId: driver.userId },
+        where: { revieweeId: driver.userId, reviewerType: ReviewerType.CUSTOMER_TO_DRIVER, visibleAt: { not: null } },
         _avg: { overallRating: true },
+        _count: { _all: true },
       }),
     ]);
 
@@ -196,12 +205,15 @@ export class DriverService {
       totalTrips,
       completedTrips,
       todayTrips,
+      // Trips the money below comes from (the dashboard's "trips").
+      earningTrips: totalRevenue._count._all,
       totalRevenue: gross,
       // Same split the admin dashboard shows for this driver.
       commissionRate: driver.commissionRate,
       companyShare,
       netEarnings: Math.round((gross - companyShare) * 100) / 100,
-      averageRating: averageRating._avg.overallRating || 5.0,
+      averageRating: Math.round((averageRating._avg.overallRating || 5.0) * 10) / 10,
+      reviewsCount: averageRating._count._all,
       rating: driver.rating,
     };
   }

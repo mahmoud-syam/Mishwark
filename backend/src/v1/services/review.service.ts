@@ -102,6 +102,7 @@ export class ReviewService {
         where: { bookingId, visibleAt: null },
         data: { visibleAt: now },
       });
+      await this.refreshRatingsFor(booking.reviews.map((r) => r.revieweeId));
       return;
     }
 
@@ -114,7 +115,33 @@ export class ReviewService {
         where: { bookingId, visibleAt: null },
         data: { visibleAt: now },
       });
+      await this.refreshRatingsFor(booking.reviews.map((r) => r.revieweeId));
     }
+  }
+
+  /** A review is shown to the person it is about once both sides reviewed, or 48 hours after it was written. */
+  public static isReleased(r: { visibleAt: Date | null }, now = new Date()) {
+    return !!r.visibleAt && r.visibleAt <= now;
+  }
+
+  /**
+   * Releases reviews that waited 48 hours for the other side (the server runs
+   * this every few minutes; before, they stayed hidden unless someone wrote
+   * another review on the same trip) and updates the drivers' ratings.
+   */
+  public static async releaseDue(now = new Date()) {
+    const cutoff = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+    const due = await prismaClient.reviews.findMany({ where: { visibleAt: null, createdAt: { lte: cutoff } }, select: { id: true, revieweeId: true } });
+    if (!due.length) return 0;
+    await prismaClient.reviews.updateMany({ where: { id: { in: due.map((d) => d.id) }, visibleAt: null }, data: { visibleAt: now } });
+    await this.refreshRatingsFor(due.map((d) => d.revieweeId));
+    return due.length;
+  }
+
+  /** The rating shown in the app for each driver among these users. */
+  public static async refreshRatingsFor(userIds: string[]) {
+    const drivers = await prismaClient.drivers.findMany({ where: { userId: { in: [...new Set(userIds)] } }, select: { id: true } });
+    for (const d of drivers) await this.updateDriverRating(d.id);
   }
 
   public static async getReviewById(reviewId: string) {
@@ -158,11 +185,9 @@ export class ReviewService {
       },
     });
 
-    return reviews.filter((r) => {
-      if (r.visibleAt && r.visibleAt <= now) return true;
-      if (r.reviewerId === requestorId || r.revieweeId === requestorId) return true;
-      return false;
-    });
+    // Blind until released: the person reviewed sees it only then (they used
+    // to see it at once, so the other side could react to it).
+    return reviews.filter((r) => this.isReleased(r, now) || r.reviewerId === requestorId);
   }
 
   public static async getUserReviews(userId: string, page: number = 1, limit: number = 10) {

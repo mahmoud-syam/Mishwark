@@ -1,9 +1,10 @@
 import { Request, Response } from "express";
+import ReviewService from "../services/review.service";
 import BookingService, { ListBookingsParams, bookingPartyOf } from "../services/booking.service";
 import prismaClient from "../utils/prismaClientHelper";
 import { ForbiddenException, NotFoundException } from "../utils/errors";
 import ServicePricing from "../services/service-pricing.service";
-import { isAdminRole, normalizeRoleName } from "../constants/roles";
+import { isAdminRole, normalizeRoleName, USER_ROLES } from "../constants/roles";
 import MapsService from "../services/maps.service";
 import AuditService from "../services/audit.service";
 import { AuditAction } from "../../../generated/prisma";
@@ -88,11 +89,37 @@ export const getBookings = async (req: Request, res: Response) => {
     },
     req.user
   );
+  // A driver's list only carries what he needs to reach the customer (no email);
+  // the list is already limited to his own trips, or the customer's own bookings.
+  const role = normalizeRoleName(typeof req.user?.role === "string" ? req.user.role : req.user?.role?.name);
+  const items = role === USER_ROLES.DRIVER
+    ? result.items.map((b) => ({ ...b, customer: { id: b.customer.id, name: b.customer.name, phoneNumber: b.customer.phoneNumber } }))
+    : result.items;
   res.status(200).json({
     success: true,
-    data: result.items,
+    data: items,
     pagination: result.pagination,
   });
+};
+
+/**
+ * What each side of a booking sees. The customer gets the driver's phone once
+ * the booking is confirmed (to reach him on the day), the driver doesn't get the
+ * customer's email, and nobody sees the other side's review before it is
+ * released (blind reviews). The office sees everything.
+ */
+const shapeForParty = (b: Awaited<ReturnType<typeof BookingService.getBookingById>>, party: string, userId: string) => {
+  if (party === "admin") return b;
+  const reviews = b.reviews.filter((r) => ReviewService.isReleased(r) || r.reviewerId === userId);
+  const { user: driverUser, ...driver } = b.driver;
+  const reachable = b.status === "CONFIRMED" && b.tripStatus !== "COMPLETED";
+  const driverView = {
+    ...driver,
+    pic: driverUser?.pic || driver.pic || "",
+    ...(party === "customer" ? { phoneNumber: reachable ? driverUser?.phoneNumber ?? null : null } : {}),
+  };
+  const customer = party === "driver" ? { id: b.customer.id, name: b.customer.name, phoneNumber: b.customer.phoneNumber } : b.customer;
+  return { ...b, driver: driverView, customer, reviews };
 };
 
 export const getBookingById = async (req: Request, res: Response) => {
@@ -100,12 +127,13 @@ export const getBookingById = async (req: Request, res: Response) => {
   const booking = await BookingService.getBookingById(id);
   // Only the booking's customer, its assigned driver or an admin may see it.
   // Others get the same 404 as a missing booking, so ids can't be probed.
-  if ((await bookingPartyOf(booking, req.user)) === null) {
+  const party = await bookingPartyOf(booking, req.user);
+  if (party === null) {
     throw new NotFoundException(`Booking with ID ${id} not found`);
   }
   res.status(200).json({
     success: true,
-    data: booking,
+    data: shapeForParty(booking, party, req.user!.id),
   });
 };
 
@@ -164,10 +192,11 @@ export const cancelBooking = async (req: Request, res: Response) => {
       details: `cancelled · paid ${c.paid}, refunded ${c.refund}, kept ${c.kept}${c.overridden ? " (admin decision)" : " (policy)"}`,
     });
   }
+  // Same per-party view as GET /bookings/:id.
   res.status(200).json({
     success: true,
     message: "Booking cancelled successfully",
-    data: result.booking,
+    data: shapeForParty(await BookingService.getBookingById(result.booking.id), party, req.user!.id),
     cancellation: result.cancellation,
     promotedWaitlistEntry: result.promotedWaitlistEntry,
   });

@@ -3,7 +3,9 @@ import {
   BookingStatus,
   VehicleStatus,
   DriverStatus,
+  ReviewerType,
 } from "../../../generated/prisma";
+import { dateKey } from "../utils/businessTime";
 import {
   NotFoundException,
   BadRequestException,
@@ -14,7 +16,7 @@ import FleetService from "./fleet.service";
 
 export class AdminService {
   public static async getDashboardStats() {
-    const today = new Date().toISOString().split("T")[0];
+    const today = dateKey(); // Cairo's day
 
     const [
       totalUsers,
@@ -179,16 +181,17 @@ export class AdminService {
       prismaClient.bookings.count({
         where: { driverId, status: BookingStatus.COMPLETED },
       }),
+      // Same money and ratings as the dashboard's driver page.
       prismaClient.bookings.aggregate({
-        where: { driverId, status: BookingStatus.COMPLETED },
+        where: { driverId, status: { in: [BookingStatus.CONFIRMED, BookingStatus.COMPLETED] }, bookingDate: { lte: dateKey() } },
         _sum: { totalPrice: true },
       }),
       prismaClient.reviews.aggregate({
-        where: { revieweeId: driver.userId },
+        where: { revieweeId: driver.userId, reviewerType: ReviewerType.CUSTOMER_TO_DRIVER },
         _avg: { overallRating: true, vehicleRating: true, punctualityRating: true },
       }),
       prismaClient.reviews.count({
-        where: { revieweeId: driver.userId },
+        where: { revieweeId: driver.userId, reviewerType: ReviewerType.CUSTOMER_TO_DRIVER },
       }),
     ]);
 
