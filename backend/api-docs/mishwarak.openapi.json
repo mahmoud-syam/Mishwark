@@ -1406,24 +1406,19 @@
                 "$ref": "#/components/schemas/PriceEstimateBody"
               },
               "example": {
-                "vehicleCategory": "VAN",
+                "vehicleId": "{{vehicleId}}",
+                "serviceType": "WEDDING",
                 "startPoint": {
                   "latitude": 30.0444,
                   "longitude": 31.2357
                 },
                 "endPoint": {
-                  "latitude": 31.2001,
-                  "longitude": 29.9187
+                  "latitude": 30.0911,
+                  "longitude": 31.3253
                 },
-                "distanceKm": 25,
-                "durationMinutes": 120,
-                "isPeakHour": false,
-                "surgeMultiplier": 1,
-                "packageDiscount": 10,
-                "referralDiscount": 5,
-                "vehicleId": "{{vehicleId}}",
-                "packageId": "",
-                "referralCode": ""
+                "startTime": "18:00",
+                "endTime": "23:00",
+                "packageId": ""
               }
             }
           }
@@ -1567,8 +1562,7 @@
                 "driverNotes": "",
                 "packageId": "",
                 "eventType": "wedding",
-                "isPeakHour": false,
-                "surgeMultiplier": 1
+                "serviceType": "WEDDING"
               }
             }
           }
@@ -5771,12 +5765,9 @@
               "example": {
                 "depositRate": 25,
                 "bookingBufferMinutes": 45,
-                "categoryRates": {
-                  "CAR": {
-                    "basePrice": 60,
-                    "pricePerKm": 10,
-                    "pricePerHour": 25
-                  }
+                "weddingDefaultPrice": 1600,
+                "tripOtherPrices": {
+                  "CAR": 1100
                 }
               }
             }
@@ -6661,9 +6652,8 @@
                 "color": "Black",
                 "capacity": 4,
                 "category": "LUXURY",
-                "basePrice": 0,
-                "pricePerKm": 0,
-                "pricePerHour": 0,
+                "weddingPrice": 1800,
+                "vipPrice": null,
                 "luggage": 3,
                 "features": [
                   "تكييف",
@@ -6844,7 +6834,7 @@
                 "$ref": "#/components/schemas/VehicleUpdateBody"
               },
               "example": {
-                "basePrice": 1800,
+                "weddingPrice": 1800,
                 "luggage": 3,
                 "features": [
                   "تكييف",
@@ -8804,20 +8794,21 @@
               "LUXURY"
             ]
           },
-          "basePrice": {
-            "type": "number",
+          "weddingPrice": {
+            "type": [
+              "number",
+              "null"
+            ],
             "minimum": 0,
-            "description": "0 = the category price from Settings."
+            "description": "This car's wedding price; null = the default on the Pricing page."
           },
-          "pricePerKm": {
-            "type": "number",
+          "vipPrice": {
+            "type": [
+              "number",
+              "null"
+            ],
             "minimum": 0,
-            "description": "0 = the category price from Settings."
-          },
-          "pricePerHour": {
-            "type": "number",
-            "minimum": 0,
-            "description": "0 = the category price from Settings."
+            "description": "This car's VIP price; null = the default on the Pricing page."
           },
           "luggage": {
             "type": "integer",
@@ -8890,20 +8881,21 @@
               "LUXURY"
             ]
           },
-          "basePrice": {
-            "type": "number",
+          "weddingPrice": {
+            "type": [
+              "number",
+              "null"
+            ],
             "minimum": 0,
-            "description": "0 = the category price from Settings."
+            "description": "This car's wedding price; null = the default on the Pricing page."
           },
-          "pricePerKm": {
-            "type": "number",
+          "vipPrice": {
+            "type": [
+              "number",
+              "null"
+            ],
             "minimum": 0,
-            "description": "0 = the category price from Settings."
-          },
-          "pricePerHour": {
-            "type": "number",
-            "minimum": 0,
-            "description": "0 = the category price from Settings."
+            "description": "This car's VIP price; null = the default on the Pricing page."
           },
           "luggage": {
             "type": "integer",
@@ -9405,16 +9397,22 @@
       "PriceEstimateBody": {
         "type": "object",
         "properties": {
-          "vehicleCategory": {
+          "vehicleId": {
+            "type": "string"
+          },
+          "serviceType": {
             "type": "string",
             "enum": [
-              "CAR",
-              "VAN",
-              "BUS",
-              "TRUCK",
-              "CLASSIC",
-              "LUXURY"
-            ]
+              "WEDDING",
+              "TRIP",
+              "VIP"
+            ],
+            "default": "TRIP",
+            "description": "How the trip is priced (Pricing page). Without it: a private trip."
+          },
+          "destinationId": {
+            "type": "string",
+            "description": "A listed destination (trips). Without it, endPoint is priced as 'another destination'."
           },
           "startPoint": {
             "$ref": "#/components/schemas/LocationInput"
@@ -9422,48 +9420,26 @@
           "endPoint": {
             "$ref": "#/components/schemas/LocationInput"
           },
-          "distanceKm": {
-            "type": "number",
-            "description": "Optional hint. Recomputed server-side and never priced."
+          "startTime": {
+            "type": "string",
+            "example": "18:00",
+            "description": "Booked hours (wedding / VIP extra hours)."
           },
-          "durationMinutes": {
-            "type": "number",
-            "description": "Optional hint. Recomputed server-side and never priced."
-          },
-          "isPeakHour": {
-            "type": "boolean"
-          },
-          "surgeMultiplier": {
-            "type": "number",
-            "deprecated": true,
-            "description": "Ignored. The server applies the peak surge from Settings when isPeakHour is true."
-          },
-          "packageDiscount": {
-            "type": "number",
-            "deprecated": true,
-            "description": "Ignored. Computed from packageId."
-          },
-          "referralDiscount": {
-            "type": "number",
-            "deprecated": true,
-            "description": "Ignored. Computed from referralCode."
-          },
-          "vehicleId": {
-            "type": "string"
+          "endTime": {
+            "type": "string",
+            "example": "23:00"
           },
           "packageId": {
             "type": "string"
-          },
-          "referralCode": {
-            "type": "string",
-            "deprecated": true,
-            "description": "Ignored. Apply the code with POST /referrals/apply."
           },
           "customerId": {
             "type": "string",
             "description": "Admins only: quote with this customer's discounts."
           }
-        }
+        },
+        "required": [
+          "vehicleId"
+        ]
       },
       "CreateBookingBody": {
         "type": "object",
@@ -9515,13 +9491,17 @@
           "eventType": {
             "type": "string"
           },
-          "isPeakHour": {
-            "type": "boolean"
+          "serviceType": {
+            "type": "string",
+            "enum": [
+              "WEDDING",
+              "TRIP",
+              "VIP"
+            ],
+            "default": "TRIP"
           },
-          "surgeMultiplier": {
-            "type": "number",
-            "deprecated": true,
-            "description": "Ignored. The server applies the peak surge from Settings when isPeakHour is true."
+          "destinationId": {
+            "type": "string"
           }
         },
         "required": [
@@ -9879,11 +9859,6 @@
             "type": "number",
             "minimum": 0
           },
-          "peakSurgeMultiplier": {
-            "type": "number",
-            "minimum": 1,
-            "maximum": 5
-          },
           "vipSpendThreshold": {
             "type": "number",
             "minimum": 0
@@ -9907,114 +9882,6 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 90
-          },
-          "categoryRates": {
-            "type": "object",
-            "description": "Only the categories to change",
-            "properties": {
-              "CAR": {
-                "type": "object",
-                "properties": {
-                  "basePrice": {
-                    "type": "number",
-                    "minimum": 0
-                  },
-                  "pricePerKm": {
-                    "type": "number",
-                    "minimum": 0
-                  },
-                  "pricePerHour": {
-                    "type": "number",
-                    "minimum": 0
-                  }
-                }
-              },
-              "VAN": {
-                "type": "object",
-                "properties": {
-                  "basePrice": {
-                    "type": "number",
-                    "minimum": 0
-                  },
-                  "pricePerKm": {
-                    "type": "number",
-                    "minimum": 0
-                  },
-                  "pricePerHour": {
-                    "type": "number",
-                    "minimum": 0
-                  }
-                }
-              },
-              "BUS": {
-                "type": "object",
-                "properties": {
-                  "basePrice": {
-                    "type": "number",
-                    "minimum": 0
-                  },
-                  "pricePerKm": {
-                    "type": "number",
-                    "minimum": 0
-                  },
-                  "pricePerHour": {
-                    "type": "number",
-                    "minimum": 0
-                  }
-                }
-              },
-              "TRUCK": {
-                "type": "object",
-                "properties": {
-                  "basePrice": {
-                    "type": "number",
-                    "minimum": 0
-                  },
-                  "pricePerKm": {
-                    "type": "number",
-                    "minimum": 0
-                  },
-                  "pricePerHour": {
-                    "type": "number",
-                    "minimum": 0
-                  }
-                }
-              },
-              "CLASSIC": {
-                "type": "object",
-                "properties": {
-                  "basePrice": {
-                    "type": "number",
-                    "minimum": 0
-                  },
-                  "pricePerKm": {
-                    "type": "number",
-                    "minimum": 0
-                  },
-                  "pricePerHour": {
-                    "type": "number",
-                    "minimum": 0
-                  }
-                }
-              },
-              "LUXURY": {
-                "type": "object",
-                "properties": {
-                  "basePrice": {
-                    "type": "number",
-                    "minimum": 0
-                  },
-                  "pricePerKm": {
-                    "type": "number",
-                    "minimum": 0
-                  },
-                  "pricePerHour": {
-                    "type": "number",
-                    "minimum": 0
-                  }
-                }
-              }
-            }
           },
           "performanceHistoryVisible": {
             "type": "boolean"
@@ -10066,15 +9933,6 @@
                 "type": "number"
               },
               "distancePrice": {
-                "type": "number"
-              },
-              "timePrice": {
-                "type": "number"
-              },
-              "surgeMultiplier": {
-                "type": "number"
-              },
-              "discountAmount": {
                 "type": "number"
               },
               "packageDiscount": {
@@ -10280,12 +10138,6 @@
                     "BOOKED",
                     "MAINTENANCE"
                   ]
-                },
-                "basePrice": {
-                  "type": "number"
-                },
-                "pricePerKm": {
-                  "type": "number"
                 },
                 "pricePerHour": {
                   "type": "number"

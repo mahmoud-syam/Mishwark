@@ -3,11 +3,10 @@ import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { VEHICLE_CATEGORY } from "../lib/labels";
-import type { BusinessSettings, CategoryRate, SettingsResponse } from "../lib/types";
-import { Button, cx, ErrorBox, Field, Page, PageHeader, Panel, Skeleton, Table, Td, fieldControl } from "../components/ui";
+import type { BusinessSettings, SettingsResponse } from "../lib/types";
+import { Button, cx, ErrorBox, Field, Page, PageHeader, Panel, Skeleton, fieldControl } from "../components/ui";
 
-type NumKey = Exclude<keyof BusinessSettings, "categoryRates">;
+type NumKey = Exclude<keyof BusinessSettings, "tripOtherPrices" | "originLabel">;
 
 interface FieldDef {
   key: NumKey;
@@ -48,7 +47,6 @@ const GROUPS: { title: string; tag: string; fields: FieldDef[] }[] = [
       { key: "defaultCommissionRate", label: "عمولة الشركة للسائق الجديد", unit: "%", min: 0, max: 100, help: "بتتحط للسائقين اللي بيتسجلوا بعد التغيير. عمولة كل سائق حالي بتتعدل من صفحته." },
       { key: "referralRewardAmount", label: "مكافأة الإحالة", unit: "ج.م", min: 0, max: 1_000_000, help: "رصيد بيتضاف لصاحب الكود لما أول رحلة للعميل اللي دعاه تخلص." },
       { key: "referredDiscountAmount", label: "خصم العميل المدعو على أول حجز", unit: "ج.م", min: 0, max: 1_000_000, help: "بيتخصم تلقائي من أول حجز للعميل اللي سجّل بكود إحالة. 0 = مفيش خصم." },
-      { key: "peakSurgeMultiplier", label: "مضاعف سعر وقت الذروة", unit: "×", min: 1, max: 5, help: "مثلاً 1.25 يعني السعر بيزيد 25% في وقت الذروة." },
     ],
   },
   {
@@ -64,22 +62,10 @@ const GROUPS: { title: string; tag: string; fields: FieldDef[] }[] = [
   },
 ];
 
-const RATE_FIELDS: { key: keyof CategoryRate; label: string }[] = [
-  { key: "basePrice", label: "سعر فتح الرحلة" },
-  { key: "pricePerKm", label: "سعر الكيلو" },
-  { key: "pricePerHour", label: "سعر الساعة" },
-];
-
 type Form = Record<NumKey, string>;
-type RatesForm = Record<string, Record<keyof CategoryRate, string>>;
 
 const toForm = (s: BusinessSettings): Form =>
   Object.fromEntries(GROUPS.flatMap((g) => g.fields).map((f) => [f.key, String(s[f.key])])) as Form;
-
-const toRatesForm = (s: BusinessSettings): RatesForm =>
-  Object.fromEntries(
-    Object.entries(s.categoryRates).map(([cat, r]) => [cat, { basePrice: String(r.basePrice), pricePerKm: String(r.pricePerKm), pricePerHour: String(r.pricePerHour) }])
-  );
 
 const parse = (v: string) => (v.trim() === "" ? NaN : Number(v.replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(",", ".")));
 
@@ -98,13 +84,11 @@ export default function Settings() {
 
   const q = useQuery({ queryKey: ["settings"], queryFn: () => api.get<SettingsResponse>("/admin/settings") });
   const [form, setForm] = useState<Form | null>(null);
-  const [rates, setRates] = useState<RatesForm | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (q.data && !form) {
       setForm(toForm(q.data));
-      setRates(toRatesForm(q.data));
     }
   }, [q.data, form]);
 
@@ -116,34 +100,21 @@ export default function Settings() {
       const e = validate(f, form[f.key]);
       if (e) out[f.key] = e;
     }
-    for (const [cat, r] of Object.entries(rates ?? {})) {
-      for (const rf of RATE_FIELDS) {
-        const n = parse(r[rf.key]);
-        if (!Number.isFinite(n) || n < 0) out[`${cat}.${rf.key}`] = "رقم موجب";
-      }
-    }
     return out;
-  }, [form, rates]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Only the values that differ from what is saved. */
   const changes = useMemo(() => {
-    if (!form || !rates || !q.data) return null;
+    if (!form || !q.data) return null;
     const body: Record<string, unknown> = {};
     for (const f of fields) {
       const n = parse(form[f.key]);
       if (Number.isFinite(n) && n !== q.data[f.key]) body[f.key] = n;
     }
-    const changedRates: Record<string, CategoryRate> = {};
-    for (const [cat, r] of Object.entries(rates)) {
-      const next = { basePrice: parse(r.basePrice), pricePerKm: parse(r.pricePerKm), pricePerHour: parse(r.pricePerHour) };
-      const cur = q.data.categoryRates[cat];
-      if (!cur || RATE_FIELDS.some((rf) => next[rf.key] !== cur[rf.key])) changedRates[cat] = next;
-    }
-    if (Object.keys(changedRates).length) body.categoryRates = changedRates;
     return body;
-  }, [form, rates, q.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form, q.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const changeCount = changes ? Object.keys(changes).filter((k) => k !== "categoryRates").length + Object.keys((changes.categoryRates as object) ?? {}).length : 0;
+  const changeCount = changes ? Object.keys(changes).length : 0;
   const hasErrors = Object.keys(errors).length > 0;
 
   const save = useMutation({
@@ -151,7 +122,6 @@ export default function Settings() {
     onSuccess: (data) => {
       qc.setQueryData(["settings"], data);
       setForm(toForm(data));
-      setRates(toRatesForm(data));
       setSaved(true);
       qc.invalidateQueries({ queryKey: ["audit"] });
       qc.invalidateQueries({ queryKey: ["overview"] });
@@ -165,7 +135,6 @@ export default function Settings() {
   const discard = () => {
     if (!q.data) return;
     setForm(toForm(q.data));
-    setRates(toRatesForm(q.data));
     save.reset();
   };
 
@@ -196,7 +165,7 @@ export default function Settings() {
         </div>
       )}
 
-      {!form || !rates || !q.data ? (
+      {!form || !q.data ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-72 rounded-[18px]" />)}</div>
       ) : (
         <>
@@ -240,37 +209,9 @@ export default function Settings() {
             ))}
           </div>
 
-          <div className="rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-[14px] text-cream">
-            أسعار الزفاف والمشاوير والـ VIP بقت في <Link to="/pricing" className="font-bold text-gold underline underline-offset-4">صفحة الأسعار</Link>. الجدول اللي تحت ده للتسعير القديم بالكيلو، وبيستخدمه بس أي نسخة قديمة من التطبيق لسه ما اتحدّثتش.
+          <div className="rounded-xl border border-line bg-raised px-4 py-3 text-[14px] text-cream">
+            أسعار الزفاف والمشاوير والـ VIP في <Link to="/pricing" className="font-bold text-gold underline underline-offset-4">صفحة الأسعار</Link>.
           </div>
-          <Panel title="التسعير القديم بالكيلو (للنسخ القديمة من التطبيق)" tag="بالجنيه · لو العربية ليها سعر خاص بيها بيتحسب هو">
-            <Table head={["النوع", ...RATE_FIELDS.map((r) => r.label)]}>
-              {Object.keys(rates).map((cat) => (
-                <tr key={cat}>
-                  <Td className="font-bold">
-                    {VEHICLE_CATEGORY[cat] ?? cat} <span className="text-[12px] font-normal text-muted" dir="ltr">{cat}</span>
-                  </Td>
-                  {RATE_FIELDS.map((rf) => {
-                    const k = `${cat}.${rf.key}`;
-                    const cur = q.data!.categoryRates[cat]?.[rf.key];
-                    const changed = parse(rates[cat][rf.key]) !== cur;
-                    return (
-                      <Td key={rf.key}>
-                        <input
-                          className={`ltr w-24 rounded-lg border bg-raised px-2 py-1.5 text-right text-[14px] font-bold text-cream outline-none focus:border-gold/60 ${errors[k] ? "border-wine" : changed ? "border-gold/70" : "border-line"}`}
-                          inputMode="decimal"
-                          value={rates[cat][rf.key]}
-                          disabled={!canEdit}
-                          aria-label={`${VEHICLE_CATEGORY[cat] ?? cat} ${rf.label}`}
-                          onChange={(e) => setRates({ ...rates, [cat]: { ...rates[cat], [rf.key]: e.target.value } })}
-                        />
-                      </Td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </Table>
-          </Panel>
 
           <p className="text-[13px] leading-relaxed text-muted">
             التغيير بيسري على الحجوزات الجديدة بس. الحجوزات الموجودة بتفضل بسعرها وعربونها. كل تعديل بيتسجل في سجل التوثيق.

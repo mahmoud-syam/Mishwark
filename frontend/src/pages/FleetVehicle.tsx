@@ -69,21 +69,21 @@ const invalidateFleet = (qc: ReturnType<typeof useQueryClient>, id?: string) => 
 // ------------------------------------------------------------- details form
 type Form = {
   make: string; model: string; year: string; plateNumber: string; color: string; capacity: string; category: VehicleCategory;
-  basePrice: string; pricePerKm: string; pricePerHour: string; luggage: string; description: string; features: string[];
+  luggage: string; description: string; features: string[];
   /** "" = use the default price from the Pricing page. */
   weddingPrice: string; vipPrice: string;
 };
 const EMPTY: Form = {
   make: "", model: "", year: String(new Date().getFullYear()), plateNumber: "", color: "", capacity: "4", category: "LUXURY",
-  basePrice: "0", pricePerKm: "0", pricePerHour: "0", luggage: "3", description: "", features: [], weddingPrice: "", vipPrice: "",
+  luggage: "3", description: "", features: [], weddingPrice: "", vipPrice: "",
 };
 const fromCar = (c: FleetDetail): Form => ({
   make: c.make, model: c.model, year: String(c.year), plateNumber: c.plateNumber, color: c.color, capacity: String(c.capacity), category: c.category,
-  basePrice: String(c.basePrice), pricePerKm: String(c.pricePerKm), pricePerHour: String(c.pricePerHour), luggage: String(c.luggage),
+  luggage: String(c.luggage),
   description: c.description.replace(/^\[demo\]\s*/, ""), features: c.features,
   weddingPrice: c.weddingPrice == null ? "" : String(c.weddingPrice), vipPrice: c.vipPrice == null ? "" : String(c.vipPrice),
 });
-const NUM_FIELDS = ["year", "capacity", "basePrice", "pricePerKm", "pricePerHour", "luggage"] as const;
+const NUM_FIELDS = ["year", "capacity", "luggage"] as const;
 const toBody = (f: Form) => ({
   ...f,
   ...Object.fromEntries(NUM_FIELDS.map((k) => [k, Number(f[k])])),
@@ -103,10 +103,6 @@ function validate(f: Form): Record<string, string> {
   if (!Number.isInteger(cap) || cap < 1 || cap > 60) e.capacity = "من 1 لـ 60";
   const lug = Number(f.luggage);
   if (!Number.isInteger(lug) || lug < 0 || lug > 30) e.luggage = "من 0 لـ 30";
-  for (const k of ["basePrice", "pricePerKm", "pricePerHour"] as const) {
-    const n = Number(f[k]);
-    if (f[k].trim() === "" || !Number.isFinite(n) || n < 0) e[k] = "رقم موجب";
-  }
   for (const k of ["weddingPrice", "vipPrice"] as const) {
     const n = Number(f[k]);
     if (f[k].trim() !== "" && (!Number.isFinite(n) || n < 0)) e[k] = "رقم موجب أو سيبها فاضية";
@@ -180,7 +176,6 @@ function DetailsForm({ car, canEdit, onCreated }: { car?: FleetDetail; canEdit: 
   const body = toBody(f);
   const base = toBody(initial);
   const changed = (Object.keys(body) as (keyof typeof body)[]).filter((k) => JSON.stringify(body[k]) !== JSON.stringify(base[k]));
-  const typePrices = car?.typePrices;
 
   const save = useMutation({
     mutationFn: () =>
@@ -243,14 +238,6 @@ function DetailsForm({ car, canEdit, onCreated }: { car?: FleetDetail; canEdit: 
           {input("vipPrice", "سعر VIP للعربية دي (ج.م)", { numeric: true, placeholder: car ? `العام: ${num(car.defaultServicePrices.vip)}` : "السعر العام", hint: f.vipPrice.trim() === "" && car ? `هيتحسب ${egp(car.defaultServicePrices.vip)}` : undefined })}
         </div>
         <p className="text-[12px] text-muted">المشاوير الخاصة بتتسعّر حسب نوع العربية والوجهة من صفحة الأسعار. الساعات والكيلومترات المشمولة والزيادة عليها من نفس الصفحة.</p>
-        <details className="rounded-xl border border-line px-3 py-2">
-          <summary className="cursor-pointer text-[13px] text-muted">التسعير القديم بالكيلو (للنسخ القديمة من التطبيق بس)</summary>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {input("basePrice", "سعر فتح الرحلة (ج.م)", { numeric: true, hint: typePrices && Number(f.basePrice) === 0 ? `هيتحسب ${egp(typePrices.basePrice)}` : undefined })}
-            {input("pricePerKm", "سعر الكيلو (ج.م)", { numeric: true, hint: typePrices && Number(f.pricePerKm) === 0 ? `هيتحسب ${egp(typePrices.pricePerKm)}` : undefined })}
-            {input("pricePerHour", "سعر الساعة (ج.م)", { numeric: true, hint: typePrices && Number(f.pricePerHour) === 0 ? `هيتحسب ${egp(typePrices.pricePerHour)}` : undefined })}
-          </div>
-        </details>
       </Panel>
 
       <Panel title="اللي بيظهر للعميل في التطبيق" bodyClassName="flex flex-col gap-3">

@@ -42,7 +42,7 @@ describe('Tier 2: Business settings', () => {
 
   const put = (body: unknown, token = ctx.su) => ctx.api.put('/admin/settings', body, { token });
   const estimate = (extra: Record<string, unknown> = {}) =>
-    ctx.api.post('/bookings/estimate-price', { vehicleCategory: 'CAR', startPoint: HALL, endPoint: HOTEL, ...extra }, { token: ctx.rider });
+    ctx.api.post('/bookings/estimate-price', { vehicleId: ctx.seed.vehicle.id, startPoint: HALL, endPoint: HOTEL, ...extra }, { token: ctx.rider });
   const book = (date: string, start: string, end: string, extra: Record<string, unknown> = {}) =>
     ctx.api.post('/bookings', { vehicleId: ctx.seed.vehicle.id, driverId: ctx.seed.driverProfile.id, bookingDate: date, startTime: start, endTime: end, startPoint: HALL, endPoint: HOTEL, ...extra }, { token: ctx.rider });
   const nextDay = () => addDays(dateKey(), 20 + ++seq);
@@ -57,8 +57,9 @@ describe('Tier 2: Business settings', () => {
     expect(d.bookingBufferMinutes).toBe(60);
     expect(d.tripEarlyStartMinutes).toBe(120);
     expect(d.vipSpendThreshold).toBe(15000);
-    expect(d.categoryRates.CAR.basePrice).toBe(50);
-    expect(d.defaults.peakSurgeMultiplier).toBe(1.25);
+    // The per-km prices and the peak multiplier are gone.
+    expect(d.categoryRates).toBe(undefined);
+    expect(d.peakSurgeMultiplier).toBe(undefined);
   });
 
   test('SET-02: only settings:manage may change settings; customers cannot read them', async () => {
@@ -72,26 +73,23 @@ describe('Tier 2: Business settings', () => {
     if (!(await setup())) return;
     expect((await put({ depositRate: 150 })).status).toBe(422);
     expect((await put({ bookingBufferMinutes: 12.5 })).status).toBe(422);
-    expect((await put({ peakSurgeMultiplier: 0.5 })).status).toBe(422);
     expect((await put({ unknownSetting: 1 })).status).toBe(422);
-    expect((await put({ categoryRates: { PLANE: { basePrice: 1, pricePerKm: 1, pricePerHour: 1 } } })).status).toBe(422);
-    expect((await put({ categoryRates: { CAR: { basePrice: -1, pricePerKm: 1, pricePerHour: 1 } } })).status).toBe(422);
+    expect((await put({ peakSurgeMultiplier: 2 })).status).toBe(422); // no longer a setting
+    expect((await put({ categoryRates: { CAR: { basePrice: 80, pricePerKm: 1, pricePerHour: 1 } } })).status).toBe(422);
     const s = await SettingsService.get();
     expect(s.depositRate).toBe(20);
-    expect(s.categoryRates.CAR.basePrice).toBe(50);
   });
 
-  test('SET-04: deposit % and category prices apply to new quotes and bookings, not existing ones', async () => {
+  test('SET-04: deposit % and trip prices apply to new quotes and bookings, not existing ones', async () => {
     if (!(await setup())) return;
     const before = (await book(nextDay(), '10:00', '11:00')).body.data;
     expect(before.depositRequired).toBe(Math.round(before.totalPrice * 0.2 * 100) / 100);
 
-    const res = await put({ depositRate: 30, categoryRates: { CAR: { basePrice: 80, pricePerKm: 10, pricePerHour: 25 } } });
+    const res = await put({ depositRate: 30, tripOtherPrices: { VAN: 1700 } });
     expect(res.status).toBe(200);
-    expect(res.body.data.categoryRates.VAN.basePrice).toBe(150); // untouched categories keep their values
+    expect(res.body.data.tripOtherPrices.CAR).toBe(1000); // untouched categories keep their values
 
     const q = (await estimate()).body.data;
-    expect(q.basePrice).toBe(80);
     expect(q.depositRequired).toBe(Math.round(q.totalPrice * 0.3 * 100) / 100);
 
     const after = (await book(nextDay(), '10:00', '11:00')).body.data;
@@ -99,24 +97,17 @@ describe('Tier 2: Business settings', () => {
 
     const old = await prismaClient.bookings.findUnique({ where: { id: before.id } });
     expect(old?.depositRequired).toBe(before.depositRequired);
+    await put({ tripOtherPrices: { VAN: 1500 } });
     await restore();
   });
 
-  test('SET-05: a client surgeMultiplier or discount is ignored; peak surge comes from settings', async () => {
+  test('SET-05: client-sent surge or discounts are ignored', async () => {
     if (!(await setup())) return;
     const normal = (await estimate()).body.data;
-    const cheat = (await estimate({ surgeMultiplier: 0.01, packageDiscount: 9999, referralDiscount: 9999 })).body.data;
+    const cheat = (await estimate({ surgeMultiplier: 0.01, packageDiscount: 9999, referralDiscount: 9999, isPeakHour: true })).body.data;
     expect(cheat.totalPrice).toBe(normal.totalPrice);
-    expect(cheat.surgeMultiplier).toBe(1);
-
-    const booked = (await book(nextDay(), '10:00', '11:00', { surgeMultiplier: 0.01 })).body.data;
-    expect(booked.totalPrice).toBeGreaterThan(normal.totalPrice * 0.5);
-
-    await put({ peakSurgeMultiplier: 2 });
-    const peak = (await estimate({ isPeakHour: true })).body.data;
-    expect(peak.surgeMultiplier).toBe(2);
-    expect(peak.totalPrice).toBeGreaterThan(normal.totalPrice * 1.9);
-    await restore();
+    const booked = (await book(nextDay(), '10:00', '11:00', { surgeMultiplier: 0.01, isPeakHour: true })).body.data;
+    expect(booked.totalPrice).toBe(normal.totalPrice);
   });
 
   test('SET-06: the gap between trips follows bookingBufferMinutes', async () => {

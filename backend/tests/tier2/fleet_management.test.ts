@@ -41,7 +41,7 @@ describe('Tier 2: Fleet management', () => {
   const day = () => addDays(dateKey(), 20 + ++seq);
   const carBody = (extra: Record<string, unknown> = {}) => ({
     make: 'Kia', model: 'K5', year: 2024, plateNumber: `FL-${++plate}`, color: 'White', capacity: 4, category: 'LUXURY',
-    basePrice: 900, pricePerKm: 20, pricePerHour: 150, luggage: 2, features: ['واي فاي'], ...extra,
+    weddingPrice: 1800, luggage: 2, features: ['واي فاي'], ...extra,
   });
   const newCar = async (extra: Record<string, unknown> = {}) => {
     const res = await ctx.api.post('/admin/vehicles', carBody(extra), { token: ctx.admin });
@@ -107,12 +107,15 @@ describe('Tier 2: Fleet management', () => {
     expect((await ctx.api.patch(`/admin/vehicles/${other.id}`, { plateNumber: car.plateNumber }, { token: ctx.admin })).status).toBe(409);
     expect((await ctx.api.patch(`/admin/vehicles/${other.id}`, { status: 'AVAILABLE' }, { token: ctx.admin })).status).toBe(422);
     expect((await ctx.api.patch(`/admin/vehicles/${other.id}`, {}, { token: ctx.admin })).status).toBe(422);
-    const upd = await ctx.api.patch(`/admin/vehicles/${other.id}`, { basePrice: 0, luggage: 5 }, { token: ctx.admin });
+    // The per-km prices are gone: such a field is refused, not silently kept.
+    expect((await ctx.api.patch(`/admin/vehicles/${other.id}`, { basePrice: 900 }, { token: ctx.admin })).status).toBe(422);
+    const upd = await ctx.api.patch(`/admin/vehicles/${other.id}`, { weddingPrice: null, luggage: 5 }, { token: ctx.admin });
     expect(upd.status).toBe(200);
     const detail = (await ctx.api.get(`/admin/vehicles/${other.id}`, { token: ctx.admin })).body.data;
     expect(detail.luggage).toBe(5);
     const row = (await ctx.api.get('/admin/vehicles', { token: ctx.admin })).body.data.find((v: any) => v.id === other.id);
-    expect(row.effectiveBasePrice).toBe(detail.typePrices.basePrice);
+    expect(row.effectiveWeddingPrice).toBe(detail.defaultServicePrices.wedding);
+    expect('basePrice' in row || 'typePrices' in detail).toBe(false);
     expect((await ctx.api.get('/admin/vehicles/00000000-0000-0000-0000-000000000000', { token: ctx.admin })).status).toBe(404);
   });
 

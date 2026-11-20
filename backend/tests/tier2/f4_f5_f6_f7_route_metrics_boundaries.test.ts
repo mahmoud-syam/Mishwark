@@ -1,13 +1,11 @@
 import { describe, test, expect } from '../infra/run-all';
 import MapsService, { toCoordinates } from '../../src/v1/services/maps.service';
-import { calculateEstimatedPrice, PricingService } from '../../src/v1/services/pricing.service';
 import { compareDistance, describePoint } from '../../src/v1/services/booking.service';
 import {
   calculatePriceSchema,
   createBookingSchema,
   estimateDistanceSchema,
 } from '../../src/v1/schemas/booking.schema';
-import { VehicleCategory } from '../../generated/prisma';
 
 // These tests must never touch the network. The haversine fallback path is the
 // one under test here; the OpenRouteService path is covered by its own
@@ -111,15 +109,9 @@ describe('Route metrics: server-computed distanceKm and durationMinutes', () => 
     expect(calculatePriceSchema.safeParse({ startPoint: CAIRO, customPricePerHour: 0 } as any).success).toBe(false);
   });
 
-  test('RM-T2-16: estimate-price rejects negative, NaN and infinite distanceKm', () => {
-    expect(calculatePriceSchema.safeParse({ startPoint: CAIRO, distanceKm: -5 }).success).toBe(false);
-    expect(calculatePriceSchema.safeParse({ startPoint: CAIRO, distanceKm: NaN }).success).toBe(false);
-    expect(calculatePriceSchema.safeParse({ startPoint: CAIRO, distanceKm: Infinity }).success).toBe(false);
-  });
-
-  test('RM-T2-17: estimate-price rejects a surge multiplier outside a sane range', () => {
-    expect(calculatePriceSchema.safeParse({ startPoint: CAIRO, surgeMultiplier: -1 }).success).toBe(false);
-    expect(calculatePriceSchema.safeParse({ startPoint: CAIRO, surgeMultiplier: 1000 }).success).toBe(false);
+  test('RM-T2-16: estimate-price needs the car (the per-km price by car type is gone)', () => {
+    expect(calculatePriceSchema.safeParse({ startPoint: CAIRO, endPoint: ALEXANDRIA }).success).toBe(false);
+    expect(calculatePriceSchema.safeParse({ vehicleId: 'v1', startPoint: CAIRO, endPoint: ALEXANDRIA }).success).toBe(true);
   });
 
   test('RM-T2-18: estimate-price requires an endpoint before it will price anything', () => {
@@ -128,7 +120,7 @@ describe('Route metrics: server-computed distanceKm and durationMinutes', () => 
 
   // --- Booking creation cannot skip the route ---
 
-  test('RM-T2-19: createBooking requires both endpoints, since distance drives the price', () => {
+  test('RM-T2-19: createBooking needs where the trip goes (it starts at the company unless a start is given)', () => {
     const base = {
       vehicleId: 'v1',
       bookingDate: '2099-01-01',
@@ -136,7 +128,7 @@ describe('Route metrics: server-computed distanceKm and durationMinutes', () => 
       endTime: '12:00',
     };
     expect(createBookingSchema.safeParse({ ...base, startPoint: CAIRO }).success).toBe(false);
-    expect(createBookingSchema.safeParse({ ...base, endPoint: ALEXANDRIA }).success).toBe(false);
+    expect(createBookingSchema.safeParse({ ...base, endPoint: ALEXANDRIA }).success).toBe(true);
     expect(createBookingSchema.safeParse({ ...base }).success).toBe(false);
     expect(createBookingSchema.safeParse({ ...base, startPoint: CAIRO, endPoint: ALEXANDRIA }).success).toBe(true);
   });
@@ -188,41 +180,5 @@ describe('Route metrics: server-computed distanceKm and durationMinutes', () => 
     expect(result.claimedDistanceKm).toBeNull();
     expect(result.distanceDifferenceKm).toBeNull();
     expect(result.withinTolerance).toBe(true);
-  });
-
-  test('RM-T2-26: quote echoes the client figure alongside the server figure without pricing it', async () => {
-    const quote = await PricingService.quote({
-      vehicleCategory: VehicleCategory.CAR,
-      startPoint: CAIRO,
-      endPoint: ALEXANDRIA,
-      distanceKm: 1,
-      durationMinutes: 1,
-    });
-
-    expect(quote.route).toBeDefined();
-    expect(quote.route!.source).toBe('haversine');
-    expect(quote.comparison!.claimedDistanceKm).toBe(1);
-    expect(quote.comparison!.withinTolerance).toBe(false);
-
-    // Priced off the server figure, so a 1 km claim cannot buy a 200 km trip.
-    const expectedDistancePrice = Math.round(quote.route!.distanceKm * 10 * 100) / 100;
-    expect(quote.breakdown.distancePrice).toBe(expectedDistancePrice);
-    expect(quote.breakdown.distancePrice).toBeGreaterThan(1500);
-  });
-
-  test('RM-T2-27: quote reports a null comparison when no endpoints were sent', async () => {
-    const quote = await PricingService.quote({ vehicleCategory: VehicleCategory.CAR, distanceKm: 20 });
-    expect(quote.route).toBeNull();
-    expect(quote.comparison).toBeNull();
-  });
-
-  // --- The price formula itself is unchanged ---
-
-  test('RM-T2-28: durationMinutes now reaches the price and adds a time component', () => {
-    const withoutTime = calculateEstimatedPrice({ vehicleCategory: VehicleCategory.CAR, distanceKm: 20, durationMinutes: 0 });
-    const withTime = calculateEstimatedPrice({ vehicleCategory: VehicleCategory.CAR, distanceKm: 20, durationMinutes: 120 });
-    expect(withoutTime.totalPrice).toBe(250);
-    expect(withTime.timePrice).toBe(50);
-    expect(withTime.totalPrice).toBe(300);
   });
 });

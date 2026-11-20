@@ -390,29 +390,9 @@ All query-string enum filters accept lowercase and are upcased server-side
 
 ### Pricing is server-side and cannot be influenced
 
-```http
-POST /bookings/estimate-price
-{ "vehicleCategory": "VAN", "startPoint": { "latitude": 30.0444, "longitude": 31.2357 }, "endPoint": "Maadi, Cairo" }
-```
-
-```json
-{
-  "success": true,
-  "data": {
-    "basePrice": 150, "distancePrice": 120, "timePrice": 40,
-    "surgeMultiplier": 1, "discountAmount": 0,
-    "totalPrice": 310, "depositPaid": 62
-  },
-  "route": {
-    "distanceKm": 12.0, "durationMinutes": 30,
-    "source": "openrouteservice",
-    "start": { "latitude": 30.0444, "longitude": 31.2357 },
-    "end": { "latitude": 30.0444, "longitude": 31.2357 },
-    "warning": "..."
-  },
-  "comparison": { "claimedDistanceKm": null, "claimedDurationMinutes": null, "distanceDifferenceKm": null, "withinTolerance": true }
-}
-```
+Every price comes from the server, by the booking's service (next section).
+Send the car and the service; the API answers with the total, the deposit and
+an itemised breakdown (`lines`).
 
 > **Package and referral discounts.** Send the Bearer token with
 > `POST /bookings/estimate-price` so the quote includes the customer's own
@@ -423,11 +403,10 @@ POST /bookings/estimate-price
 > booking automatically; `POST /referrals/apply` returns 400 once they have
 > booked, so offer the code field only before the first booking.
 
-> **Pricing fields the server ignores.** `surgeMultiplier`, `packageDiscount`
-> and `referralDiscount` in a request body are ignored. The server applies the
-> peak surge from the admin Settings when `isPeakHour` is true, and discounts
-> only from `packageId` / `referralCode`. Deposit % and default prices per car
-> type are also admin settings, so always show the amounts the API returns.
+> **Pricing fields the server ignores.** `surgeMultiplier`, `isPeakHour`,
+> `packageDiscount` and `referralDiscount` in a request body are ignored;
+> discounts come only from `packageId` / the customer's referral. Prices and the
+> deposit % are admin settings, so always show the amounts the API returns.
 
 
 Each endpoint accepts exactly one location shape:
@@ -437,9 +416,8 @@ server falls back to a straight-line estimate and says so in `route.source` and
 `route.warning`.
 
 `customBasePrice`, `customPricePerKm` and `customPricePerHour` are **rejected**
-if sent — pricing is server-authoritative. Distance and duration are always
-recomputed server-side. Any `distanceKm` you send is only echoed back under
-`comparison` and never priced, so don't bother computing it client-side.
+if sent — pricing is server-authoritative. The distance is always computed
+server-side (it decides the extra km); a `distanceKm` you send is never priced.
 
 ### Prices: wedding, private trip, VIP
 
@@ -476,8 +454,8 @@ Show `lines` as the price breakdown (codes: `wedding`, `vip`, `trip` (with
 `referral_discount`; negative amounts are discounts), then the total and the
 deposit. `route.source: "haversine"` means the distance is an estimate. Send the
 same `serviceType` / `destinationId` to `POST /bookings`; the booking keeps them
-with `priceLines`. Without `serviceType` the older per-km price still applies
-(for app versions that aren't updated yet).
+with `priceLines`. Without `serviceType` it is priced as a private trip
+(`TRIP`). `vehicleId` is required for a quote. (The old per-km price is gone.)
 
 ### Choosing places on a map
 
@@ -675,7 +653,8 @@ interface Vehicle {
   make: string; model: string; year: number;
   plateNumber: string; color: string; capacity: number;
   category: VehicleCategory; status: VehicleStatus;
-  basePrice: number; pricePerKm: number; pricePerHour: number;
+  weddingPrice: number | null;   // null = the default on the Pricing page
+  vipPrice: number | null;
   description: string;
   luggage: number;          // new
   features: string[];       // new, shown as chips
@@ -684,10 +663,9 @@ interface Vehicle {
 }
 ```
 
-Category default rates, used when the vehicle row has no explicit rate:
+Prices per service (and the defaults) come from `GET /pricing`.
 
-| Category | basePrice | pricePerKm | pricePerHour |
-|----------|-----------|------------|--------------|
+----------|-----------|------------|--------------|
 | CAR | 50 | 10 | 25 |
 | VAN | 150 | 15 | 40 |
 | BUS | 300 | 25 | 60 |

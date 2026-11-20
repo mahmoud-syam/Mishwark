@@ -29,10 +29,10 @@ const routeFields = z.object({
 /**
  * How the booking is priced (wedding, private trip, VIP). A private trip to a
  * listed destination needs no points: it starts at the company and ends at the
- * destination. Without serviceType the older per-km price applies.
+ * destination. Without serviceType it is priced as a private trip.
  */
 const serviceFields = z.object({
-  serviceType: z.nativeEnum(ServiceType).optional(),
+  serviceType: z.nativeEnum(ServiceType).default(ServiceType.TRIP),
   destinationId: z.string().min(1).optional(),
 });
 /** True when the points can be left out (a trip to a listed destination). */
@@ -61,31 +61,20 @@ const clientPriceOverride = (field: string) =>
 
 export const calculatePriceSchema = z
   .object({
-    vehicleCategory: z.union([z.nativeEnum(VehicleCategory), z.string()]).optional(),
-    distanceKm: nonNegative.optional(),
-    durationMinutes: nonNegative.optional(),
-    isPeakHour: z.boolean().optional(),
-    surgeMultiplier: z.number().min(0).max(10).optional(),
-    packageDiscount: nonNegative.optional(),
-    referralDiscount: nonNegative.optional(),
-    vehicleId: z.string().optional(),
+    vehicleId: z.string().min(1, "vehicleId is required"),
     packageId: z.string().optional(),
-    referralCode: z.string().optional(),
     /** Admins only: quote with this customer's discounts. Ignored for others. */
     customerId: z.string().optional(),
     customBasePrice: clientPriceOverride("customBasePrice").optional(),
     customPricePerKm: clientPriceOverride("customPricePerKm").optional(),
     customPricePerHour: clientPriceOverride("customPricePerHour").optional(),
-    /** With serviceType: the booked hours (wedding / VIP extra hours). */
+    /** The booked hours (wedding / VIP extra hours). */
     startTime: z.string().regex(TIME_RE).optional(),
     endTime: z.string().regex(TIME_RE).optional(),
   })
   .merge(routeFields)
   .merge(serviceFields)
   .superRefine((value, ctx) => {
-    if (value.serviceType && !value.vehicleId) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["vehicleId"], message: "vehicleId is required with serviceType" });
-    }
     if (value.serviceType === ServiceType.TRIP) {
       if (!value.destinationId && value.endPoint == null) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["destinationId"], message: "Choose a destination or send endPoint" });
@@ -115,8 +104,6 @@ export const createBookingSchema = z
     driverNotes: z.string().max(2000).optional(),
     packageId: z.string().optional(),
     eventType: z.string().max(100).optional(),
-    isPeakHour: z.boolean().optional(),
-    surgeMultiplier: z.number().min(0).max(10).optional(),
   })
   .merge(routeFields)
   .merge(serviceFields)

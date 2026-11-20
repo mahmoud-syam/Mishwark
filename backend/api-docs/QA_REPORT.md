@@ -19,7 +19,7 @@ The mobile apps are not in this repository, so both apps were simulated through 
 | API sweep (functional, ownership, no-auth, robustness) | 357 / 357 passing |
 | Bugs found and fixed | 17 |
 | Product decisions taken and implemented | 7 + SMS/OTP hardening |
-| Backend test suite | 410 / 410 passing |
+| Backend test suite | 406 / 406 passing |
 
 All dashboard numbers matched the database exactly at every step: revenue,
 pending bookings, live trips, payments, driver and customer analytics,
@@ -184,6 +184,10 @@ Found while testing them:
 | # | Severity | Problem | Fix |
 |---|---|---|---|
 | F-57 | Medium | A team member couldn't change their own name, photo or password; only a Super Admin could reset a password, and that endpoint didn't ask for the current one. | Profile page (click your name in the side menu): name, photo (`PUT/DELETE /auth/me/photo`, real-image check, random file name, old file deleted unless another account uses it) and password (`POST /auth/me/password`: current password required and counted toward the lockout, other sessions signed out, this one kept). Photos show in the side menu and on the Team page. |
+
+### Old per-km pricing removed (2026-11-20)
+
+The app hasn't been released, so the per-km pricing kept for "older app versions" was removed: the price to open a trip, per km and per hour (per car and per car type), and the peak multiplier. Every booking is priced by its service from the Pricing page; without a service it is a private trip. The Settings table, the car page's old prices and the database columns are gone (migration `20261120200000_remove_per_km_pricing`). Demo bookings are weddings priced the same way.
 
 ### Push notifications (2026-11-20)
 

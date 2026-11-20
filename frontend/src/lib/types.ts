@@ -189,14 +189,10 @@ export interface Vehicle {
   category: string;
   status: VehicleStatus;
   plateNumber: string;
-  basePrice: number;
-  pricePerKm: number;
-  pricePerHour: number;
   capacity: number;
   year: number;
 }
 
-export type CategoryRate = { basePrice: number; pricePerKm: number; pricePerHour: number };
 
 export interface BusinessSettings {
   depositRate: number;
@@ -226,13 +222,11 @@ export interface BusinessSettings {
   defaultCommissionRate: number;
   referralRewardAmount: number;
   referredDiscountAmount: number;
-  peakSurgeMultiplier: number;
   vipSpendThreshold: number;
   delayAlertMinutes: number;
   punctualityGraceMinutes: number;
   complaintMaxRating: number;
   maintenanceAlertDays: number;
-  categoryRates: Record<string, CategoryRate>;
 }
 
 export interface SettingsResponse extends BusinessSettings {
@@ -270,9 +264,6 @@ export interface FleetItem {
   category: VehicleCategory;
   status: FleetStatus;
   retiredAt: string | null;
-  basePrice: number;
-  effectiveBasePrice: number;
-  usesTypePrices: boolean;
   weddingPrice: number | null;
   vipPrice: number | null;
   effectiveWeddingPrice: number;
@@ -307,15 +298,11 @@ export interface FleetDetail {
   capacity: number;
   luggage: number;
   category: VehicleCategory;
-  basePrice: number;
-  pricePerKm: number;
-  pricePerHour: number;
   description: string;
   features: string[];
   status: FleetStatus;
   retiredAt: string | null;
   retiredReason: string | null;
-  typePrices: { basePrice: number; pricePerKm: number; pricePerHour: number };
   weddingPrice: number | null;
   vipPrice: number | null;
   defaultServicePrices: { wedding: number; vip: number };
