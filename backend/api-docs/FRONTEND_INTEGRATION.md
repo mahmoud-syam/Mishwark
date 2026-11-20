@@ -795,15 +795,58 @@ completes, the referral flips to `COMPLETED` and both wallets are credited
 (once). There is no client endpoint for it any more.
 
 ```http
-GET   /notifications?page=1&limit=20&status=SENT
+GET   /notifications?page=1&limit=20
 GET   /notifications/unread-count
 PATCH /notifications/:id/read
 PATCH /notifications/read-all
 ```
 
-Reminder notifications (`REMINDER_24H`, `REMINDER_2H`, `REMINDER_30M`) are
-scheduled server-side. Poll `unread-count` for a badge; there is no push
-delivery to the browser.
+The inbox lists what is due (a reminder appears at its time). Each item has
+`read` (true once opened; `readAt` is the time) and `notificationType`,
+`title`, `body`, `bookingId`. **Use `read`, not `status`**: `status` is now the
+delivery state (`SENT`, `FAILED`).
+
+### Push notifications (Firebase)
+
+The server pushes through Firebase Cloud Messaging (Android and iPhone). In the
+app:
+
+1. Add Firebase (FlutterFire / Firebase SDK), ask the user for notification
+   permission, and get the FCM token.
+2. After every sign-in, and on Firebase's token refresh, register it:
+   ```http
+   POST /devices   { "token": "<fcm token>", "platform": "android" | "ios", "appVersion": "1.2.0" }
+   ```
+3. On sign-out send the token so this phone stops getting the account's pushes:
+   ```http
+   POST /auth/logout   { "deviceToken": "<fcm token>" }
+   ```
+   (or `DELETE /devices { token }`). "Sign out everywhere" forgets all phones.
+4. Android: create a notification channel with id **`mishwark`** (high
+   importance). iOS: enable Push Notifications + Background Modes (remote
+   notifications) and upload the APNs key in the Firebase console.
+5. Each push has `notification.title` / `notification.body` (already in the
+   user's language, Arabic unless `preferredLanguage` is `en`) and `data`:
+   `{ type, notificationId, bookingId? }`. On tap, open the booking when
+   `bookingId` is there, and mark it read with `PATCH /notifications/:id/read`.
+
+`data.type`, who gets it, when:
+
+| type | to | when |
+|---|---|---|
+| `NEW_TRIP` | driver | a booking is made for him |
+| `SYSTEM` | customer | the office booked a trip for them |
+| `BOOKING_CONFIRMED` | customer, driver | confirmed by the driver or the office (the driver also when the deposit confirms it) |
+| `PAYMENT_RECEIVED` | customer | a payment is confirmed (says if it also confirmed the booking) |
+| `REMINDER_24H`, `REMINDER_2H` | customer (24h, 2h), driver (2h) | before the trip, Cairo time |
+| `TRIP_STARTED`, `DRIVER_ARRIVED` | customer | the driver starts / arrives |
+| `RATE_TRIP` | customer | the trip is completed |
+| `BOOKING_CANCELLED` | the other side | cancelled (with the refund to the wallet, if any) |
+| `DOCUMENT_REVIEWED` | driver | a paper approved or rejected (with the reason) |
+| `WAITLIST_AVAILABLE` | customer | the car they waited for became free |
+
+Without Firebase set up on the server, the same notifications still appear in
+the inbox; only the push is missing.
 
 ---
 

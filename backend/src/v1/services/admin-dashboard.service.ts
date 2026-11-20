@@ -24,6 +24,7 @@ import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
 import FleetService from "./fleet.service";
 import DriverDocumentService from "./driver-document.service";
 import ReviewAdminService from "./review-admin.service";
+import Notify from "./notify.service";
 import {
   addDays,
   addMonths,
@@ -836,6 +837,8 @@ export class AdminDashboardService {
       await PaymentService.recalculateBookingPaymentStatus(booking.id);
     }
     const final = await prismaClient.bookings.findUniqueOrThrow({ where: { id: booking.id } });
+    // The customer already heard "booked for you"; the driver and reminders follow the confirmation.
+    Notify.later(() => Notify.bookingConfirmed(final, { quietCustomer: true }));
 
     await AuditService.record(actor, {
       action: AuditAction.CREATE,

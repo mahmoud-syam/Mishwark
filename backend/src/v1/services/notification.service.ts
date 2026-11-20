@@ -1,4 +1,5 @@
 import prismaClient from "../utils/prismaClientHelper";
+import Notify from "./notify.service";
 import {
   NotificationStatus,
 } from "../../../generated/prisma";
@@ -15,7 +16,8 @@ export class NotificationService {
     const limit = params.limit && params.limit > 0 ? params.limit : 20;
     const skip = (page - 1) * limit;
 
-    const where: any = { recipientId: userId };
+    // The inbox shows what is due (a reminder appears at its time), never cancelled ones.
+    const where: any = { recipientId: userId, scheduledAt: { lte: new Date() }, status: { not: NotificationStatus.CANCELLED } };
     if (params.status) where.status = params.status;
 
     const [items, total] = await Promise.all([
@@ -34,7 +36,7 @@ export class NotificationService {
     ]);
 
     return {
-      items,
+      items: items.map((n) => ({ ...n, read: n.readAt !== null })),
       pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -52,22 +54,17 @@ export class NotificationService {
       throw new NotFoundException("Notification not found");
     }
 
-    return await prismaClient.scheduledNotifications.update({
+    const updated = await prismaClient.scheduledNotifications.update({
       where: { id: notificationId },
-      data: { status: NotificationStatus.SENT, sentAt: new Date() },
+      data: { readAt: notification.readAt ?? new Date() },
     });
+    return { ...updated, read: true };
   }
 
   public static async markAllAsRead(userId: string) {
     await prismaClient.scheduledNotifications.updateMany({
-      where: {
-        recipientId: userId,
-        status: NotificationStatus.SCHEDULED,
-      },
-      data: {
-        status: NotificationStatus.SENT,
-        sentAt: new Date(),
-      },
+      where: { recipientId: userId, readAt: null, scheduledAt: { lte: new Date() } },
+      data: { readAt: new Date() },
     });
 
     return { message: "All notifications marked as read" };
@@ -75,10 +72,7 @@ export class NotificationService {
 
   public static async getUnreadCount(userId: string) {
     const count = await prismaClient.scheduledNotifications.count({
-      where: {
-        recipientId: userId,
-        status: NotificationStatus.SCHEDULED,
-      },
+      where: { recipientId: userId, readAt: null, scheduledAt: { lte: new Date() }, status: { not: NotificationStatus.CANCELLED } },
     });
 
     return { unreadCount: count };
@@ -109,52 +103,12 @@ export class NotificationService {
     });
   }
 
+  /** Kept for older callers: reminders now come from Notify (Cairo time, 24h and 2h before). */
   public static async scheduleBookingReminders(bookingId: string) {
-    const booking = await prismaClient.bookings.findUnique({
-      where: { id: bookingId },
-    });
-
-    if (!booking) return;
-
-    const bookingDateTime = new Date(`${booking.bookingDate}T${booking.startTime}:00.000Z`);
-    const now = new Date();
-
-    const reminders = [
-      { hours: 24, type: "REMINDER_24H" as const, label: "24 hours" },
-      { hours: 2, type: "REMINDER_2H" as const, label: "2 hours" },
-      { minutes: 30, type: "REMINDER_30M" as const, label: "30 minutes" },
-    ];
-
-    for (const reminder of reminders) {
-      const scheduledAt = new Date(bookingDateTime.getTime() - (reminder.hours || reminder.minutes!) * 60 * 60 * 1000);
-
-      if (scheduledAt > now) {
-        const existing = await prismaClient.scheduledNotifications.findFirst({
-          where: {
-            bookingId,
-            recipientId: booking.customerId,
-            notificationType: reminder.type,
-          },
-        });
-
-        if (!existing) {
-          await prismaClient.scheduledNotifications.create({
-            data: {
-              bookingId,
-              recipientId: booking.customerId,
-              recipientType: "CUSTOMER",
-              notificationType: reminder.type,
-              channel: "PUSH",
-              title: `Trip Reminder`,
-              body: `Your trip is in ${reminder.label}. Get ready!`,
-              scheduledAt,
-              status: NotificationStatus.SCHEDULED,
-            },
-          });
-        }
-      }
-    }
+    const b = await prismaClient.bookings.findUnique({ where: { id: bookingId }, select: { id: true, bookingDate: true, startTime: true, customerId: true, driverId: true } });
+    if (b) await Notify.scheduleReminders(b);
   }
+
 }
 
 export default NotificationService;

@@ -15,3 +15,7 @@
 tmp-*.log
 tmp-*.err
 tmp-*.pid
+
+# Firebase / Google service-account keys never go in git
+*service-account*.json
+*firebase-adminsdk*.json

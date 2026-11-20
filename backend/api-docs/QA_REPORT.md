@@ -19,7 +19,7 @@ The mobile apps are not in this repository, so both apps were simulated through 
 | API sweep (functional, ownership, no-auth, robustness) | 357 / 357 passing |
 | Bugs found and fixed | 17 |
 | Product decisions taken and implemented | 7 + SMS/OTP hardening |
-| Backend test suite | 399 / 399 passing |
+| Backend test suite | 410 / 410 passing |
 
 All dashboard numbers matched the database exactly at every step: revenue,
 pending bookings, live trips, payments, driver and customer analytics,
@@ -184,6 +184,16 @@ Found while testing them:
 | # | Severity | Problem | Fix |
 |---|---|---|---|
 | F-57 | Medium | A team member couldn't change their own name, photo or password; only a Super Admin could reset a password, and that endpoint didn't ask for the current one. | Profile page (click your name in the side menu): name, photo (`PUT/DELETE /auth/me/photo`, real-image check, random file name, old file deleted unless another account uses it) and password (`POST /auth/me/password`: current password required and counted toward the lockout, other sessions signed out, this one kept). Photos show in the side menu and on the Team page. |
+
+### Push notifications (2026-11-20)
+
+| # | Severity | Problem | Fix |
+|---|---|---|---|
+| F-69 | High | Nothing was ever pushed to a phone: notifications only sat in a table, and only a waitlist promotion created one. | Firebase push (Android and iPhone) for every step of a trip: new trip, booked for you, confirmed, payment received, 24h/2h reminders, driver on the way / arrived, rate the trip, cancelled (with refund), paper approved/rejected, waitlist. Phones register with `POST /devices`; dead tokens are dropped; sign-out forgets the phone. Works without Firebase too (inbox only). |
+| F-70 | Medium | Reminders: the "30 minutes" one was scheduled 30 hours before, all used UTC instead of Cairo time (2 hours off), they showed in the inbox as unread from the moment they were created, and nothing ever sent them. | 24h and 2h reminders at Cairo time, shown when due, sent once by a one-minute worker (safe with several servers), dropped when the trip is cancelled or done. |
+| F-71 | Low | "Read" was stored as the delivery status, so marking read and sending got mixed. | Separate `readAt` (`read` in the API); old rows migrated. |
+
+The dashboard's Settings page shows which outside services are set up (SMS, push, road distances).
 
 ### Licence re-review (2026-11-20)
 
