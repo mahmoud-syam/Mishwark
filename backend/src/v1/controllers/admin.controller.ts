@@ -104,7 +104,6 @@ const SETTING_LABELS: Record<string, string> = {
   defaultCommissionRate: "عمولة السائق الجديد %",
   referralRewardAmount: "مكافأة الإحالة",
   referredDiscountAmount: "خصم العميل المدعو على أول حجز",
-  peakSurgeMultiplier: "مضاعف وقت الذروة",
   vipSpendThreshold: "حد عميل VIP",
   delayAlertMinutes: "تنبيه التأخير (دقيقة)",
   punctualityGraceMinutes: "سماحية التأخير في البدء (دقيقة)",
@@ -137,13 +136,6 @@ const describeSettingsChange = (before: any, after: any): string => {
   const parts: string[] = [];
   for (const key of Object.keys(SETTING_LABELS)) {
     if (before[key] !== after[key]) parts.push(`${SETTING_LABELS[key]}: ${before[key]} → ${after[key]}`);
-  }
-  for (const cat of Object.keys(after.categoryRates ?? {})) {
-    const b = before.categoryRates?.[cat] ?? {};
-    const a = after.categoryRates[cat];
-    for (const f of ["basePrice", "pricePerKm", "pricePerHour"]) {
-      if (b[f] !== a[f]) parts.push(`سعر ${cat} ${f}: ${b[f]} → ${a[f]}`);
-    }
   }
   for (const cat of Object.keys(after.tripOtherPrices ?? {})) {
     if (before.tripOtherPrices?.[cat] !== after.tripOtherPrices[cat]) parts.push(`مشوار لوجهة تانية ${cat}: ${before.tripOtherPrices?.[cat]} → ${after.tripOtherPrices[cat]}`);

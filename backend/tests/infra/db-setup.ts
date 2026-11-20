@@ -178,9 +178,6 @@ export async function seedDatabase(): Promise<TestSeedData> {
       capacity: 4,
       category: VehicleCategory.CAR,
       status: VehicleStatus.AVAILABLE,
-      basePrice: 50.0,
-      pricePerKm: 10.0,
-      pricePerHour: 25.0,
     },
   });
 

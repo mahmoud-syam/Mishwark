@@ -8,9 +8,6 @@ model Vehicles {
   capacity              Int                   @default(0)
   category              VehicleCategory       @default(CAR)
   status                VehicleStatus         @default(AVAILABLE)
-  basePrice             Float                 @default(0)
-  pricePerKm            Float                 @default(0)
-  pricePerHour          Float                 @default(0)
   /// Fixed wedding price for this car; null = the default in Settings.
   weddingPrice          Float?
   /// Fixed VIP-occasion price for this car; null = the default in Settings.

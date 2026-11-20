@@ -166,9 +166,6 @@ async function main() {
         capacity: 14,
         category: VehicleCategory.VAN,
         status: VehicleStatus.AVAILABLE,
-        basePrice: 150.0,
-        pricePerKm: 10.0,
-        pricePerHour: 50.0,
       },
       create: {
         make: "Toyota",
@@ -179,9 +176,6 @@ async function main() {
         capacity: 14,
         category: VehicleCategory.VAN,
         status: VehicleStatus.AVAILABLE,
-        basePrice: 150.0,
-        pricePerKm: 10.0,
-        pricePerHour: 50.0,
       },
     });
 
@@ -195,9 +189,6 @@ async function main() {
         capacity: 19,
         category: VehicleCategory.BUS,
         status: VehicleStatus.AVAILABLE,
-        basePrice: 300.0,
-        pricePerKm: 20.0,
-        pricePerHour: 100.0,
       },
       create: {
         make: "Mercedes",
@@ -208,9 +199,6 @@ async function main() {
         capacity: 19,
         category: VehicleCategory.BUS,
         status: VehicleStatus.AVAILABLE,
-        basePrice: 300.0,
-        pricePerKm: 20.0,
-        pricePerHour: 100.0,
       },
     });
 
@@ -224,9 +212,6 @@ async function main() {
         capacity: 4,
         category: VehicleCategory.CAR,
         status: VehicleStatus.AVAILABLE,
-        basePrice: 80.0,
-        pricePerKm: 5.0,
-        pricePerHour: 30.0,
       },
       create: {
         make: "Hyundai",
@@ -237,9 +222,6 @@ async function main() {
         capacity: 4,
         category: VehicleCategory.CAR,
         status: VehicleStatus.AVAILABLE,
-        basePrice: 80.0,
-        pricePerKm: 5.0,
-        pricePerHour: 30.0,
       },
     });
 

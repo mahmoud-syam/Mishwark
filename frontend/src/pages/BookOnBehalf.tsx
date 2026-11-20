@@ -11,7 +11,7 @@ import { LocationField, type PlacePoint } from "../components/PlacePicker";
 import { Avatar, Button, cx, ErrorBox, Field, fieldControl, Page, PageHeader, Panel, Skeleton, Toggle } from "../components/ui";
 
 interface Estimate {
-  data: { totalPrice: number; depositRequired: number; basePrice: number; distancePrice: number; timePrice: number; referralDiscount: number };
+  data: { totalPrice: number; depositRequired: number; basePrice: number; distancePrice: number; referralDiscount: number };
   lines?: PriceLine[];
   depositRate?: number;
   bookedMinutes?: number | null;

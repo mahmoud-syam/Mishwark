@@ -127,15 +127,11 @@ describe('Tier 1: Features F1, F2, F3 - Prisma Models, Client & Seeds Coverage',
       capacity: 14,
       category: VehicleCategory.VAN,
       status: VehicleStatus.AVAILABLE,
-      basePrice: 150.0,
-      pricePerKm: 15.0,
-      pricePerHour: 40.0,
     };
 
     expect(mockVehicle.category).toBe(VehicleCategory.VAN);
     expect(mockVehicle.status).toBe(VehicleStatus.AVAILABLE);
     expect(mockVehicle.capacity).toBe(14);
-    expect(mockVehicle.basePrice).toBe(150.0);
   });
 
   test('F1-T1-11: Bookings model structure binds customer, vehicle, driver, and statuses', () => {
@@ -226,9 +222,6 @@ describe('Tier 1: Features F1, F2, F3 - Prisma Models, Client & Seeds Coverage',
       capacity: 4,
       category: VehicleCategory.CAR,
       status: VehicleStatus.AVAILABLE,
-      basePrice: 100.0,
-      pricePerKm: 12.5,
-      pricePerHour: 30.0,
       weddingPrice: null,
       vipPrice: null,
       description: 'Clean sedan',
