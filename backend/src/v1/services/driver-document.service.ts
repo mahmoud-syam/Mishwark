@@ -107,7 +107,10 @@ export class DriverDocumentService {
       const r = byType.get(type);
       return r ? shape(r) : { type, status: "MISSING" as const };
     });
-    return { documents, summary: this.summarize(rows) };
+    // The licence details beside the licence photos, so the office can compare them.
+    const d = await prismaClient.drivers.findUnique({ where: { id: driverId }, select: { licenseNumber: true, licenseExpiry: true } });
+    const licence = { number: d?.licenseNumber ?? "", expiry: d?.licenseExpiry ? d.licenseExpiry.toISOString().slice(0, 10) : null };
+    return { documents, summary: this.summarize(rows), licence };
   }
 
   /** MISSING (something not uploaded), REJECTED, PENDING (waiting for review) or APPROVED (all approved). */
@@ -130,15 +133,28 @@ export class DriverDocumentService {
     return { doc: d, full };
   }
 
+  /**
+   * The licence details changed (number or expiry): the licence photos no longer
+   * prove them, so both go back to the office for review. Nothing changes for
+   * papers that aren't uploaded or are already waiting. Returns how many moved.
+   */
+  public static async reopenLicence(driverId: string, reason: string) {
+    const r = await prismaClient.driverDocuments.updateMany({
+      where: { driverId, type: { in: [DriverDocumentType.LICENSE_FRONT, DriverDocumentType.LICENSE_BACK] }, status: { not: DocumentStatus.PENDING } },
+      data: { status: DocumentStatus.PENDING, reviewNote: reason, reviewedById: null, reviewedAt: null },
+    });
+    return r.count;
+  }
+
   public static async review(id: string, status: "APPROVED" | "REJECTED", note: string | undefined, reviewerId: string) {
-    const d = await prismaClient.driverDocuments.findUnique({ where: { id }, include: { driver: { select: { fullName: true } } } });
+    const d = await prismaClient.driverDocuments.findUnique({ where: { id }, include: { driver: { select: { fullName: true, userId: true } } } });
     if (!d) throw new NotFoundException("Document not found");
     if (status === "REJECTED" && !note?.trim()) throw new BadRequestException("Write why it was rejected, the driver will see it");
     const row = await prismaClient.driverDocuments.update({
       where: { id },
       data: { status, reviewNote: status === "REJECTED" ? note!.trim() : null, reviewedById: reviewerId, reviewedAt: new Date() },
     });
-    return { before: d, after: shape(row), driverName: d.driver.fullName };
+    return { before: d, after: shape(row), driverName: d.driver.fullName, driverUserId: d.driver.userId };
   }
 }
 

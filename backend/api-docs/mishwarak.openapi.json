@@ -71,6 +71,10 @@
     {
       "name": "Pricings",
       "description": "Pricings"
+    },
+    {
+      "name": "Devices",
+      "description": "Devices"
     }
   ],
   "paths": {
@@ -2010,7 +2014,7 @@
         "tags": [
           "Drivers"
         ],
-        "summary": "PUT /driver/profile",
+        "summary": "The signed-in driver updates `fullName`, `licenseNumber`, `licenseExpiry` (YYYY-MM-DD); other fields are ignored (the photo is PUT /auth/me/photo). A new licence number or expiry sends both licence photos back to review: the reply's `documentsBackToReview` says how many.",
         "security": [
           {
             "bearerAuth": []
@@ -2065,7 +2069,7 @@
             }
           }
         },
-        "description": "PUT /driver/profile",
+        "description": "The signed-in driver updates `fullName`, `licenseNumber`, `licenseExpiry` (YYYY-MM-DD); other fields are ignored (the photo is PUT /auth/me/photo). A new licence number or expiry sends both licence photos back to review: the reply's `documentsBackToReview` says how many.",
         "operationId": "put_driver_profile"
       }
     },
@@ -5782,6 +5786,54 @@
         "operationId": "put_admin_settings"
       }
     },
+    "/admin/integrations": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Which outside services the server has: `{ sms, push, roadDistances, production }` (yes/no only, never keys).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Which outside services the server has: `{ sms, push, roadDistances, production }` (yes/no only, never keys).",
+        "operationId": "get_admin_integrations"
+      }
+    },
     "/admin/overview": {
       "get": {
         "tags": [
@@ -8558,6 +8610,146 @@
         },
         "description": "PUBLIC. Every price and rule the apps need before booking: `origin` (where private trips start), `depositRate`, `wedding` and `vip` ({ defaultPrice, includedHours, includedKm, extraHourPrice, extraKmPrice }; a car's own price is `weddingPrice` / `vipPrice` on the vehicle), `trip` ({ includedKm, extraKmPrice, otherPrices per car category }) and the active `destinations` with their price per category. The final price always comes from POST /bookings/estimate-price.",
         "operationId": "get_pricing"
+      }
+    },
+    "/devices": {
+      "get": {
+        "tags": [
+          "Devices"
+        ],
+        "summary": "The signed-in account's registered phones (platform, app version, last seen). Tokens are never returned.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "The signed-in account's registered phones (platform, app version, last seen). Tokens are never returned.",
+        "operationId": "get_devices"
+      },
+      "post": {
+        "tags": [
+          "Devices"
+        ],
+        "summary": "Registers this phone for push notifications: `{ token, platform: android|ios|web, appVersion? }`. Call after every sign-in and whenever Firebase gives the app a new token. A token belongs to one account: signing in as someone else on the same phone moves it. Up to 10 phones per account (oldest dropped). 201.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Registers this phone for push notifications: `{ token, platform: android|ios|web, appVersion? }`. Call after every sign-in and whenever Firebase gives the app a new token. A token belongs to one account: signing in as someone else on the same phone moves it. Up to 10 phones per account (oldest dropped). 201.",
+        "operationId": "post_devices"
+      },
+      "delete": {
+        "tags": [
+          "Devices"
+        ],
+        "summary": "Stops pushes to this phone: `{ token }` in the body (or ?token=). Only your own tokens. Signing out with `POST /auth/logout { deviceToken }` does the same.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultSuccess"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "description": "Stops pushes to this phone: `{ token }` in the body (or ?token=). Only your own tokens. Signing out with `POST /auth/logout { deviceToken }` does the same.",
+        "operationId": "delete_devices"
       }
     }
   },

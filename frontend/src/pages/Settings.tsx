@@ -5,7 +5,7 @@ import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { VEHICLE_CATEGORY } from "../lib/labels";
 import type { BusinessSettings, CategoryRate, SettingsResponse } from "../lib/types";
-import { Button, ErrorBox, Field, Page, PageHeader, Panel, Skeleton, Table, Td, fieldControl } from "../components/ui";
+import { Button, cx, ErrorBox, Field, Page, PageHeader, Panel, Skeleton, Table, Td, fieldControl } from "../components/ui";
 
 type NumKey = Exclude<keyof BusinessSettings, "categoryRates">;
 
@@ -187,6 +187,7 @@ export default function Settings() {
     <Page>
       <PageHeader eyebrow="قواعد الحجز والأسعار والتنبيهات" title="الإعدادات" actions={actions} />
 
+      <Integrations />
       {q.error && <ErrorBox error={errorMessage(q.error)} onRetry={() => q.refetch()} />}
       {save.error && <ErrorBox error={errorMessage(save.error)} />}
       {!canEdit && q.data && (
@@ -277,5 +278,37 @@ export default function Settings() {
         </>
       )}
     </Page>
+  );
+}
+
+/** Which outside services the server has (set in its .env by whoever runs it). */
+function Integrations() {
+  const q = useQuery({
+    queryKey: ["integrations"],
+    queryFn: () => api.get<{ sms: boolean; push: boolean; roadDistances: boolean; production: boolean }>("/admin/integrations"),
+    staleTime: 5 * 60_000,
+  });
+  if (!q.data) return null;
+  const items: { on: boolean; label: string; off: string }[] = [
+    { on: q.data.sms, label: "رسايل كود الدخول (SMS)", off: q.data.production ? "مش متظبطة: العملاء والسواقين مش هيقدروا يدخلوا" : "مش متظبطة (الكود بيظهر في التطبيق للتجربة)" },
+    { on: q.data.push, label: "الإشعارات على الموبايل", off: "مش متظبطة: الإشعارات بتظهر جوه التطبيق بس" },
+    { on: q.data.roadDistances, label: "المسافة بالطريق الفعلي", off: "مش متظبطة: المسافة تقديرية" },
+  ];
+  return (
+    <section aria-label="الخدمات المتوصلة" className="card flex flex-col gap-2 p-[18px]">
+      <h2 className="text-[16px] font-bold text-cream">الخدمات المتوصلة</h2>
+      <ul className="grid gap-2 md:grid-cols-3">
+        {items.map((i) => (
+          <li key={i.label} className="flex items-start gap-2 rounded-xl border border-line bg-raised px-3 py-2.5 text-[13px]">
+            <span className={cx("mt-1 size-2.5 shrink-0 rounded-full", i.on ? "bg-mint" : "bg-amber")} aria-hidden />
+            <span className="flex flex-col">
+              <b className="text-cream">{i.label}</b>
+              <span className={i.on ? "text-mint" : "text-muted"}>{i.on ? "شغالة" : i.off}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-[12px] text-muted">بتتظبط من ملف الإعدادات على السيرفر (.env)، مش من هنا.</p>
+    </section>
   );
 }

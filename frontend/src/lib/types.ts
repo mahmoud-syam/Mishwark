@@ -30,7 +30,7 @@ export type Alert =
     }
   | { type: "no_driver"; severity: "warning"; entityId: string; vehicleName: string }
   | { type: "driver_unavailable"; severity: "danger"; entityId: string; driverName: string; driverStatus: DriverStatus; trips: number; firstDate: string }
-  | { type: "documents_pending"; severity: "warning"; entityId: string; driverName: string; documents: number };
+  | { type: "documents_pending"; severity: "warning"; entityId: string; driverName: string; documents: number; licenceChanged?: boolean };
 
 export interface Overview {
   today: string;

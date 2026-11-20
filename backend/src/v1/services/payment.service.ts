@@ -1,5 +1,6 @@
 import prismaClient from "../utils/prismaClientHelper";
 import { lockKeys } from "../utils/locks";
+import Notify from "./notify.service";
 import {
   BookingStatus,
   PaymentMethod,
@@ -59,6 +60,7 @@ export class PaymentService {
     status: PaymentRecordStatus,
     transactionRef?: string
   ) {
+    let newlyConfirmed = false;
     const updatedPayment = await prismaClient.$transaction(async (tx) => {
       const found = await tx.payments.findUnique({ where: { id: paymentId }, select: { bookingId: true } });
       if (!found) {
@@ -84,6 +86,7 @@ export class PaymentService {
           throw new BadRequestException(`This payment would go over the booking's price: ${left} left to pay`);
         }
       }
+      newlyConfirmed = status === PaymentRecordStatus.SUCCESS && payment.status !== PaymentRecordStatus.SUCCESS;
       return tx.payments.update({
         where: { id: paymentId },
         data: {
@@ -95,7 +98,15 @@ export class PaymentService {
     });
     const payment = updatedPayment;
 
-    await this.recalculateBookingPaymentStatus(payment.bookingId);
+    const { autoConfirmed, booking } = await this.recalculateBookingPaymentStatus(payment.bookingId);
+    if (newlyConfirmed && booking) {
+      // One message to the customer (received, and confirmed if it was); the
+      // driver and the reminders follow a confirmation as usual.
+      Notify.later(async () => {
+        await Notify.paymentReceived(booking, payment.amount, autoConfirmed);
+        if (autoConfirmed) await Notify.bookingConfirmed(booking, { quietCustomer: true });
+      });
+    }
 
     return updatedPayment;
   }
@@ -106,7 +117,7 @@ export class PaymentService {
       include: { payments: true },
     });
 
-    if (!booking) return;
+    if (!booking) return { autoConfirmed: false, booking: null };
 
     const successfulPayments = booking.payments.filter(
       (p) => p.status === PaymentRecordStatus.SUCCESS
@@ -126,7 +137,7 @@ export class PaymentService {
     const depositCovered = totalPaid > 0 && totalPaid + 0.001 >= booking.depositRequired;
     const autoConfirm = booking.status === BookingStatus.PENDING && depositCovered;
 
-    await prismaClient.bookings.update({
+    const updated = await prismaClient.bookings.update({
       where: { id: bookingId },
       data: {
         paymentStatus,
@@ -134,6 +145,7 @@ export class PaymentService {
         ...(autoConfirm && { status: BookingStatus.CONFIRMED }),
       },
     });
+    return { autoConfirmed: autoConfirm, booking: updated };
   }
 
   public static async getBookingPayments(bookingId: string) {

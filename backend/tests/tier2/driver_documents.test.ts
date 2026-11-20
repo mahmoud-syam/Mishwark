@@ -162,4 +162,43 @@ describe('Tier 2: driver documents (private upload and review)', () => {
     expect(summary.documents.state).toBe('MISSING');
     expect(summary.documents.pending).toBe(2);
   });
+
+  test('DOC-07: a new licence number or expiry sends the licence photos back to review', async () => {
+    if (!(await setup())) return;
+    const d = await driver();
+    for (const t of TYPES) expect((await upload(d.token, t, PNG)).status).toBe(201);
+    const list = (await ctx.api.get(`/admin/drivers/${d.id}/documents`, { token: ctx.admin })).body.data;
+    for (const doc of list.documents) expect((await ctx.api.patch(`/admin/driver-documents/${doc.id}`, { status: 'APPROVED' }, { token: ctx.admin })).status).toBe(200);
+    expect(list.licence.number.startsWith('DOC-')).toBe(true);
+
+    // Same details again: nothing moves.
+    const same = await ctx.api.put('/driver/profile', { licenseNumber: list.licence.number }, { token: d.token });
+    expect(same.status).toBe(200);
+    expect(same.body.data.documentsBackToReview).toBe(0);
+
+    const r = await ctx.api.put('/driver/profile', { licenseNumber: 'NEW-778899', licenseExpiry: '2031-05-01' }, { token: d.token });
+    expect(r.status).toBe(200);
+    expect(r.body.data.documentsBackToReview).toBe(2);
+    const after = (await ctx.api.get('/driver/documents', { token: d.token })).body.data.documents;
+    const by = (t: string) => after.find((x: any) => x.type === t);
+    expect(by('LICENSE_FRONT').status).toBe('PENDING');
+    expect(by('LICENSE_BACK').status).toBe('PENDING');
+    expect(by('LICENSE_FRONT').reviewNote.includes('الرخصة')).toBe(true);
+    expect(by('NATIONAL_ID_FRONT').status).toBe('APPROVED');
+    expect(by('CRIMINAL_RECORD').status).toBe('APPROVED');
+
+    const admin = (await ctx.api.get(`/admin/drivers/${d.id}/documents`, { token: ctx.admin })).body.data;
+    expect(admin.licence.number).toBe('NEW-778899');
+    expect(admin.licence.expiry).toBe('2031-05-01');
+    const alert = (await ctx.api.get('/admin/overview', { token: ctx.admin })).body.data.alerts.find((a: any) => a.type === 'documents_pending' && a.entityId === d.id);
+    expect(alert.licenceChanged).toBe(true);
+    expect(alert.documents).toBe(2);
+    const audit = await prismaClient.auditLogs.findFirst({ where: { entityType: 'driver', entityId: d.id, details: { contains: 'NEW-778899' } } });
+    expect(!!audit).toBe(true);
+
+    // Approving again clears the note; the driver's expiry change alone also reopens.
+    for (const t of ['LICENSE_FRONT', 'LICENSE_BACK']) expect((await ctx.api.patch(`/admin/driver-documents/${by(t).id}`, { status: 'APPROVED' }, { token: ctx.admin })).status).toBe(200);
+    const exp = await ctx.api.put('/driver/profile', { licenseExpiry: '2032-01-01' }, { token: d.token });
+    expect(exp.body.data.documentsBackToReview).toBe(2);
+  });
 });

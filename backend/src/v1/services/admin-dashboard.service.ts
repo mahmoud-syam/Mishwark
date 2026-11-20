@@ -24,6 +24,7 @@ import SettingsService, { DEFAULT_SETTINGS } from "./settings.service";
 import FleetService from "./fleet.service";
 import DriverDocumentService from "./driver-document.service";
 import ReviewAdminService from "./review-admin.service";
+import Notify from "./notify.service";
 import {
   addDays,
   addMonths,
@@ -249,6 +250,10 @@ export class AdminDashboardService {
 
     // Drivers with papers waiting for review.
     const papersWaiting = await prismaClient.driverDocuments.groupBy({ by: ["driverId"], where: { status: "PENDING" }, _count: { _all: true } });
+    // Waiting because the driver changed his licence details (a note is only set then).
+    const licenceChanged = new Set(
+      (await prismaClient.driverDocuments.findMany({ where: { status: "PENDING", reviewNote: { not: null } }, select: { driverId: true }, distinct: ["driverId"] })).map((x) => x.driverId)
+    );
     const papersDrivers = papersWaiting.length
       ? await prismaClient.drivers.findMany({ where: { id: { in: papersWaiting.map((x) => x.driverId) } }, select: { id: true, fullName: true } })
       : [];
@@ -260,6 +265,7 @@ export class AdminDashboardService {
         entityId: x.driverId,
         driverName: papersDrivers.find((d) => d.id === x.driverId)?.fullName ?? "",
         documents: x._count._all,
+        licenceChanged: licenceChanged.has(x.driverId),
       })),
       ...stranded.map((x) => {
         const d = strandedDrivers.find((v) => v.id === x.driverId);
@@ -831,6 +837,8 @@ export class AdminDashboardService {
       await PaymentService.recalculateBookingPaymentStatus(booking.id);
     }
     const final = await prismaClient.bookings.findUniqueOrThrow({ where: { id: booking.id } });
+    // The customer already heard "booked for you"; the driver and reminders follow the confirmation.
+    Notify.later(() => Notify.bookingConfirmed(final, { quietCustomer: true }));
 
     await AuditService.record(actor, {
       action: AuditAction.CREATE,
