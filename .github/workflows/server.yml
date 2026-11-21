@@ -82,7 +82,7 @@ jobs:
           docker compose run --rm -T backup now
           ls -l backups
           db=$(ls backups/db-*.dump | head -1)
-          docker compose exec -T db pg_restore --list < "$db" | grep -q 'TABLE public "Users"'
+          docker compose exec -T db pg_restore --list < "$db" | grep -q 'TABLE public Users '
           tar -tzf $(ls backups/files-*.tar.gz | head -1) | grep -q '^storage/'
 
       - name: Restore (and the safety backup it takes first)
