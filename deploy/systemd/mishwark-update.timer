@@ -1,0 +1,10 @@
+[Unit]
+Description=Mishwark: check GitHub for new commits every 2 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+Unit=mishwark-update.service
+
+[Install]
+WantedBy=timers.target

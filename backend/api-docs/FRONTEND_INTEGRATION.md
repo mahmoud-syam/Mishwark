@@ -893,6 +893,12 @@ upcoming trips).
 
 ## Integration notes
 
+**Servers**: production is `https://mishwark.mahmoud-syam.me/api/v1` (once the
+permanent server is up; it replaces the temporary preview). `GET /api/v1/health`
+answers `{ ok, version }` without signing in: use it to show "server
+unreachable" instead of a generic error. Production starts with an empty
+database (no demo accounts).
+
 **Recommended booking flow**: `GET /vehicles` → `POST /bookings/estimate-distance`
 for the distance display → `POST /bookings/estimate-price` for the quote →
 `POST /bookings` → poll or refetch `GET /bookings/:id` for status changes.

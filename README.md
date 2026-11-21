@@ -32,7 +32,7 @@ cd backend
 cp .env.example .env                      # set DATABASE_URL and JWT_SECRET
 npm ci
 npx prisma generate
-npx prisma migrate deploy
+npm run migrate                           # applies missing migrations (tracked)
 npm run seed                              # roles + admin@mishwarak.com / secret123
 npm run seed:demo                         # optional: demo data around today
 npm run dev                               # http://localhost:5000, docs at /api-docs
@@ -55,6 +55,12 @@ The first admin login asks you to set up 2FA with an authenticator app.
 | `npm run api-docs` | Rebuild and check the OpenAPI spec after changing routes |
 | `npm run dashboard:build` | Build the dashboard into `frontend/dist` |
 | `npm run build && npm start` | Production build; serves the dashboard at `/dashboard` |
+| `npm run migrate` | Apply missing migrations (`--status` to list) |
+
+## Production server
+
+One Docker server (Oracle Cloud ARM or any VPS) with automatic deploys from
+`main`, Cloudflare Tunnel and daily backups: see [deploy/README.md](deploy/README.md).
 
 ## Documentation
 

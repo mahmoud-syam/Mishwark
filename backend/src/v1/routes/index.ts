@@ -15,8 +15,21 @@ import adminRouter from "./admin.routes";
 import placesRouter from "./places.routes";
 import pricingRouter from "./pricing.routes";
 import deviceRouter from "./device.routes";
+import prismaClient from "../utils/prismaClientHelper";
 
 const rootRouterV1: Router = Router();
+
+// Health check for the server's deploy script, the container and uptime
+// monitors: is the API up, can it reach the database, which build is running.
+const startedAt = new Date();
+rootRouterV1.get("/health", async (_req, res) => {
+  try {
+    await prismaClient.$queryRaw`SELECT 1`;
+    res.json({ ok: true, version: process.env.APP_VERSION || "dev", startedAt });
+  } catch {
+    res.status(503).json({ ok: false, version: process.env.APP_VERSION || "dev", error: "database unreachable" });
+  }
+});
 
 rootRouterV1.use("/auth", authRouterV1);
 rootRouterV1.use("/vehicles", vehiclesRouterV1);
