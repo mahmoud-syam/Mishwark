@@ -121,3 +121,37 @@ jobs:
       - name: Logs on failure
         if: failure()
         run: docker compose logs --tail 200
+
+  setup:
+    name: setup.sh (unattended, arm64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Unattended run, as cloud-init does it (no terminal, no token, no admin)
+        run: |
+          git branch -f ci-setup HEAD
+          sudo MISHWARK_REPO_URL="file://$GITHUB_WORKSPACE" MISHWARK_REF=ci-setup MISHWARK_NO_TIMER=1 \
+            bash deploy/setup.sh < /dev/null | tee setup1.log
+          grep -q "No Super Admin yet" setup1.log
+          grep -q "No tunnel token yet" setup1.log
+          curl -fsS http://127.0.0.1:5000/api/v1/health | jq -e --arg v "$(git rev-parse --short=7 HEAD)" '.ok and .version == $v'
+          sudo test -f /opt/mishwark/deploy/.env
+          [ "$(sudo stat -c %a /opt/mishwark/deploy/.env)" = "600" ]
+      - name: Second run with the admin's details keeps the secrets and creates the admin
+        run: |
+          before=$(sudo grep ^JWT_SECRET= /opt/mishwark/deploy/.env)
+          sudo MISHWARK_REPO_URL="file://$GITHUB_WORKSPACE" MISHWARK_REF=ci-setup MISHWARK_NO_TIMER=1 \
+            ADMIN_EMAIL=owner@example.com ADMIN_NAME=Owner bash deploy/setup.sh < /dev/null | tee setup2.log
+          [ "$before" = "$(sudo grep ^JWT_SECRET= /opt/mishwark/deploy/.env)" ]
+          grep -q "Temporary password:" setup2.log
+          sudo MISHWARK_REPO_URL="file://$GITHUB_WORKSPACE" MISHWARK_REF=ci-setup MISHWARK_NO_TIMER=1 \
+            bash deploy/setup.sh < /dev/null | grep -q "A Super Admin already exists"
+          cd /opt/mishwark/deploy && sudo docker compose ps --format '{{.Service}} {{.State}}' | sort | tee /tmp/ps.txt
+          grep -q "backup running" /tmp/ps.txt
+      - name: Logs on failure
+        if: failure()
+        run: cd /opt/mishwark/deploy && sudo docker compose logs --tail 200 || true
+
