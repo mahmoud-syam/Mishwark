@@ -1,0 +1,97 @@
+# Mishwark on one server: database, API + dashboard, Cloudflare Tunnel, backups.
+# Run from this folder (setup.sh and update.sh do it for you):
+#   docker compose up -d
+# Settings and secrets come from deploy/.env (see .env.example). Nothing listens
+# on the internet: the API is reachable only through the tunnel, plus
+# 127.0.0.1:5000 on the server itself for health checks.
+name: mishwark
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" }
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mishwark
+      POSTGRES_USER: mishwark
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - db:/var/lib/postgresql/data
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mishwark -d mishwark"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+
+  api:
+    image: mishwark-api:current
+    build:
+      context: ..
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://mishwark:${POSTGRES_PASSWORD}@db:5432/mishwark
+      NODE_ENV: production
+      PORT: "5000"
+      # Requests arrive through cloudflared; the client's address is the last
+      # one Cloudflare adds to X-Forwarded-For.
+      TRUST_PROXY: "1"
+    volumes:
+      - documents:/app/backend/storage
+      - uploads:/app/backend/uploads
+      # Optional: Firebase service account for push (FCM_SERVICE_ACCOUNT_FILE=/run/mishwark/firebase.json)
+      - ./secrets:/run/mishwark:ro
+    ports:
+      - "127.0.0.1:5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *logging
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      - api
+    logging: *logging
+
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    entrypoint: ["sh", "/scripts/backup.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: mishwark
+      PGDATABASE: mishwark
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-01}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+    volumes:
+      - ./backups:/backups
+      - ./backup.sh:/scripts/backup.sh:ro
+      - documents:/data/storage:ro
+      - uploads:/data/uploads:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *logging
+
+volumes:
+  db:
+  documents:
+  uploads:

@@ -1,0 +1,18 @@
+# Keep the build context small and free of secrets and local data.
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+**/*service-account*.json
+**/*firebase-adminsdk*.json
+.git
+.github
+docs
+backend/dist
+backend/generated
+backend/storage
+backend/uploads
+backend/coverage
+frontend/dist
+deploy/.env
+deploy/backups

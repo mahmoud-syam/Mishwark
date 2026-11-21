@@ -1,0 +1,10 @@
+[Unit]
+Description=Mishwark: deploy new commits from GitHub
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/mishwark/deploy/update.sh
+TimeoutStartSec=30min
