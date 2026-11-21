@@ -101,6 +101,23 @@ jobs:
           docker compose logs --since 2m api | grep -q "Database is up to date"
           [ "$(docker compose exec -T db psql -U mishwark -d mishwark -Atc 'SELECT count(*) FROM "Users"')" = "1" ]
 
+      - name: Automatic update (update.sh, as the server's timer runs it)
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          sudo git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          target=$(git ls-remote origin "refs/heads/$BRANCH" | cut -c1-7)
+          sudo MISHWARK_BRANCH="$BRANCH" ./update.sh --force | tee update.log
+          grep -q "live: $target" update.log
+          curl -fsS http://127.0.0.1:5000/api/v1/health | jq -e --arg v "$target" '.ok and .version == $v'
+          # The update took a backup first, and kept the data.
+          [ "$(ls backups/db-*.dump | wc -l)" -ge 3 ]
+          [ "$(docker compose exec -T db psql -U mishwark -d mishwark -Atc 'SELECT count(*) FROM "Users"')" = "1" ]
+          # Nothing new on the branch: a normal run does nothing.
+          sudo MISHWARK_BRANCH="$BRANCH" ./update.sh | tee update2.log
+          ! grep -q deploying update2.log
+
       - name: Logs on failure
         if: failure()
         run: docker compose logs --tail 200
